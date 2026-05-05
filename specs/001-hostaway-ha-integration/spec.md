@@ -27,10 +27,11 @@ value for the core workflow.
 **Acceptance Scenarios**:
 
 1. **Given** a valid reservation exists in Hostaway,
-   **When** the user calls `hostaway.set_door_code` with a
-   reservation ID, door code, vendor, and instruction,
-   **Then** the reservation's doorCode, doorCodeVendor, and
-   doorCodeInstruction fields are updated via the Hostaway API.
+   **When** the user calls `hostaway.set_door_code` with
+   `reservation_id`, `door_code`, `door_code_vendor`, and
+   `door_code_instruction`,
+   **Then** the reservation's corresponding Hostaway API fields
+   are updated.
 2. **Given** a reservation ID that does not exist,
    **When** the user calls `hostaway.set_door_code`,
    **Then** the service returns a clear error indicating the
@@ -216,10 +217,12 @@ event is fired containing the reservation data.
   entities following the naming convention
   `sensor.hostaway_<listing>_<attribute>` per the project
   constitution, where `<listing>` is the slugified listing
-  name used as the default entity name. Each sensor's
-  unique_id MUST be derived solely from immutable identifiers
-  (account ID + listing ID + attribute key) to ensure
-  stability across listing renames and restarts.
+  name used for entity_id generation and `<attribute>` is
+  the data field name. The human-readable display name uses
+  the original listing name. Each sensor's unique_id MUST be
+  derived solely from immutable identifiers (account ID +
+  listing ID + attribute key) to ensure stability across
+  listing renames and restarts.
 - **FR-008**: System MUST poll listing data at a
   user-configurable interval (default: 5 minutes, minimum:
   1 minute) and update sensor state accordingly.
