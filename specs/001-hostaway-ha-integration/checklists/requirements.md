@@ -7,7 +7,8 @@ before proceeding to planning
 
 ## Content Quality
 
-- [x] No implementation details (languages, frameworks, APIs)
+- [x] No unnecessary implementation details beyond mandated
+  project constraints
 - [x] Focused on user value and business needs
 - [x] Written for non-technical stakeholders
 - [x] All mandatory sections completed
@@ -31,7 +32,8 @@ before proceeding to planning
 - [x] User scenarios cover primary flows
 - [x] Feature meets measurable outcomes defined in Success
   Criteria
-- [x] No implementation details leak into specification
+- [x] No unnecessary implementation details leak into
+  specification beyond project-mandated constraints
 
 ## Notes
 

@@ -212,11 +212,12 @@ event is fired containing the reservation data.
   appropriate throttling and backoff.
 - **FR-006**: System MUST handle HTTP 429 responses with
   exponential backoff retry.
-- **FR-007**: System MUST expose each monitored listing as a
-  single sensor entity with a stable unique_id derived from the
-  Hostaway listing ID and listing attributes (name, status,
-  pricing, occupancy) stored as entity state attributes. The
-  default entity name MUST use the slugified listing name.
+- **FR-007**: System MUST expose listing data as sensor
+  entities following the naming convention
+  `sensor.hostaway_<listing>_<attribute>` per the project
+  constitution. Each sensor's unique_id MUST be derived from
+  immutable identifiers (account ID + listing ID + attribute
+  key) to ensure stability across restarts and name changes.
 - **FR-008**: System MUST poll listing data at a
   user-configurable interval (default: 5 minutes, minimum:
   1 minute) and update sensor state accordingly.
