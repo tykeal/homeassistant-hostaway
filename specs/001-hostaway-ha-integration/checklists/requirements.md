@@ -7,8 +7,7 @@ before proceeding to planning
 
 ## Content Quality
 
-- [x] Requirements are technology-agnostic (project constraints
-  documented separately in Assumptions)
+- [x] No implementation details (languages, frameworks, APIs)
 - [x] Focused on user value and business needs
 - [x] Written for non-technical stakeholders
 - [x] All mandatory sections completed
@@ -32,7 +31,7 @@ before proceeding to planning
 - [x] User scenarios cover primary flows
 - [x] Feature meets measurable outcomes defined in Success
   Criteria
-- [x] Project constraints confined to Assumptions section
+- [x] No implementation details leak into specification
 
 ## Notes
 
@@ -45,4 +44,5 @@ before proceeding to planning
   version minimums from manifest.json/hacs.json) in the
   Assumptions section as mandated by the project constitution.
   These are fixed environmental constraints, not design
-  decisions made here.
+  decisions made here — they do not constitute implementation
+  details leaking into the spec.

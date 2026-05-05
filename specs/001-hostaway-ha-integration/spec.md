@@ -213,9 +213,10 @@ event is fired containing the reservation data.
 - **FR-006**: System MUST handle HTTP 429 responses with
   exponential backoff retry.
 - **FR-007**: System MUST expose each monitored listing as a
-  single sensor entity (`sensor.hostaway_<listing_name>`)
-  with listing attributes (name, status, pricing, occupancy)
-  stored as entity state attributes.
+  single sensor entity with a stable unique_id derived from the
+  Hostaway listing ID and listing attributes (name, status,
+  pricing, occupancy) stored as entity state attributes. The
+  default entity name MUST use the slugified listing name.
 - **FR-008**: System MUST poll listing data at a
   user-configurable interval (default: 5 minutes, minimum:
   1 minute) and update sensor state accordingly.
@@ -231,16 +232,19 @@ event is fired containing the reservation data.
   (cursor-based with afterId for reservations) to retrieve
   complete data sets.
 - **FR-013**: System MUST provide a
-  `hostaway.set_door_code` service that updates doorCode,
-  doorCodeVendor, and doorCodeInstruction fields on a
-  specified reservation.
+  `hostaway.set_door_code` service that updates the
+  reservation door code fields (Hostaway API fields:
+  doorCode, doorCodeVendor, doorCodeInstruction) on a
+  specified reservation. Service parameters use snake_case
+  (door_code, door_code_vendor, door_code_instruction).
 - **FR-014**: System MUST provide a
   `hostaway.get_reservations` service that fires a
   `hostaway_reservations_retrieved` event with the following
-  payload: `listing_id` (int), `listing_name` (string),
-  `reservations` (list of reservation objects containing at
+  snake_case payload: `listing_id` (int), `listing_name`
+  (string), `reservations` (list of objects containing at
   minimum: id, guest_name, check_in, check_out, status,
-  door_code).
+  door_code). All Hostaway camelCase API fields MUST be
+  mapped to snake_case in HA-facing interfaces.
 - **FR-015**: System MUST validate service call parameters and
   return clear error messages for invalid inputs.
 - **FR-016**: System MUST gracefully handle API unavailability
