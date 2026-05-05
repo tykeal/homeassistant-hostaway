@@ -321,7 +321,8 @@ event is fired containing the reservation data.
 - Only the doorCode, doorCodeVendor, and doorCodeInstruction
   fields need write access on reservations; no other
   reservation fields require modification.
-- Default entity display names use slugified listing names
-  (lowercase, underscores replacing spaces/special
-  characters). Entity unique_ids use immutable Hostaway
-  listing IDs for stability independent of name changes.
+- Default entity_ids use slugified listing names (lowercase,
+  underscores replacing spaces/special characters) while
+  display names use the original human-readable listing
+  name. Entity unique_ids use immutable Hostaway listing IDs
+  for stability independent of name changes.
