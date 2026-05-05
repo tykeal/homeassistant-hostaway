@@ -1,0 +1,298 @@
+<!--
+SPDX-FileCopyrightText: 2026 Andrew Grimberg <tykeal@bardicgrove.org>
+SPDX-License-Identifier: Apache-2.0
+-->
+
+# Agent Development Guidelines
+
+This document codifies git and development practices for AI agents working on
+this repository. The project constitution and established development
+conventions drive these practices.
+
+## Constitution
+
+If `.specify/memory/constitution.md` exists in this repository, read it and
+follow its principles. The constitution takes precedence over this file when
+the two documents conflict.
+
+## Git Commit Message Rules
+
+This project follows the
+[seven rules of a great Git commit message](https://chris.beams.io/posts/git-commit/).
+**gitlint** enforces most of these rules automatically (see `.gitlint`).
+
+### Rule 1: Separate subject from body with a blank line
+
+The blank line between the subject and body is critical. Git tools like `log`,
+`shortlog`, and `rebase` rely on this separation. Simple changes may omit the
+body entirely.
+
+- **Enforcement**: Convention and tooling; gitlint validates structure.
+
+### Rule 2: Limit the subject line to 50 characters
+
+Keep subjects concise. The hard limit is 50 characters.
+
+- **Enforcement**: gitlint `title-max-length` (configured to 50).
+
+### Rule 3: Capitalize the subject line
+
+The subject line MUST start with a capital letter. This project uses
+Conventional Commits, whose capitalized types naturally meet this rule.
+
+- **Enforcement**: gitlint `contrib-title-conventional-commits` requires
+  capitalized types.
+
+### Rule 4: Do not end the subject line with a period
+
+The subject line MUST NOT end with a period. Trailing space is precious
+when you have a 50-character limit.
+
+- **Enforcement**: gitlint `title-trailing-punctuation` (T3, enabled by
+  default).
+
+### Rule 5: Use the imperative mood in the subject line
+
+Write the subject as if completing the sentence: "If applied, this commit
+will \_\_\_\_\_\_\_\_." The Conventional Commit type prefix naturally leads into
+imperative mood.
+
+Good examples:
+
+- `Fix: correct race condition in deploy`
+- `Feat: add OpenStack quota command`
+- `Refactor: extract Jenkins helpers`
+
+Bad examples:
+
+- ~~`Fix: fixed the race condition`~~ (past tense)
+- ~~`Feat: adds OpenStack command`~~ (third person)
+- ~~`Refactor: extracting Jenkins helpers`~~ (gerund)
+
+- **Enforcement**: Manual discipline; not automatically enforceable.
+
+### Rule 6: Wrap the body at 72 characters
+
+Body text MUST wrap at 72 characters per line. Lines containing URLs
+MAY exceed this limit, but enforcement tooling has limitations.
+
+- **Enforcement**: gitlint `body-max-line-length` (configured to 72). The
+  configured `ignore-by-body` rule disables this check for the entire
+  commit body if any line matches the URL pattern, so you MUST still
+  manually wrap non-URL lines to 72 characters.
+
+### Rule 7: Use the body to explain what and why, not how
+
+The code diff shows _how_ a change happened. The commit body should explain
+_what_ problem the change solves and _why_ this approach works best. Include
+context that will help future developers understand the rationale.
+
+- **Enforcement**: Manual discipline; not automatically enforceable.
+
+## Conventional Commit Format
+
+This project uses **Conventional Commits** with **capitalized types**:
+
+```plaintext
+Type(scope): Short imperative description
+
+Body explaining what and why. Wrap at 72 characters.
+URLs on their own line are exempt from the wrap limit.
+
+Co-authored-by: <AI Model Name> <appropriate-email@provider.com>
+Signed-off-by: Name <email>
+```
+
+**Allowed types** (capitalized, enforced by gitlint):
+
+- `Fix` — Bug fixes
+- `Feat` — New features
+- `Chore` — Maintenance tasks
+- `Docs` — Documentation changes
+- `Style` — Code style/formatting (no logic change)
+- `Refactor` — Code refactoring (no behavior change)
+- `Perf` — Performance improvements
+- `Test` — Adding or updating tests
+- `Revert` — Reverting previous commits
+- `CI` — CI/CD configuration changes
+- `Build` — Build system changes
+
+### Commit Command
+
+Always use the `-s` flag for Developer Certificate of Origin sign-off:
+
+```bash
+git commit -s -m "Type(scope): Short imperative description
+
+Body explaining what changed and why.
+
+Co-authored-by: <AI Model> <email@provider.com>"
+```
+
+### Co-Authorship
+
+All AI-assisted commits MUST include a `Co-authored-by` trailer identifying
+the AI model used.
+
+This trailer goes at the end of the commit message body. Note that
+`git commit -s` appends the `Signed-off-by` line after all other
+content, so it will appear after the `Co-authored-by` trailer
+automatically.
+
+## Gitlint Enforcement Summary
+
+The following gitlint rules are active (see `.gitlint` for full config):
+
+| Rule | What it checks | Value |
+| ---- | -------------- | ----- |
+| `title-max-length` (T1) | Subject ≤50 chars | 50 |
+| `title-trailing-punctuation` (T3) | No trailing `.` `;` `:` | On |
+| `body-max-line-length` (B1) | Body lines ≤72 chars | 72 |
+| `ignore-by-body` | Exempt URL lines from B1 | On |
+| `contrib-title-conventional-commits` | Capitalized type prefix | On |
+| `contrib-body-requires-signed-off-by` | DCO sign-off present | On |
+
+## Pre-Commit Hooks
+
+This repository uses pre-commit hooks that run automatically on `git commit`.
+
+Check `.pre-commit-config.yaml` for the complete list.
+
+### If Pre-Commit Fails
+
+**CRITICAL**: Do NOT use `git reset` or `git commit --amend` after a
+failed commit attempt.
+
+1. Fix the issues identified by the pre-commit hooks
+2. Stage the fixes: `git add <files>`
+3. Attempt the commit again as a fresh commit (as if the failed attempt never happened)
+4. The pre-commit hooks will run again on the new attempt
+
+Pre-commit hooks may auto-fix some issues (e.g., ruff format, markdownlint).
+If hooks modified files, stage them and commit again.
+
+### Never Bypass Hooks
+
+Using `--no-verify` to bypass pre-commit hooks is **PROHIBITED**.
+
+## Prohibited Post-Failure Git Operations
+
+After a failed `git commit` (e.g., pre-commit hook failure), the
+following operations are **PROHIBITED**:
+
+- `git reset` (all forms: `--soft`, `--mixed`, `--hard`)
+- `git commit --amend`
+
+**If a commit fails**: fix the issues, stage with `git add`, and create
+a new commit. Never use `git reset` to recover from a failed commit.
+
+## Atomic Commits
+
+Each commit MUST represent one logical change:
+
+- ✅ One feature per commit
+- ✅ One bug fix per commit
+- ✅ One refactor per commit
+- ❌ Bundling unrelated changes in one commit
+
+### Task List Updates Are Separate Commits
+
+Changes to task tracking documents (e.g., `tasks.md`) MUST go in their
+own commits, separate from the code or documentation they track. Bundling a task
+list update into the same commit as the work it describes breaks commit
+atomicity — even when both changes count as documentation.
+
+- ✅ Commit 1: `Feat(core): Add HTTP client` (code + tests)
+- ✅ Commit 2: `Docs(tasks): Mark T015 complete` (tasks.md)
+- ❌ Single commit with code changes **and** tasks.md update
+
+## SPDX License Headers
+
+All new source files MUST include SPDX headers. The correct license
+identifier depends on the file's location — consult `REUSE.toml` for
+the authoritative file-to-license mapping.
+
+**Typical project files** (most code under `lftools_uv/`, `tests/`, etc.):
+
+```python
+# SPDX-FileCopyrightText: 2026 Andrew Grimberg <tykeal@bardicgrove.org>
+# SPDX-License-Identifier: Apache-2.0
+```
+
+**Note**: The project is dual-licensed (`EPL-1.0 OR Apache-2.0` per
+`pyproject.toml`). Some paths (e.g., `.specify/`) use different licenses
+as declared in `REUSE.toml` annotations. Always check `REUSE.toml`
+before adding headers to new files.
+
+## Git Worktrees
+
+When creating git worktrees for feature branches, bug fixes, or any
+other work, **always** place them in the sibling `worktrees/` directory:
+
+```bash
+git worktree add ../worktrees/lftools-uv/<branch-name> -b <branch-name> main
+```
+
+The `worktrees/` directory is a sibling of the repository under the
+repository root's parent directory:
+
+```text
+repos/github/tlf/releng/
+├── lftools-uv/              ← this repository
+└── worktrees/lftools-uv/    ← all worktrees go here
+    ├── feat/some-feature/
+    └── fix/some-bugfix/
+```
+
+**NEVER** create worktrees inside the repository directory itself.
+
+Clean up worktrees after merging the associated branch:
+
+```bash
+git worktree remove ../worktrees/lftools-uv/<branch-name>
+git branch -D <branch-name>
+```
+
+## Testing Requirements
+
+The Python project lives under `custom_components/`. Run commands from the
+repository root using `uv`:
+
+- Run tests before committing: `uv run pytest tests/`
+- Run linting before committing: `uv run ruff check custom_components/ tests/`
+- All tests must pass before pushing
+- New features should include appropriate test coverage
+
+## Development Workflow Summary
+
+1. Make changes to code
+2. Run tests locally to verify: `uv run pytest tests/ -x -q`
+3. Run linting: `uv run ruff check custom_components/ tests/`
+4. Stage changes: `git add <files>`
+5. Commit with sign-off and co-authorship:
+
+   ```bash
+   git commit -s -m "Type(scope): Short imperative description
+
+   Body explaining what and why.
+
+   Co-authored-by: <AI Model> <email@provider.com>"
+   ```
+
+6. If pre-commit fails, fix issues and commit again (don't reset)
+7. Push when ready
+
+## Quick Reference
+
+| Rule | Command/Format |
+| ------------ | ---------------- |
+| Sign-off | `git commit -s` |
+| Co-author | `Co-authored-by: <Model> <email>` |
+| Subject format | `Type(scope): imperative description` |
+| Type case | Capitalized (e.g., `Fix`, `Feat`) |
+| Subject length | ≤50 chars (enforced by gitlint) |
+| Body line length | ≤72 chars (URLs exempt) |
+| Subject punctuation | No trailing period |
+| Subject mood | Imperative ("Add", not "Added") |
+| Body content | Explain what and why, not how |
+| After failed commit | Fix and retry (no reset, no amend) |
