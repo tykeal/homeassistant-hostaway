@@ -7,8 +7,7 @@ before proceeding to planning
 
 ## Content Quality
 
-- [x] No unnecessary implementation details beyond mandated
-  project constraints
+- [x] No implementation details (languages, frameworks, APIs)
 - [x] Focused on user value and business needs
 - [x] Written for non-technical stakeholders
 - [x] All mandatory sections completed
@@ -32,19 +31,17 @@ before proceeding to planning
 - [x] User scenarios cover primary flows
 - [x] Feature meets measurable outcomes defined in Success
   Criteria
-- [x] No unnecessary implementation details leak into
-  specification beyond project-mandated constraints
+- [x] No implementation details leak into specification
 
 ## Notes
 
 - All items pass validation. Spec is ready for
   `/speckit.clarify` or `/speckit.plan`.
-- Assumptions section documents reasonable defaults chosen for
-  polling intervals, rate limit handling, and entity naming
-  patterns.
-- The spec references project constraints (httpx, Pydantic,
-  version minimums from manifest.json/hacs.json) in the
-  Assumptions section as mandated by the project constitution.
-  These are fixed environmental constraints, not design
-  decisions made here — they do not constitute implementation
-  details leaking into the spec.
+- Assumptions section documents reasonable defaults for
+  polling intervals, rate limit handling, and entity naming.
+- The Assumptions section references architectural patterns
+  from the Guesty sister project (httpx, Pydantic,
+  DataUpdateCoordinators) and version constraints from
+  manifest.json/hacs.json. These are project environmental
+  constraints confined to Assumptions, not requirements or
+  design decisions in the spec body.
