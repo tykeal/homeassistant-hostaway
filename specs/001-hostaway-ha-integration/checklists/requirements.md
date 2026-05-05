@@ -7,7 +7,8 @@ before proceeding to planning
 
 ## Content Quality
 
-- [x] No implementation details (languages, frameworks, APIs)
+- [x] Requirements are technology-agnostic (project constraints
+  documented separately in Assumptions)
 - [x] Focused on user value and business needs
 - [x] Written for non-technical stakeholders
 - [x] All mandatory sections completed
@@ -31,7 +32,7 @@ before proceeding to planning
 - [x] User scenarios cover primary flows
 - [x] Feature meets measurable outcomes defined in Success
   Criteria
-- [x] No implementation details leak into specification
+- [x] Project constraints confined to Assumptions section
 
 ## Notes
 
@@ -40,6 +41,7 @@ before proceeding to planning
 - Assumptions section documents reasonable defaults chosen for
   polling intervals, rate limit handling, and entity naming
   patterns.
-- The spec references architectural patterns (httpx, Pydantic,
-  Python 3.14+, HA 2026.4.0+) in Assumptions only — these are
-  project constraints, not implementation specifications.
+- The spec references project constraints (httpx, Pydantic,
+  Python 3.14+, HA 2026.4.0+) in the Assumptions section as
+  mandated by the project constitution. These are fixed
+  environmental constraints, not design decisions made here.

@@ -286,10 +286,11 @@ event is fired containing the reservation data.
   <https://api.hostaway.com/documentation>
   accurately reflects current API behavior.
 - Python 3.14+ and Home Assistant 2026.4.0+ are the minimum
-  supported versions.
-- The integration follows the same architectural patterns as
-  the Guesty sister project (httpx client, Pydantic models,
-  DataUpdateCoordinators).
+  supported versions (per project constitution).
+- The integration follows project-mandated architectural
+  patterns (httpx client, Pydantic models,
+  DataUpdateCoordinators) as established by the constitution
+  and the Guesty sister project.
 - Polling is sufficient for the initial release; webhook
   support for real-time updates is a future enhancement.
 - Only the doorCode, doorCodeVendor, and doorCodeInstruction
