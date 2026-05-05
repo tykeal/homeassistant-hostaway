@@ -42,6 +42,7 @@ before proceeding to planning
   polling intervals, rate limit handling, and entity naming
   patterns.
 - The spec references project constraints (httpx, Pydantic,
-  Python 3.14+, HA 2026.4.0+) in the Assumptions section as
-  mandated by the project constitution. These are fixed
-  environmental constraints, not design decisions made here.
+  version minimums from manifest.json/hacs.json) in the
+  Assumptions section as mandated by the project constitution.
+  These are fixed environmental constraints, not design
+  decisions made here.
