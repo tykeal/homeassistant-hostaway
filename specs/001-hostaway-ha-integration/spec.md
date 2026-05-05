@@ -215,9 +215,11 @@ event is fired containing the reservation data.
 - **FR-007**: System MUST expose listing data as sensor
   entities following the naming convention
   `sensor.hostaway_<listing>_<attribute>` per the project
-  constitution. Each sensor's unique_id MUST be derived from
-  immutable identifiers (account ID + listing ID + attribute
-  key) to ensure stability across restarts and name changes.
+  constitution, where `<listing>` is the slugified listing
+  name used as the default entity name. Each sensor's
+  unique_id MUST be derived solely from immutable identifiers
+  (account ID + listing ID + attribute key) to ensure
+  stability across listing renames and restarts.
 - **FR-008**: System MUST poll listing data at a
   user-configurable interval (default: 5 minutes, minimum:
   1 minute) and update sensor state accordingly.
@@ -233,19 +235,22 @@ event is fired containing the reservation data.
   (cursor-based with afterId for reservations) to retrieve
   complete data sets.
 - **FR-013**: System MUST provide a
-  `hostaway.set_door_code` service that updates the
-  reservation door code fields (Hostaway API fields:
-  doorCode, doorCodeVendor, doorCodeInstruction) on a
-  specified reservation. Service parameters use snake_case
-  (door_code, door_code_vendor, door_code_instruction).
+  `hostaway.set_door_code` service accepting parameters:
+  `reservation_id` (int, required), `door_code` (string,
+  required), `door_code_vendor` (string, optional),
+  `door_code_instruction` (string, optional). The service
+  updates the corresponding Hostaway API fields (doorCode,
+  doorCodeVendor, doorCodeInstruction) on the specified
+  reservation.
 - **FR-014**: System MUST provide a
-  `hostaway.get_reservations` service that fires a
-  `hostaway_reservations_retrieved` event with the following
-  snake_case payload: `listing_id` (int), `listing_name`
-  (string), `reservations` (list of objects containing at
-  minimum: id, guest_name, check_in, check_out, status,
-  door_code). All Hostaway camelCase API fields MUST be
-  mapped to snake_case in HA-facing interfaces.
+  `hostaway.get_reservations` service accepting parameter:
+  `listing_id` (int, required). The service fires a
+  `hostaway_reservations_retrieved` event with snake_case
+  payload: `listing_id` (int), `listing_name` (string),
+  `reservations` (list of objects containing at minimum: id,
+  guest_name, check_in, check_out, status, door_code). All
+  Hostaway camelCase API fields MUST be mapped to snake_case
+  in HA-facing interfaces.
 - **FR-015**: System MUST validate service call parameters and
   return clear error messages for invalid inputs.
 - **FR-016**: System MUST gracefully handle API unavailability
@@ -313,5 +318,7 @@ event is fired containing the reservation data.
 - Only the doorCode, doorCodeVendor, and doorCodeInstruction
   fields need write access on reservations; no other
   reservation fields require modification.
-- Entity naming uses slugified listing names (lowercase,
-  underscores replacing spaces/special characters).
+- Default entity display names use slugified listing names
+  (lowercase, underscores replacing spaces/special
+  characters). Entity unique_ids use immutable Hostaway
+  listing IDs for stability independent of name changes.
