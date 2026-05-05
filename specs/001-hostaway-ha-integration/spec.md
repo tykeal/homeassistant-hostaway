@@ -212,28 +212,38 @@ event is fired containing the reservation data.
   appropriate throttling and backoff.
 - **FR-006**: System MUST handle HTTP 429 responses with
   exponential backoff retry.
-- **FR-007**: System MUST expose listing data as sensor
-  entities following the pattern
-  `sensor.hostaway_<listing_name>_<attribute>`.
-- **FR-008**: System MUST poll listing data periodically and
-  update sensor state accordingly.
+- **FR-007**: System MUST expose each monitored listing as a
+  single sensor entity (`sensor.hostaway_<listing_name>`)
+  with listing attributes (name, status, pricing, occupancy)
+  stored as entity state attributes.
+- **FR-008**: System MUST poll listing data at a
+  user-configurable interval (default: 5 minutes, minimum:
+  1 minute) and update sensor state accordingly.
 - **FR-009**: System MUST expose reservation data as sensor
   entities for monitored listings.
-- **FR-010**: System MUST poll reservation data periodically
-  and update sensor state accordingly.
-- **FR-011**: System MUST handle Hostaway API pagination
+- **FR-010**: System MUST poll reservation data at a
+  user-configurable interval (default: 2 minutes, minimum:
+  1 minute) and update sensor state accordingly.
+- **FR-011**: System MUST provide an options flow allowing
+  users to adjust listing and reservation polling intervals
+  after initial setup.
+- **FR-012**: System MUST handle Hostaway API pagination
   (cursor-based with afterId for reservations) to retrieve
   complete data sets.
-- **FR-012**: System MUST provide a
+- **FR-013**: System MUST provide a
   `hostaway.set_door_code` service that updates doorCode,
   doorCodeVendor, and doorCodeInstruction fields on a
   specified reservation.
-- **FR-013**: System MUST provide a
-  `hostaway.get_reservations` service that fires an event
-  with reservation data for a specified listing.
-- **FR-014**: System MUST validate service call parameters and
+- **FR-014**: System MUST provide a
+  `hostaway.get_reservations` service that fires a
+  `hostaway_reservations_retrieved` event with the following
+  payload: `listing_id` (int), `listing_name` (string),
+  `reservations` (list of reservation objects containing at
+  minimum: id, guest_name, check_in, check_out, status,
+  door_code).
+- **FR-015**: System MUST validate service call parameters and
   return clear error messages for invalid inputs.
-- **FR-015**: System MUST gracefully handle API unavailability
+- **FR-016**: System MUST gracefully handle API unavailability
   by retaining last known sensor values and retrying on the
   next poll interval.
 
