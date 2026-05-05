@@ -313,8 +313,7 @@ event is fired containing the reservation data.
   as specified in the project constitution.
 - The integration follows the architectural patterns
   established by the Guesty sister project
-  (<https://github.com/tykeal/homeassistant-guesty>):
-  httpx client, Pydantic models, DataUpdateCoordinators.
+  (<https://github.com/tykeal/homeassistant-guesty>).
 - Polling is sufficient for the initial release; webhook
   support for real-time updates is a future enhancement.
 - Only the doorCode, doorCodeVendor, and doorCodeInstruction

@@ -37,11 +37,15 @@ before proceeding to planning
 
 - All items pass validation. Spec is ready for
   `/speckit.clarify` or `/speckit.plan`.
+- The "no implementation details" checklist items refer to
+  implementation *choices* (languages, frameworks, internal
+  architecture). The spec necessarily includes API behavioral
+  details (OAuth grant type, rate limits, field names) because
+  these define the external system constraints the integration
+  must satisfy — they describe *what* to integrate with, not
+  *how* to build it.
 - Assumptions section documents reasonable defaults for
   polling intervals, rate limit handling, and entity naming.
-- The Assumptions section references architectural patterns
-  from the Guesty sister project (httpx, Pydantic,
-  DataUpdateCoordinators) and version constraints from
-  manifest.json/hacs.json. These are project environmental
-  constraints confined to Assumptions, not requirements or
-  design decisions in the spec body.
+- The Guesty sister project is referenced as an architectural
+  precedent; specific technology choices will be made during
+  the planning phase.
