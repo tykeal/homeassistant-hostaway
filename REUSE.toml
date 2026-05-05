@@ -1,0 +1,43 @@
+version = 1
+
+[[annotations]]
+path = "node_modules/**"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Andrew Grimberg <tykeal@bardicgrove.org>"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = "tests/.mypy**"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Andrew Grimberg <tykeal@bardicgrove.org>"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = "tests/__pycache__/**"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Andrew Grimberg <tykeal@bardicgrove.org>"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = [".specify/**", ".github/*/speckit.**", ".vscode/**"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "Delimarsky, D., & Riem, M. (2026)"
+SPDX-License-Identifier = "MIT"
+
+[[annotations]]
+path = "custom_components/**/*.json"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Andrew Grimberg <tykeal@bardicgrove.org>"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = "uv.lock"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Andrew Grimberg <tykeal@bardicgrove.org>"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = "hacs.json"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Andrew Grimberg <tykeal@bardicgrove.org>"
+SPDX-License-Identifier = "Apache-2.0"
