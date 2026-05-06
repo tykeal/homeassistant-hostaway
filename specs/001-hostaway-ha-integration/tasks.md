@@ -55,26 +55,29 @@ scaffolding, CI configuration, and manifest files
   `iot_class: cloud_polling`, HA version requirement,
   requirements `httpx>=0.27`, codeowners `@tykeal`,
   documentation URL
-- [ ] T003 [P] Create HACS manifest in `hacs.json`: name
-  `Hostaway`, `render_readme: true`, homeassistant minimum
-  version matching manifest.json
+- [ ] T003 [P] Verify and update existing `hacs.json`:
+  confirm name is `Hostaway`, `render_readme: true`, and
+  homeassistant minimum version matches manifest.json
 - [ ] T004 [P] Create `pyproject.toml` with project metadata,
   test dependencies (`pytest`, `pytest-asyncio`,
   `pytest-homeassistant-custom-component`, `respx`), ruff
   config, mypy config, and interrogate config
-- [ ] T005 [P] Create `.pre-commit-config.yaml` with hooks
-  for ruff, ruff-format, mypy, interrogate, yamllint,
+- [ ] T005 [P] Update existing `.pre-commit-config.yaml` to
+  include any missing hooks needed for implementation:
+  ruff, ruff-format, mypy, interrogate, yamllint,
   markdownlint, reuse-tool, gitlint, codespell, and
   validate-pyproject
-- [ ] T006 [P] Create `.gitlint` with title-max-length 50,
-  body-max-line-length 72, conventional commits, and
-  signed-off-by enforcement
-- [ ] T007 [P] Create `REUSE.toml` with license annotations
-  for all file patterns (Apache-2.0 for source,
-  CC-BY-4.0 for docs/specs)
-- [ ] T008 [P] Create GitHub Actions CI workflow in
-  `.github/workflows/ci.yml`: lint, type-check, test
-  matrix on Python versions
+- [ ] T006 [P] Verify existing `.gitlint` enforces
+  title-max-length 50, body-max-line-length 72,
+  conventional commits, and signed-off-by; update if
+  needed
+- [ ] T007 [P] Update existing `REUSE.toml` with license
+  annotations for new file patterns added by this feature
+  (Apache-2.0 for source, CC-BY-4.0 for docs/specs)
+- [ ] T008 [P] Verify existing GitHub Actions workflows
+  (e.g., `build-test.yaml`, `validate.yaml`) cover lint,
+  type-check, and test matrix; extend or add workflow if
+  gaps exist
 
 **Checkpoint**: Project skeleton compiles, pre-commit hooks
 pass, CI pipeline runs successfully
@@ -292,11 +295,12 @@ the Home Assistant UI (FR-004, FR-011)
   `DEFAULT_RESERVATION_SCAN_INTERVAL` (2),
   `PLATFORMS: list[Platform]` (sensor)
 - [ ] T032 [P] [US2] Create localized UI strings in
-  `custom_components/hostaway/strings.json`: config flow
-  steps `user` and `listings` with field descriptions,
-  options flow step with interval fields, error messages
-  (`invalid_auth`, `cannot_connect`, `unknown`), abort
-  reasons (`already_configured`)
+  `custom_components/hostaway/strings.json` and
+  `custom_components/hostaway/translations/en.json`:
+  config flow steps `user` and `listings` with field
+  descriptions, options flow step with interval fields,
+  error messages (`invalid_auth`, `cannot_connect`,
+  `unknown`), abort reasons (`already_configured`)
 - [ ] T033 [US2] Implement config flow in
   `custom_components/hostaway/config_flow.py`:
   `HostawayConfigFlow(ConfigFlow, domain=DOMAIN)` with
@@ -452,10 +456,12 @@ reservation data programmatically (FR-013, FR-014, FR-015)
   `custom_components/hostaway/services.yaml`: define
   `set_door_code` and `get_reservations` schemas per
   contracts/services.md
-- [ ] T050 Register services in `async_setup_entry` in
-  `custom_components/hostaway/__init__.py`: register both
-  service handlers with voluptuous schema validation,
-  unregister in `async_unload_entry`
+- [ ] T050 Register services once per integration in
+  `async_setup` in `custom_components/hostaway/__init__.py`:
+  register both service handlers with voluptuous schema
+  validation; use a domain-level setup guard so services
+  persist across multiple config entries and are only
+  removed when the last entry unloads
 
 **Checkpoint**: Both services functional — door codes can be
 set via automation, reservations retrievable on demand
