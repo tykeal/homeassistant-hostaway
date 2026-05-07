@@ -55,7 +55,7 @@ class AccessToken:
         """Compute the expiration timestamp.
 
         Returns:
-            UTC datetime when this token expires.
+            Datetime when this token expires (same tz as issued_at).
         """
         return self.issued_at + timedelta(seconds=self.expires_in)
 
@@ -125,7 +125,7 @@ class HostawayListing:
         id: Unique listing identifier.
         name: Public listing name.
         internal_name: Internal reference name.
-        status: Listing status ('active' or 'inactive').
+        status: Listing status ('active', 'inactive', or None).
         address: Full address string.
         city: City name.
         country_code: ISO country code.
@@ -175,8 +175,14 @@ class HostawayListing:
         if "id" not in data:
             msg = "id is required"
             raise ValueError(msg)
+        if not isinstance(data["id"], int) or data["id"] <= 0:
+            msg = "id must be a positive integer"
+            raise ValueError(msg)
         if "name" not in data:
             msg = "name is required"
+            raise ValueError(msg)
+        if not data["name"]:
+            msg = "name must be non-empty"
             raise ValueError(msg)
 
         # Map isActive to status
@@ -269,7 +275,7 @@ class HostawayReservation:
             A HostawayReservation instance.
 
         Raises:
-            ValueError: If required fields are missing.
+            ValueError: If required fields are missing or invalid.
         """
         required_mappings = {
             "id": "id",
@@ -283,6 +289,16 @@ class HostawayReservation:
             if api_key not in data:
                 msg = f"{field_name} is required"
                 raise ValueError(msg)
+
+        if not isinstance(data["id"], int) or data["id"] <= 0:
+            msg = "id must be a positive integer"
+            raise ValueError(msg)
+        if not isinstance(data["listingMapId"], int) or data["listingMapId"] <= 0:
+            msg = "listing_id must be a positive integer"
+            raise ValueError(msg)
+        if not data["guestName"]:
+            msg = "guest_name must be non-empty"
+            raise ValueError(msg)
 
         return cls(
             id=data["id"],
