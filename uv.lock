@@ -1158,8 +1158,8 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "homeassistant", marker = "extra == 'test'", specifier = ">=2026.4.0" },
-    { name = "httpx", specifier = ">=0.28" },
-    { name = "httpx", marker = "extra == 'test'", specifier = ">=0.28" },
+    { name = "httpx", specifier = "==0.28.1" },
+    { name = "httpx", marker = "extra == 'test'", specifier = "==0.28.1" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=8.0" },
     { name = "pytest-asyncio", marker = "extra == 'test'", specifier = ">=0.25" },
     { name = "pytest-cov", marker = "extra == 'test'", specifier = ">=6.0" },
@@ -1171,7 +1171,7 @@ provides-extras = ["test"]
 [package.metadata.requires-dev]
 dev = [
     { name = "homeassistant", specifier = ">=2026.4.0" },
-    { name = "httpx", specifier = ">=0.28" },
+    { name = "httpx", specifier = "==0.28.1" },
     { name = "interrogate", specifier = ">=1.7" },
     { name = "mypy", specifier = ">=1.20" },
     { name = "pytest", specifier = ">=8.0" },
