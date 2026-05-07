@@ -13,8 +13,6 @@ from custom_components.hostaway.api.models import HostawayListing
 from custom_components.hostaway.const import DOMAIN
 
 if TYPE_CHECKING:
-    from homeassistant.config_entries import ConfigEntry
-
     from custom_components.hostaway.coordinator import (
         HostawayListingsCoordinator,
     )
@@ -39,14 +37,12 @@ class HostawayEntity(
         self,
         coordinator: HostawayListingsCoordinator,
         listing_id: int,
-        entry: ConfigEntry,
     ) -> None:
         """Initialize the base entity.
 
         Args:
             coordinator: The listings coordinator.
             listing_id: The Hostaway listing ID.
-            entry: The config entry (used by subclasses).
         """
         super().__init__(coordinator)
         self._listing_id = listing_id
