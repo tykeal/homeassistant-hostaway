@@ -140,10 +140,14 @@ automation:
       - service: hostaway.set_door_code
         data:
           reservation_id: 1234
-          door_code: "{{ range(1000, 9999) | random }}"
+          door_code: >-
+            {{ range(1000, 9999) | random }}
           door_code_vendor: "smartlock"
           door_code_instruction: "Use the keypad"
 ```
+
+Reservation entity IDs follow the pattern:
+`sensor.<listing_name>_reservation_<id>`
 
 ### Notify on new reservations
 

@@ -10,6 +10,7 @@ service calls without deadlock.
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, patch
 
 from homeassistant.config_entries import ConfigEntryState
@@ -17,6 +18,7 @@ from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.hostaway.api.models import (
+    AccessToken,
     HostawayListing,
     HostawayReservation,
 )
@@ -92,10 +94,8 @@ class TestTokenExpiryDuringRefresh:
     ) -> None:
         """Coordinator refresh succeeds after token invalidation.
 
-        Verifies that invalidating the cached token does not
-        prevent subsequent coordinator refreshes from returning
-        valid data when the API client is mocked. Confirms that
-        invalidate() clears the cache correctly.
+        Verifies that invalidating a seeded token clears the
+        cache and coordinator refreshes still succeed.
         """
         entry = _make_entry()
         entry.add_to_hass(hass)
@@ -106,10 +106,19 @@ class TestTokenExpiryDuringRefresh:
         data = hass.data[DOMAIN][entry.entry_id]
         lc = data["listings_coordinator"]
 
-        # Token manager invalidate clears cached token
+        # Seed a token so invalidate has something to clear
         tm = data["token_manager"]
+        tm.seed_token(
+            AccessToken(
+                access_token="seeded-token",
+                token_type="Bearer",
+                expires_in=86400,
+                issued_at=datetime.now(UTC),
+            )
+        )
+        assert tm._cached_token is not None
+
         tm.invalidate()
-        # Verify the cache is cleared
         assert tm._cached_token is None
 
         # Coordinator refresh still works with mocked API
