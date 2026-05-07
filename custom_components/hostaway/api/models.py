@@ -86,7 +86,7 @@ class AccessToken:
         if not self.token_type:
             msg = "token_type must be non-empty"
             raise ValueError(msg)
-        if not isinstance(self.expires_in, int):
+        if isinstance(self.expires_in, bool) or not isinstance(self.expires_in, int):
             msg = "expires_in must be an integer"
             raise ValueError(msg)
         if self.expires_in <= 0:
@@ -230,14 +230,18 @@ class HostawayListing:
         if "id" not in data:
             msg = "id is required"
             raise ValueError(msg)
-        if not isinstance(data["id"], int) or data["id"] <= 0:
+        if (
+            isinstance(data["id"], bool)
+            or not isinstance(data["id"], int)
+            or data["id"] <= 0
+        ):
             msg = "id must be a positive integer"
             raise ValueError(msg)
         if "name" not in data:
             msg = "name is required"
             raise ValueError(msg)
-        if not data["name"]:
-            msg = "name must be non-empty"
+        if not isinstance(data["name"], str) or not data["name"]:
+            msg = "name must be a non-empty string"
             raise ValueError(msg)
 
         # Map isActive (0/1) to status
@@ -359,24 +363,32 @@ class HostawayReservation:
                 msg = f"{field_name} is required"
                 raise ValueError(msg)
 
-        if not isinstance(data["id"], int) or data["id"] <= 0:
+        if (
+            isinstance(data["id"], bool)
+            or not isinstance(data["id"], int)
+            or data["id"] <= 0
+        ):
             msg = "id must be a positive integer"
             raise ValueError(msg)
         listing_map_id = data["listingMapId"]
-        if not isinstance(listing_map_id, int) or listing_map_id <= 0:
+        if (
+            isinstance(listing_map_id, bool)
+            or not isinstance(listing_map_id, int)
+            or listing_map_id <= 0
+        ):
             msg = "listing_id must be a positive integer"
             raise ValueError(msg)
-        if not data["guestName"]:
-            msg = "guest_name must be non-empty"
+        if not isinstance(data["guestName"], str) or not data["guestName"]:
+            msg = "guest_name must be a non-empty string"
             raise ValueError(msg)
-        if not data["arrivalDate"]:
-            msg = "check_in must be non-empty"
+        if not isinstance(data["arrivalDate"], str) or not data["arrivalDate"]:
+            msg = "check_in must be a non-empty string"
             raise ValueError(msg)
-        if not data["departureDate"]:
-            msg = "check_out must be non-empty"
+        if not isinstance(data["departureDate"], str) or not data["departureDate"]:
+            msg = "check_out must be a non-empty string"
             raise ValueError(msg)
-        if not data["status"]:
-            msg = "status must be non-empty"
+        if not isinstance(data["status"], str) or not data["status"]:
+            msg = "status must be a non-empty string"
             raise ValueError(msg)
 
         # Validate optional numeric fields when present
