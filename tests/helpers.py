@@ -17,8 +17,11 @@ FAKE_BASE_URL = "https://api.hostaway.com"
 def make_token_response(**overrides: Any) -> dict[str, Any]:
     """Create a mock Hostaway token endpoint response.
 
+    Returns the wrapped format matching the real API:
+    {"status": "success", "result": {token fields}}.
+
     Args:
-        **overrides: Fields to override on the default response.
+        **overrides: Fields to override on the token result.
 
     Returns:
         Dictionary matching the Hostaway token endpoint response format.
@@ -29,7 +32,7 @@ def make_token_response(**overrides: Any) -> dict[str, Any]:
         "expires_in": 86400,
     }
     defaults.update(overrides)
-    return defaults
+    return {"status": "success", "result": defaults}
 
 
 def make_listing_response(**overrides: Any) -> dict[str, Any]:
