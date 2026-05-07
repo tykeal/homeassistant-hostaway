@@ -105,6 +105,7 @@ async def async_handle_set_door_code(
         raise ServiceValidationError(
             "door_code must be a non-empty string",
         )
+    door_code = door_code.strip()
 
     payload: dict[str, str] = {"doorCode": door_code}
     if call.data.get("door_code_vendor") is not None:
@@ -201,7 +202,11 @@ async def async_handle_get_reservations(
             for r in reservations
         ],
     }
-    hass.bus.async_fire("hostaway_reservations_retrieved", event_data)
+    hass.bus.async_fire(
+        "hostaway_reservations_retrieved",
+        event_data,
+        context=call.context,
+    )
 
 
 def async_setup_services(hass: HomeAssistant) -> None:

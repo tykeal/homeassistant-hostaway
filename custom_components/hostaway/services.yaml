@@ -36,6 +36,7 @@ set_door_code:
       example: "Enter code on keypad"
       selector:
         text:
+          multiline: true
     config_entry_id:
       name: Config entry ID
       description: >-
