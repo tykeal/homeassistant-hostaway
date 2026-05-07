@@ -2,9 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """Integration tests for full Hostaway lifecycle.
 
-Tests the complete flow: config entry setup, coordinator data
-fetch, sensor entity creation, entity naming (FR-007), unique_id
-stability across unload/reload, and end-to-end service calls.
+Tests the complete flow: entry setup via MockConfigEntry,
+coordinator data fetch, sensor entity creation, entity
+naming (FR-007), unique_id stability across unload/reload,
+and end-to-end service calls.
 """
 
 from __future__ import annotations
