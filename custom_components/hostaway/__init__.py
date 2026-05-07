@@ -136,6 +136,9 @@ async def async_unload_entry(
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
     if unload_ok and DOMAIN in hass.data:
-        hass.data[DOMAIN].pop(entry.entry_id, None)
+        data = hass.data[DOMAIN].pop(entry.entry_id, None)
+        if data:
+            await data["listings_coordinator"].async_shutdown()
+            await data["reservations_coordinator"].async_shutdown()
 
     return unload_ok
