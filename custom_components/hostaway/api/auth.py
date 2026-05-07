@@ -100,6 +100,8 @@ class HostawayTokenManager:
             HostawayAuthError: If credentials are invalid.
             HostawayConnectionError: If the token endpoint is
                 unreachable.
+            HostawayRateLimitError: If the token endpoint returns
+                HTTP 429.
             HostawayResponseError: If the response format is
                 unexpected.
         """
@@ -149,7 +151,7 @@ class HostawayTokenManager:
                     "Accept": "application/json",
                 },
             )
-        except (httpx.ConnectError, httpx.TimeoutException) as exc:
+        except httpx.RequestError as exc:
             raise HostawayConnectionError(
                 f"Failed to connect to token endpoint: {exc}",
             ) from exc

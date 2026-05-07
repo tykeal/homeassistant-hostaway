@@ -301,7 +301,7 @@ class HostawayApiClient:
                         "Accept": "application/json",
                     },
                 )
-            except (httpx.ConnectError, httpx.TimeoutException) as exc:
+            except httpx.RequestError as exc:
                 if attempt >= MAX_RETRIES:
                     raise HostawayConnectionError(
                         f"Failed to connect to Hostaway API "
