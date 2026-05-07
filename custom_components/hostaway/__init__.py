@@ -113,15 +113,12 @@ async def async_setup_entry(
         "reservations_coordinator": reservations_coordinator,
     }
 
-    # Register services (once per domain)
-    if not hass.services.has_service(
-        DOMAIN, "set_door_code"
-    ) or not hass.services.has_service(DOMAIN, "get_reservations"):
-        from custom_components.hostaway.services import (
-            async_setup_services,
-        )
+    # Register services (idempotent, safe for multi-entry)
+    from custom_components.hostaway.services import (
+        async_setup_services,
+    )
 
-        async_setup_services(hass)
+    async_setup_services(hass)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 

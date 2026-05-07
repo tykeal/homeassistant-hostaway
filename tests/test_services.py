@@ -103,6 +103,68 @@ def _make_reservation(**overrides: object) -> HostawayReservation:
     return HostawayReservation(**defaults)  # type: ignore[arg-type]
 
 
+class TestServiceLifecycle:
+    """Tests for service registration and unregistration."""
+
+    async def test_services_registered_on_setup(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Services are registered after entry setup."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        assert hass.services.has_service(DOMAIN, "set_door_code")
+        assert hass.services.has_service(DOMAIN, "get_reservations")
+
+    async def test_services_removed_on_last_unload(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Services are removed when last entry unloads."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        assert hass.services.has_service(DOMAIN, "set_door_code")
+
+        await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()
+
+        assert not hass.services.has_service(DOMAIN, "set_door_code")
+        assert not hass.services.has_service(DOMAIN, "get_reservations")
+
+    async def test_services_registered_once_multi_entry(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Services are registered once across multiple entries."""
+        entry1 = MockConfigEntry(
+            domain=DOMAIN,
+            title="Hostaway (client-1)",
+            data={
+                CONF_CLIENT_ID: "test-client-id-1",
+                CONF_CLIENT_SECRET: "test-client-secret-1",
+                CONF_SELECTED_LISTINGS: [12345],
+            },
+            unique_id="client-1",
+        )
+        entry2 = MockConfigEntry(
+            domain=DOMAIN,
+            title="Hostaway (client-2)",
+            data={
+                CONF_CLIENT_ID: "test-client-id-2",
+                CONF_CLIENT_SECRET: "test-client-secret-2",
+                CONF_SELECTED_LISTINGS: [67890],
+            },
+            unique_id="client-2",
+        )
+        await _setup_entry(hass, entry1)
+        await _setup_entry(hass, entry2)
+
+        assert hass.services.has_service(DOMAIN, "set_door_code")
+        assert hass.services.has_service(DOMAIN, "get_reservations")
+
+
 class TestSetDoorCode:
     """Tests for the hostaway.set_door_code service."""
 

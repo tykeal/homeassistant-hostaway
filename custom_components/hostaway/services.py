@@ -255,7 +255,8 @@ async def async_handle_get_reservations(
 def async_setup_services(hass: HomeAssistant) -> None:
     """Register Hostaway domain-level services.
 
-    Should be called once when the first config entry loads.
+    Idempotent: skips registration for services that already
+    exist. Safe to call on every config entry setup.
 
     Args:
         hass: Home Assistant instance.
@@ -269,15 +270,17 @@ def async_setup_services(hass: HomeAssistant) -> None:
         """Delegate to get_reservations handler."""
         await async_handle_get_reservations(hass, call)
 
-    hass.services.async_register(
-        DOMAIN,
-        "set_door_code",
-        _handle_set_door_code,
-        schema=SERVICE_SET_DOOR_CODE_SCHEMA,
-    )
-    hass.services.async_register(
-        DOMAIN,
-        "get_reservations",
-        _handle_get_reservations,
-        schema=SERVICE_GET_RESERVATIONS_SCHEMA,
-    )
+    if not hass.services.has_service(DOMAIN, "set_door_code"):
+        hass.services.async_register(
+            DOMAIN,
+            "set_door_code",
+            _handle_set_door_code,
+            schema=SERVICE_SET_DOOR_CODE_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, "get_reservations"):
+        hass.services.async_register(
+            DOMAIN,
+            "get_reservations",
+            _handle_get_reservations,
+            schema=SERVICE_GET_RESERVATIONS_SCHEMA,
+        )
