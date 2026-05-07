@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -37,15 +38,18 @@ class HostawayEntity(
         self,
         coordinator: HostawayListingsCoordinator,
         listing_id: int,
+        entry: ConfigEntry,
     ) -> None:
         """Initialize the base entity.
 
         Args:
             coordinator: The listings coordinator.
             listing_id: The Hostaway listing ID.
+            entry: The config entry for unique device identifiers.
         """
         super().__init__(coordinator)
         self._listing_id = listing_id
+        self._entry_unique_id = entry.unique_id
 
     @property
     def _listing(self) -> HostawayListing | None:
@@ -69,7 +73,7 @@ class HostawayEntity(
         if listing is None:
             return None
         return DeviceInfo(
-            identifiers={(DOMAIN, str(listing.id))},
+            identifiers={(DOMAIN, f"{self._entry_unique_id}_{listing.id}")},
             name=listing.name,
             manufacturer="Hostaway",
             model=listing.property_type or "Listing",

@@ -244,10 +244,72 @@ class TestListingSensor:
         sensor = HostawayListingSensor(coordinator, 100, entry, status_desc)
         device_info = sensor.device_info
         assert device_info is not None
-        assert (DOMAIN, "100") in device_info["identifiers"]
+        assert (DOMAIN, "test-client-id_100") in device_info["identifiers"]
         assert device_info["name"] == "Beach House"
         assert device_info["manufacturer"] == "Hostaway"
         assert device_info["model"] == "apartment"
+
+    async def test_suggested_object_id_follows_fr007(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """suggested_object_id follows hostaway_<listing>_<attr>."""
+        entry = _make_entry(selected=[100])
+        entry.add_to_hass(hass)
+        api_client = AsyncMock()
+        api_client.get_all_listings = AsyncMock(
+            return_value=[_make_listing(100, "Beach House")]
+        )
+
+        coordinator = HostawayListingsCoordinator(hass, entry, api_client)
+        await coordinator.async_refresh()
+
+        status_desc = next(d for d in LISTING_SENSOR_DESCRIPTIONS if d.key == "status")
+        sensor = HostawayListingSensor(coordinator, 100, entry, status_desc)
+        assert sensor.suggested_object_id == "hostaway_beach_house_status"
+
+    async def test_entity_ids_via_async_setup_entry(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """async_setup_entry registers entities with FR-007 IDs."""
+        from custom_components.hostaway.sensor import async_setup_entry
+
+        entry = _make_entry(selected=[100])
+        entry.add_to_hass(hass)
+        api_client = AsyncMock()
+        api_client.get_all_listings = AsyncMock(
+            return_value=[_make_listing(100, "Beach House")]
+        )
+        api_client.get_all_reservations = AsyncMock(return_value=[])
+
+        listings_coord = HostawayListingsCoordinator(hass, entry, api_client)
+        await listings_coord.async_refresh()
+        res_coord = HostawayReservationsCoordinator(hass, entry, api_client)
+        await res_coord.async_refresh()
+
+        hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
+            "listings_coordinator": listings_coord,
+            "reservations_coordinator": res_coord,
+        }
+
+        added: list = []
+        await async_setup_entry(
+            hass,
+            entry,
+            lambda entities, update_before_add=False: added.extend(entities),
+        )
+
+        # Verify suggested_object_id for all listing sensors
+        for entity in added:
+            if isinstance(entity, HostawayListingSensor):
+                obj_id = entity.suggested_object_id
+                assert obj_id is not None
+                assert obj_id.startswith("hostaway_")
+
+        # Cleanup to avoid lingering timers
+        await listings_coord.async_shutdown()
+        await res_coord.async_shutdown()
 
 
 class TestReservationSensor:
@@ -402,5 +464,5 @@ class TestReservationSensor:
         )
         device_info = sensor.device_info
         assert device_info is not None
-        assert (DOMAIN, "100") in device_info["identifiers"]
+        assert (DOMAIN, "test-client-id_100") in device_info["identifiers"]
         assert device_info["name"] == "Beach House"

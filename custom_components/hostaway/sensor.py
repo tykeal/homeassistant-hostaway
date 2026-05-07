@@ -15,6 +15,7 @@ from homeassistant.components.sensor import (
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.typing import StateType
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import slugify
 
 from custom_components.hostaway.api.models import (
     HostawayListing,
@@ -101,9 +102,25 @@ class HostawayListingSensor(HostawayEntity, SensorEntity):
             entry: The config entry.
             description: The sensor entity description.
         """
-        super().__init__(coordinator, listing_id)
+        super().__init__(coordinator, listing_id, entry)
         self.entity_description = description
         self._attr_unique_id = f"{entry.unique_id}_{listing_id}_{description.key}"
+        # FR-007: entity_id = sensor.hostaway_<listing>_<attribute>
+        listing = coordinator.data.get(listing_id) if coordinator.data else None
+        self._suggested_object_id: str | None = None
+        if listing:
+            self._suggested_object_id = (
+                f"hostaway_{slugify(listing.name)}_{description.key}"
+            )
+
+    @property
+    def suggested_object_id(self) -> str | None:
+        """Return FR-007 compliant object id.
+
+        Returns:
+            Object ID in hostaway_<listing>_<attribute> format.
+        """
+        return self._suggested_object_id
 
     @property
     def native_value(self) -> StateType:
@@ -154,6 +171,7 @@ class HostawayReservationSensor(
         self._reservation_id = reservation.id
         self._listing_id = reservation.listing_id
         self._listings_coordinator = listings_coordinator
+        self._entry_unique_id = entry.unique_id
         self._attr_unique_id = f"{entry.unique_id}_{reservation.id}"
         self._attr_name = f"Reservation {reservation.id}"
 
@@ -229,7 +247,7 @@ class HostawayReservationSensor(
         if listing is None:
             return None
         return DeviceInfo(
-            identifiers={(DOMAIN, str(listing.id))},
+            identifiers={(DOMAIN, f"{self._entry_unique_id}_{listing.id}")},
             name=listing.name,
             manufacturer="Hostaway",
             model=listing.property_type or "Listing",
