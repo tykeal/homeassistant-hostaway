@@ -146,7 +146,7 @@ class TestListingSensor:
         self,
         hass: HomeAssistant,
     ) -> None:
-        """unique_id format: {entry_id}_{listing_id}_{attribute_key}."""
+        """unique_id format: {unique_id}_{listing_id}_{attribute_key}."""
         entry = _make_entry(selected=[100])
         entry.add_to_hass(hass)
         api_client = AsyncMock()
@@ -323,7 +323,7 @@ class TestReservationSensor:
         self,
         hass: HomeAssistant,
     ) -> None:
-        """unique_id: {entry_id}_{reservation_id}."""
+        """unique_id: {unique_id}_{reservation_id}."""
         entry = _make_entry(selected=[100])
         entry.add_to_hass(hass)
         api_client = AsyncMock()
@@ -373,11 +373,8 @@ class TestReservationSensor:
         api_client.get_all_reservations = AsyncMock(return_value=[updated_res])
         await res_coord.async_refresh()
 
-        # Sensor reads from coordinator data
-        sensor2 = HostawayReservationSensor(
-            res_coord, listings_coord, updated_res, entry
-        )
-        assert sensor2.extra_state_attributes["status"] == "checked_in"
+        # Same sensor instance reflects updated coordinator data
+        assert sensor.extra_state_attributes["status"] == "checked_in"
 
     async def test_device_info_from_listings_coordinator(
         self,
