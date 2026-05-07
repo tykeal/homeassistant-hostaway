@@ -16,8 +16,11 @@ async def async_setup_entry(
 ) -> None:
     """Set up Hostaway sensor entities from a config entry.
 
+    Stub implementation — entity creation will be added in Phase 5.
+
     Args:
         hass: Home Assistant instance.
         entry: The config entry.
         async_add_entities: Callback to add entities.
     """
+    # No entities to add yet; Phase 5 will populate this.

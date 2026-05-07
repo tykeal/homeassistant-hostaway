@@ -21,6 +21,8 @@ from custom_components.hostaway.api.client import HostawayApiClient
 from custom_components.hostaway.api.exceptions import (
     HostawayApiError,
     HostawayAuthError,
+    HostawayConnectionError,
+    HostawayRateLimitError,
 )
 from custom_components.hostaway.api.models import AccessToken
 from custom_components.hostaway.const import (
@@ -81,9 +83,13 @@ async def async_setup_entry(
         raise ConfigEntryAuthFailed(
             f"Invalid Hostaway credentials: {exc}",
         ) from exc
-    except HostawayApiError as exc:
+    except (HostawayConnectionError, HostawayRateLimitError) as exc:
         raise ConfigEntryNotReady(
             f"Unable to connect to Hostaway: {exc}",
+        ) from exc
+    except HostawayApiError as exc:
+        raise ConfigEntryNotReady(
+            f"Hostaway API error during setup: {exc}",
         ) from exc
 
     hass.data.setdefault(DOMAIN, {})

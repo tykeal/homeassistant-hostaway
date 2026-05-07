@@ -292,10 +292,10 @@ class HostawayConfigFlow(ConfigFlow, domain=DOMAIN):
                     self._client_secret,
                 )
             except HostawayAuthError:
-                _LOGGER.exception("Auth failed fetching listings")
+                _LOGGER.warning("Auth failed fetching listings")
                 return self.async_abort(reason="invalid_auth")
             except HostawayConnectionError:
-                _LOGGER.exception("Connection failed fetching listings")
+                _LOGGER.warning("Connection failed fetching listings")
                 return self.async_abort(reason="cannot_connect")
             except Exception:
                 _LOGGER.exception("Failed to fetch listings")
