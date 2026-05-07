@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from typing import Any
 
 import voluptuous as vol
@@ -39,6 +40,8 @@ def _positive_int(value: Any) -> int:
     if isinstance(value, bool):
         raise vol.Invalid("boolean is not a valid integer")
     if isinstance(value, float):
+        if not math.isfinite(value):
+            raise vol.Invalid("expected a finite number")
         if value != int(value):
             raise vol.Invalid("float with fractional part is not valid")
         value = int(value)
@@ -73,20 +76,39 @@ def _non_empty_string(value: Any) -> str:
     return stripped
 
 
+def _strict_string(value: Any) -> str:
+    """Validate that a value is a string without coercion.
+
+    Args:
+        value: The value to validate.
+
+    Returns:
+        The original string value.
+
+    Raises:
+        vol.Invalid: If the value is not a string.
+    """
+    if not isinstance(value, str):
+        raise vol.Invalid("expected a string")
+    return value
+
+
 SERVICE_SET_DOOR_CODE_SCHEMA = vol.Schema(
     {
         vol.Required("reservation_id"): _positive_int,
         vol.Required("door_code"): _non_empty_string,
-        vol.Optional("door_code_vendor"): vol.Maybe(str),
-        vol.Optional("door_code_instruction"): vol.Maybe(str),
-        vol.Optional("config_entry_id"): str,
+        vol.Optional("door_code_vendor"): vol.Maybe(_strict_string),
+        vol.Optional("door_code_instruction"): vol.Maybe(
+            _strict_string,
+        ),
+        vol.Optional("config_entry_id"): _strict_string,
     }
 )
 
 SERVICE_GET_RESERVATIONS_SCHEMA = vol.Schema(
     {
         vol.Required("listing_id"): _positive_int,
-        vol.Optional("config_entry_id"): str,
+        vol.Optional("config_entry_id"): _strict_string,
     }
 )
 
