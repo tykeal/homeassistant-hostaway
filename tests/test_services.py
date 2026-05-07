@@ -550,3 +550,94 @@ class TestGetReservations:
         assert len(events) == 1
         assert events[0]["listing_id"] == 99999
         assert events[0]["reservations"] == []
+
+    async def test_multi_entry_selects_correct_client(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """config_entry_id selects correct entry's client."""
+        entry1 = MockConfigEntry(
+            domain=DOMAIN,
+            title="Hostaway (client-1)",
+            data={
+                CONF_CLIENT_ID: "test-client-id-1",
+                CONF_CLIENT_SECRET: "test-client-secret-1",
+                CONF_SELECTED_LISTINGS: [12345],
+            },
+            unique_id="client-1",
+        )
+        entry2 = MockConfigEntry(
+            domain=DOMAIN,
+            title="Hostaway (client-2)",
+            data={
+                CONF_CLIENT_ID: "test-client-id-2",
+                CONF_CLIENT_SECRET: "test-client-secret-2",
+                CONF_SELECTED_LISTINGS: [67890],
+            },
+            unique_id="client-2",
+        )
+        await _setup_entry(hass, entry1)
+        await _setup_entry(hass, entry2)
+
+        mock_get = AsyncMock(return_value=[])
+        entry2_client = hass.data[DOMAIN][entry2.entry_id]["api_client"]
+        entry2_client.get_all_reservations = mock_get
+
+        events: list[Mapping[str, Any]] = []
+        hass.bus.async_listen(
+            "hostaway_reservations_retrieved",
+            lambda evt: events.append(evt.data),
+        )
+
+        await hass.services.async_call(
+            DOMAIN,
+            "get_reservations",
+            {
+                "listing_id": 67890,
+                "config_entry_id": entry2.entry_id,
+            },
+            blocking=True,
+        )
+        await hass.async_block_till_done()
+
+        mock_get.assert_called_once_with(67890)
+        assert len(events) == 1
+
+    async def test_multi_entry_no_id_raises_error(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Missing config_entry_id with multiple entries raises."""
+        entry1 = MockConfigEntry(
+            domain=DOMAIN,
+            title="Hostaway (client-1)",
+            data={
+                CONF_CLIENT_ID: "test-client-id-1",
+                CONF_CLIENT_SECRET: "test-client-secret-1",
+                CONF_SELECTED_LISTINGS: [12345],
+            },
+            unique_id="client-1",
+        )
+        entry2 = MockConfigEntry(
+            domain=DOMAIN,
+            title="Hostaway (client-2)",
+            data={
+                CONF_CLIENT_ID: "test-client-id-2",
+                CONF_CLIENT_SECRET: "test-client-secret-2",
+                CONF_SELECTED_LISTINGS: [67890],
+            },
+            unique_id="client-2",
+        )
+        await _setup_entry(hass, entry1)
+        await _setup_entry(hass, entry2)
+
+        with pytest.raises(
+            ServiceValidationError,
+            match="config_entry_id required",
+        ):
+            await hass.services.async_call(
+                DOMAIN,
+                "get_reservations",
+                {"listing_id": 12345},
+                blocking=True,
+            )

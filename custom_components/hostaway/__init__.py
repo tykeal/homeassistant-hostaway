@@ -114,7 +114,9 @@ async def async_setup_entry(
     }
 
     # Register services (once per domain)
-    if not hass.services.has_service(DOMAIN, "set_door_code"):
+    if not hass.services.has_service(
+        DOMAIN, "set_door_code"
+    ) or not hass.services.has_service(DOMAIN, "get_reservations"):
         from custom_components.hostaway.services import (
             async_setup_services,
         )

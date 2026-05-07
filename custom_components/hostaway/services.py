@@ -68,6 +68,11 @@ def _resolve_entry_data(
         result: dict[str, Any] = entries[config_entry_id]
         return result
 
+    if len(entries) == 0:
+        raise ServiceValidationError(
+            "No Hostaway config entries are loaded",
+        )
+
     if len(entries) == 1:
         first: dict[str, Any] = next(iter(entries.values()))
         return first
