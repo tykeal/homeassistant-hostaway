@@ -338,26 +338,26 @@ entities with configurable polling (FR-007 through FR-010)
 > **NOTE: Write these tests FIRST, ensure they FAIL before
 > implementation**
 
-- [ ] T035 [P] [US3] Write ListingsCoordinator tests in
+- [x] T035 [P] [US3] Write ListingsCoordinator tests in
   `tests/test_coordinator.py`: successful data fetch
   returns `dict[int, HostawayListing]`, configurable poll
   interval from options (FR-008), API error sets
   coordinator last_update_success=False, retains last
   data on transient failure (FR-016)
-- [ ] T036 [P] [US4] Write ReservationsCoordinator tests in
+- [x] T036 [P] [US4] Write ReservationsCoordinator tests in
   `tests/test_coordinator.py`: successful fetch returns
   `dict[int, list[HostawayReservation]]` sorted by
   check_in, configurable poll interval from options
   (FR-010), handles pagination for large reservation
   sets, only fetches for selected listings
-- [ ] T037 [P] [US3] Write listing sensor entity tests in
+- [x] T037 [P] [US3] Write listing sensor entity tests in
   `tests/test_sensor.py`: entity creation per listing
   with correct unique_id (account_id + listing_id +
   attribute), entity_id follows
   `sensor.hostaway_<listing>_<attribute>` convention
   (FR-007), state updates when coordinator data changes,
   entity becomes unavailable when listing removed
-- [ ] T038 [P] [US4] Write reservation sensor entity tests
+- [x] T038 [P] [US4] Write reservation sensor entity tests
   in `tests/test_sensor.py`: entity per reservation with
   guest_name as state, attributes include check_in,
   check_out, status, door_code fields (FR-009), new
@@ -366,38 +366,38 @@ entities with configurable polling (FR-007 through FR-010)
 
 ### Implementation for Coordinators and Entities
 
-- [ ] T039 [US3] Implement `HostawayListingsCoordinator` in
+- [x] T039 [US3] Implement `HostawayListingsCoordinator` in
   `custom_components/hostaway/coordinator.py`:
   `DataUpdateCoordinator` subclass, `_async_update_data`
   calls `api_client.get_all_listings()`, filters to
   selected listings, returns `dict[int, HostawayListing]`,
   update interval from `config_entry.options` (FR-008,
   FR-016)
-- [ ] T040 [US4] Implement `HostawayReservationsCoordinator`
+- [x] T040 [US4] Implement `HostawayReservationsCoordinator`
   in `custom_components/hostaway/coordinator.py`:
   `DataUpdateCoordinator` subclass, `_async_update_data`
   fetches reservations for each selected listing with
   pagination, returns
   `dict[int, list[HostawayReservation]]` sorted by
   check_in, update interval from options (FR-010, FR-012)
-- [ ] T041 [US3] Implement base entity class in
+- [x] T041 [US3] Implement base entity class in
   `custom_components/hostaway/entity.py`:
   `HostawayEntity(CoordinatorEntity)` with device_info,
   unique_id generation from account_id + entity-specific
   immutable IDs per FR-007
-- [ ] T042 [US3] Implement listing sensor descriptions and
+- [x] T042 [US3] Implement listing sensor descriptions and
   platform in `custom_components/hostaway/sensor.py`:
   `SensorEntityDescription` for listing attributes
   (status, base_price, bedrooms, bathrooms, max_guests),
   `HostawayListingSensor` class, `async_setup_entry`
   creating sensors per listing per description (FR-007)
-- [ ] T043 [US4] Implement reservation sensor in
+- [x] T043 [US4] Implement reservation sensor in
   `custom_components/hostaway/sensor.py`:
   `HostawayReservationSensor` class with guest_name as
   state, extra_state_attributes for check_in, check_out,
   status, door_code, door_code_vendor,
   door_code_instruction, num_guests (FR-009)
-- [ ] T044 Wire coordinators into entry setup in
+- [x] T044 Wire coordinators into entry setup in
   `custom_components/hostaway/__init__.py`: create both
   coordinators in `async_setup_entry`, call
   `async_config_entry_first_refresh()`, store in
