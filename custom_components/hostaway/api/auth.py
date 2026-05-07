@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from datetime import UTC, datetime
 
 import httpx
@@ -17,6 +18,7 @@ from custom_components.hostaway.api.const import (
 from custom_components.hostaway.api.exceptions import (
     HostawayAuthError,
     HostawayConnectionError,
+    HostawayRateLimitError,
     HostawayResponseError,
 )
 from custom_components.hostaway.api.models import AccessToken
@@ -154,6 +156,17 @@ class HostawayTokenManager:
 
         if response.status_code == 401:
             raise HostawayAuthError("Invalid client credentials")
+
+        if response.status_code == 429:
+            retry_after: float | None = None
+            header = response.headers.get("Retry-After")
+            if header is not None:
+                with contextlib.suppress(ValueError):
+                    retry_after = float(header)
+            raise HostawayRateLimitError(
+                "Token endpoint rate limited",
+                retry_after=retry_after,
+            )
 
         if response.status_code != 200:
             raise HostawayResponseError(

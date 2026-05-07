@@ -241,6 +241,11 @@ class HostawayApiClient:
             json=data,
         )
         parsed = self._parse_response(response)
+        status = parsed.get("status")
+        if status is not None and status != "success":
+            raise HostawayResponseError(
+                f"Update failed: {parsed.get('result', status)}",
+            )
         result = parsed.get("result")
         if not isinstance(result, dict):
             raise HostawayResponseError(
@@ -420,9 +425,14 @@ class HostawayApiClient:
             The result list from the response wrapper.
 
         Raises:
-            HostawayResponseError: If result field is missing or
-                not a list.
+            HostawayResponseError: If status is not success, result
+                field is missing, or not a list of dicts.
         """
+        status = data.get("status")
+        if status is not None and status != "success":
+            raise HostawayResponseError(
+                f"API error: {data.get('result', status)}",
+            )
         results = data.get("result")
         if results is None:
             raise HostawayResponseError("Response missing 'result' field")
