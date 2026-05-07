@@ -103,7 +103,7 @@ class HostawayListingSensor(HostawayEntity, SensorEntity):
         """
         super().__init__(coordinator, listing_id, entry)
         self.entity_description = description
-        self._attr_unique_id = f"{entry.entry_id}_{listing_id}_{description.key}"
+        self._attr_unique_id = f"{entry.unique_id}_{listing_id}_{description.key}"
 
     @property
     def native_value(self) -> StateType:
@@ -154,7 +154,7 @@ class HostawayReservationSensor(
         self._reservation_id = reservation.id
         self._listing_id = reservation.listing_id
         self._listings_coordinator = listings_coordinator
-        self._attr_unique_id = f"{entry.entry_id}_{reservation.id}"
+        self._attr_unique_id = f"{entry.unique_id}_{reservation.id}"
         self._attr_name = f"Reservation {reservation.id}"
 
     @property
@@ -266,7 +266,7 @@ async def async_setup_entry(
     if listings_coordinator.data:
         for listing_id in listings_coordinator.data:
             for description in LISTING_SENSOR_DESCRIPTIONS:
-                uid = f"{entry.entry_id}_{listing_id}_{description.key}"
+                uid = f"{entry.unique_id}_{listing_id}_{description.key}"
                 known_listing_sensor_ids.add(uid)
                 entities.append(
                     HostawayListingSensor(
@@ -300,7 +300,7 @@ async def async_setup_entry(
         new_entities: list[SensorEntity] = []
         for listing_id in listings_coordinator.data:
             for description in LISTING_SENSOR_DESCRIPTIONS:
-                uid = f"{entry.entry_id}_{listing_id}_{description.key}"
+                uid = f"{entry.unique_id}_{listing_id}_{description.key}"
                 if uid not in known_listing_sensor_ids:
                     known_listing_sensor_ids.add(uid)
                     new_entities.append(

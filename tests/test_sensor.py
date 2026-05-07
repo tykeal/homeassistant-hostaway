@@ -157,7 +157,7 @@ class TestListingSensor:
 
         desc = LISTING_SENSOR_DESCRIPTIONS[0]  # status
         sensor = HostawayListingSensor(coordinator, 100, entry, desc)
-        expected = f"{entry.entry_id}_100_{desc.key}"
+        expected = f"{entry.unique_id}_100_{desc.key}"
         assert sensor.unique_id == expected
 
     async def test_state_updates_when_coordinator_data_changes(
@@ -341,7 +341,7 @@ class TestReservationSensor:
         sensor = HostawayReservationSensor(
             res_coord, listings_coord, reservation, entry
         )
-        expected = f"{entry.entry_id}_1001"
+        expected = f"{entry.unique_id}_1001"
         assert sensor.unique_id == expected
 
     async def test_status_change_updates_state(
