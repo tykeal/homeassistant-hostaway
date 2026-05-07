@@ -37,10 +37,16 @@ class AccessToken:
         if not self.access_token:
             msg = "access_token must be non-empty"
             raise ValueError(msg)
+        if not self.token_type:
+            msg = "token_type must be non-empty"
+            raise ValueError(msg)
         if self.expires_in <= 0:
             msg = "expires_in must be positive"
             raise ValueError(msg)
-        if self.issued_at.tzinfo is None:
+        if (
+            self.issued_at.tzinfo is None
+            or self.issued_at.tzinfo.utcoffset(self.issued_at) is None
+        ):
             msg = "issued_at must be timezone-aware"
             raise ValueError(msg)
 
@@ -125,13 +131,13 @@ class HostawayListing:
         country_code: ISO country code.
         property_type: Type of property.
         bedrooms: Number of bedrooms.
-        bathrooms: Number of bathrooms.
+        bathrooms: Number of bathrooms (may be fractional).
         max_guests: Maximum guest capacity.
         base_price: Default nightly price.
         currency: Currency code.
-        check_in_time_start: Earliest check-in hour.
-        check_in_time_end: Latest check-in hour.
-        check_out_time: Check-out hour.
+        check_in_time_start: Earliest check-in time (HH:MM).
+        check_in_time_end: Latest check-in time (HH:MM).
+        check_out_time: Check-out time (HH:MM).
         is_listed: Whether listing is publicly visible.
     """
 
@@ -144,13 +150,13 @@ class HostawayListing:
     country_code: str | None = None
     property_type: str | None = None
     bedrooms: int | None = None
-    bathrooms: int | None = None
+    bathrooms: float | None = None
     max_guests: int | None = None
     base_price: float | None = None
     currency: str | None = None
-    check_in_time_start: int | None = None
-    check_in_time_end: int | None = None
-    check_out_time: int | None = None
+    check_in_time_start: str | None = None
+    check_in_time_end: str | None = None
+    check_out_time: str | None = None
     is_listed: bool | None = None
 
     @classmethod

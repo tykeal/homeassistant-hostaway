@@ -53,13 +53,13 @@ def make_listing_response(**overrides: Any) -> dict[str, Any]:
         "countryCode": "US",
         "propertyType": "apartment",
         "bedroomsNumber": 2,
-        "bathroomsNumber": 1,
+        "bathroomsNumber": 1.5,
         "personCapacity": 4,
         "price": 150.00,
         "currencyCode": "USD",
-        "checkInTimeStart": 15,
-        "checkInTimeEnd": 20,
-        "checkOutTime": 11,
+        "checkInTimeStart": "15:00",
+        "checkInTimeEnd": "20:00",
+        "checkOutTime": "11:00",
         "isListed": 1,
     }
     defaults.update(overrides)

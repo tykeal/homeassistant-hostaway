@@ -15,6 +15,7 @@ from custom_components.hostaway.api.models import (
     HostawayListing,
     HostawayReservation,
 )
+from tests.conftest import make_listing_response, make_reservation_response
 
 
 def _make_token(**overrides: Any) -> AccessToken:
@@ -50,6 +51,11 @@ class TestAccessTokenCreation:
         """AccessToken raises ValueError for empty access_token."""
         with pytest.raises(ValueError, match="non-empty"):
             _make_token(access_token="")
+
+    def test_empty_token_type_raises(self) -> None:
+        """AccessToken raises ValueError for empty token_type."""
+        with pytest.raises(ValueError, match="non-empty"):
+            _make_token(token_type="")
 
     def test_negative_expires_in_raises(self) -> None:
         """AccessToken raises ValueError for non-positive expires_in."""
@@ -199,40 +205,9 @@ class TestAccessTokenSerialization:
 class TestHostawayListingFromApiResponse:
     """Tests for HostawayListing.from_api_response parsing."""
 
-    def _make_listing_data(self, **overrides: Any) -> dict[str, Any]:
-        """Create a mock listing API response dict.
-
-        Args:
-            **overrides: Fields to override on the default response.
-
-        Returns:
-            Dictionary matching Hostaway listing API response format.
-        """
-        defaults: dict[str, Any] = {
-            "id": 12345,
-            "name": "Oceanview Suite",
-            "internalName": "ocean-suite-1",
-            "isActive": 1,
-            "address": "123 Beach Road",
-            "city": "Miami",
-            "countryCode": "US",
-            "propertyType": "apartment",
-            "bedroomsNumber": 2,
-            "bathroomsNumber": 1,
-            "personCapacity": 4,
-            "price": 150.00,
-            "currencyCode": "USD",
-            "checkInTimeStart": 15,
-            "checkInTimeEnd": 20,
-            "checkOutTime": 11,
-            "isListed": 1,
-        }
-        defaults.update(overrides)
-        return defaults
-
     def test_basic_field_mapping(self) -> None:
         """Fields are mapped from camelCase to snake_case."""
-        data = self._make_listing_data()
+        data = make_listing_response()
         listing = HostawayListing.from_api_response(data)
         assert listing.id == 12345
         assert listing.name == "Oceanview Suite"
@@ -241,56 +216,58 @@ class TestHostawayListingFromApiResponse:
         assert listing.country_code == "US"
         assert listing.property_type == "apartment"
         assert listing.bedrooms == 2
-        assert listing.bathrooms == 1
+        assert listing.bathrooms == 1.5
         assert listing.max_guests == 4
         assert listing.base_price == 150.00
         assert listing.currency == "USD"
 
     def test_is_active_maps_to_status_active(self) -> None:
         """isActive=1 maps to status='active'."""
-        data = self._make_listing_data(isActive=1)
+        data = make_listing_response(isActive=1)
         listing = HostawayListing.from_api_response(data)
         assert listing.status == "active"
 
     def test_is_active_maps_to_status_inactive(self) -> None:
         """isActive=0 maps to status='inactive'."""
-        data = self._make_listing_data(isActive=0)
+        data = make_listing_response(isActive=0)
         listing = HostawayListing.from_api_response(data)
         assert listing.status == "inactive"
 
     def test_address_as_string(self) -> None:
         """String address is stored directly."""
-        data = self._make_listing_data(address="456 Main St")
+        data = make_listing_response(address="456 Main St")
         listing = HostawayListing.from_api_response(data)
         assert listing.address == "456 Main St"
 
     def test_address_as_nested_object(self) -> None:
         """Nested address object uses 'full' field."""
-        data = self._make_listing_data(address={"full": "789 Oak Ave, Suite 2"})
+        data = make_listing_response(
+            address={"full": "789 Oak Ave, Suite 2"},
+        )
         listing = HostawayListing.from_api_response(data)
         assert listing.address == "789 Oak Ave, Suite 2"
 
     def test_check_in_out_times(self) -> None:
-        """Check-in/out times are correctly mapped."""
-        data = self._make_listing_data(
-            checkInTimeStart=14,
-            checkInTimeEnd=22,
-            checkOutTime=10,
+        """Check-in/out times are correctly mapped as strings."""
+        data = make_listing_response(
+            checkInTimeStart="14:00",
+            checkInTimeEnd="22:00",
+            checkOutTime="10:00",
         )
         listing = HostawayListing.from_api_response(data)
-        assert listing.check_in_time_start == 14
-        assert listing.check_in_time_end == 22
-        assert listing.check_out_time == 10
+        assert listing.check_in_time_start == "14:00"
+        assert listing.check_in_time_end == "22:00"
+        assert listing.check_out_time == "10:00"
 
     def test_is_listed_field(self) -> None:
         """isListed field is correctly mapped."""
-        data = self._make_listing_data(isListed=1)
+        data = make_listing_response(isListed=1)
         listing = HostawayListing.from_api_response(data)
         assert listing.is_listed is True
 
     def test_is_listed_false(self) -> None:
         """isListed=0 maps to False."""
-        data = self._make_listing_data(isListed=0)
+        data = make_listing_response(isListed=0)
         listing = HostawayListing.from_api_response(data)
         assert listing.is_listed is False
 
@@ -329,38 +306,9 @@ class TestHostawayListingFromApiResponse:
 class TestHostawayReservationFromApiResponse:
     """Tests for HostawayReservation.from_api_response parsing."""
 
-    def _make_reservation_data(self, **overrides: Any) -> dict[str, Any]:
-        """Create a mock reservation API response dict.
-
-        Args:
-            **overrides: Fields to override on the default response.
-
-        Returns:
-            Dictionary matching Hostaway reservation API response format.
-        """
-        defaults: dict[str, Any] = {
-            "id": 99001,
-            "listingMapId": 12345,
-            "guestName": "John Doe",
-            "arrivalDate": "2025-08-01",
-            "departureDate": "2025-08-05",
-            "status": "confirmed",
-            "channelName": "airbnb",
-            "numberOfGuests": 3,
-            "totalPrice": 600.00,
-            "currency": "USD",
-            "doorCode": "1234",
-            "doorCodeVendor": "smartlock",
-            "doorCodeInstruction": "Use keypad on front door",
-            "confirmationCode": "ABC123",
-            "nights": 4,
-        }
-        defaults.update(overrides)
-        return defaults
-
     def test_basic_field_mapping(self) -> None:
         """Fields are mapped from camelCase to snake_case."""
-        data = self._make_reservation_data()
+        data = make_reservation_response()
         res = HostawayReservation.from_api_response(data)
         assert res.id == 99001
         assert res.listing_id == 12345
@@ -375,7 +323,7 @@ class TestHostawayReservationFromApiResponse:
 
     def test_door_code_fields(self) -> None:
         """Door code fields are correctly mapped."""
-        data = self._make_reservation_data()
+        data = make_reservation_response()
         res = HostawayReservation.from_api_response(data)
         assert res.door_code == "1234"
         assert res.door_code_vendor == "smartlock"
@@ -383,7 +331,7 @@ class TestHostawayReservationFromApiResponse:
 
     def test_confirmation_and_nights(self) -> None:
         """Confirmation code and nights are correctly mapped."""
-        data = self._make_reservation_data()
+        data = make_reservation_response()
         res = HostawayReservation.from_api_response(data)
         assert res.confirmation_code == "ABC123"
         assert res.nights == 4
@@ -411,42 +359,42 @@ class TestHostawayReservationFromApiResponse:
 
     def test_missing_id_raises(self) -> None:
         """Missing id raises ValueError."""
-        data = self._make_reservation_data()
+        data = make_reservation_response()
         del data["id"]
         with pytest.raises(ValueError, match="id"):
             HostawayReservation.from_api_response(data)
 
     def test_missing_listing_id_raises(self) -> None:
         """Missing listingMapId raises ValueError."""
-        data = self._make_reservation_data()
+        data = make_reservation_response()
         del data["listingMapId"]
         with pytest.raises(ValueError, match="listing_id"):
             HostawayReservation.from_api_response(data)
 
     def test_missing_guest_name_raises(self) -> None:
         """Missing guestName raises ValueError."""
-        data = self._make_reservation_data()
+        data = make_reservation_response()
         del data["guestName"]
         with pytest.raises(ValueError, match="guest_name"):
             HostawayReservation.from_api_response(data)
 
     def test_missing_check_in_raises(self) -> None:
         """Missing arrivalDate raises ValueError."""
-        data = self._make_reservation_data()
+        data = make_reservation_response()
         del data["arrivalDate"]
         with pytest.raises(ValueError, match="check_in"):
             HostawayReservation.from_api_response(data)
 
     def test_missing_check_out_raises(self) -> None:
         """Missing departureDate raises ValueError."""
-        data = self._make_reservation_data()
+        data = make_reservation_response()
         del data["departureDate"]
         with pytest.raises(ValueError, match="check_out"):
             HostawayReservation.from_api_response(data)
 
     def test_missing_status_raises(self) -> None:
         """Missing status raises ValueError."""
-        data = self._make_reservation_data()
+        data = make_reservation_response()
         del data["status"]
         with pytest.raises(ValueError, match="status"):
             HostawayReservation.from_api_response(data)
