@@ -31,6 +31,7 @@ from custom_components.hostaway.api.exceptions import (
 )
 from custom_components.hostaway.api.models import HostawayListing
 from custom_components.hostaway.const import (
+    CONF_CACHED_TOKEN,
     CONF_CLIENT_ID,
     CONF_CLIENT_SECRET,
     CONF_RESERVATION_SCAN_INTERVAL,
@@ -120,6 +121,7 @@ class HostawayConfigFlow(ConfigFlow, domain=DOMAIN):
         self._client_id: str = ""
         self._client_secret: str = ""
         self._listings: list[HostawayListing] = []
+        self._reauth_entry: ConfigEntry | None = None
 
     @staticmethod
     def async_get_options_flow(
@@ -134,6 +136,79 @@ class HostawayConfigFlow(ConfigFlow, domain=DOMAIN):
             The options flow handler instance.
         """
         return HostawayOptionsFlow(config_entry)
+
+    async def async_step_reauth(
+        self,
+        entry_data: dict[str, Any],
+    ) -> ConfigFlowResult:
+        """Handle reauth initiation.
+
+        Args:
+            entry_data: Existing config entry data.
+
+        Returns:
+            Config flow result showing the reauth confirm form.
+        """
+        self._reauth_entry = self.hass.config_entries.async_get_entry(
+            self.context["entry_id"],
+        )
+        self._client_id = entry_data.get(CONF_CLIENT_ID, "")
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> ConfigFlowResult:
+        """Handle reauth confirmation step.
+
+        Args:
+            user_input: User-provided form data, or None for initial
+                form display.
+
+        Returns:
+            Config flow result (form, error, or abort on success).
+        """
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            client_id = self._client_id
+            client_secret = user_input[CONF_CLIENT_SECRET]
+
+            try:
+                await _validate_credentials(self.hass, client_id, client_secret)
+            except HostawayAuthError:
+                errors["base"] = "invalid_auth"
+            except HostawayConnectionError:
+                errors["base"] = "cannot_connect"
+            except Exception:
+                _LOGGER.exception("Unexpected error during reauth")
+                errors["base"] = "unknown"
+            else:
+                if self._reauth_entry is not None:
+                    self.hass.config_entries.async_update_entry(
+                        self._reauth_entry,
+                        data={
+                            **self._reauth_entry.data,
+                            CONF_CLIENT_SECRET: client_secret,
+                            CONF_CACHED_TOKEN: None,
+                        },
+                    )
+                    await self.hass.config_entries.async_reload(
+                        self._reauth_entry.entry_id,
+                    )
+                return self.async_abort(reason="reauth_successful")
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_CLIENT_SECRET): str,
+            }
+        )
+
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=schema,
+            errors=errors,
+        )
 
     async def async_step_user(
         self,
@@ -219,9 +294,12 @@ class HostawayConfigFlow(ConfigFlow, domain=DOMAIN):
             except HostawayAuthError:
                 _LOGGER.exception("Auth failed fetching listings")
                 return self.async_abort(reason="invalid_auth")
+            except HostawayConnectionError:
+                _LOGGER.exception("Connection failed fetching listings")
+                return self.async_abort(reason="cannot_connect")
             except Exception:
                 _LOGGER.exception("Failed to fetch listings")
-                return self.async_abort(reason="cannot_connect")
+                return self.async_abort(reason="unknown")
 
         # Filter to active listings only
         active_listings = [lst for lst in self._listings if lst.status == "active"]

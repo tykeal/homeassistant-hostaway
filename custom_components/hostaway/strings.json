@@ -15,6 +15,13 @@
                 "data": {
                     "selected_listings": "Listings to track"
                 }
+            },
+            "reauth_confirm": {
+                "title": "Re-authenticate Hostaway",
+                "description": "Your Hostaway credentials need updating. Enter your new client secret.",
+                "data": {
+                    "client_secret": "Client Secret"
+                }
             }
         },
         "error": {
@@ -27,7 +34,9 @@
             "already_configured": "This Hostaway account is already configured.",
             "invalid_auth": "Authentication failed while fetching listings.",
             "cannot_connect": "Unable to connect to Hostaway while fetching listings.",
-            "no_active_listings": "No active listings found in your Hostaway account."
+            "no_active_listings": "No active listings found in your Hostaway account.",
+            "reauth_successful": "Re-authentication was successful.",
+            "unknown": "An unexpected error occurred."
         }
     },
     "options": {

@@ -13,7 +13,7 @@ import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.httpx_client import get_async_client
 
 from custom_components.hostaway.api.auth import HostawayTokenManager
@@ -24,6 +24,7 @@ from custom_components.hostaway.api.exceptions import (
 )
 from custom_components.hostaway.api.models import AccessToken
 from custom_components.hostaway.const import (
+    CONF_CACHED_TOKEN,
     CONF_CLIENT_ID,
     CONF_CLIENT_SECRET,
     DOMAIN,
@@ -61,7 +62,7 @@ async def async_setup_entry(
     )
 
     # Restore persisted token if available
-    cached = entry.data.get("cached_token")
+    cached = entry.data.get(CONF_CACHED_TOKEN)
     if cached is not None:
         try:
             token = AccessToken.from_dict(cached)
@@ -77,9 +78,8 @@ async def async_setup_entry(
     try:
         await api_client.test_connection()
     except HostawayAuthError as exc:
-        _LOGGER.error("Invalid Hostaway credentials: %s", exc)
-        raise ConfigEntryNotReady(
-            f"Authentication failed: {exc}",
+        raise ConfigEntryAuthFailed(
+            f"Invalid Hostaway credentials: {exc}",
         ) from exc
     except HostawayApiError as exc:
         raise ConfigEntryNotReady(

@@ -16,6 +16,7 @@ from custom_components.hostaway.api.exceptions import (
     HostawayConnectionError,
 )
 from custom_components.hostaway.const import (
+    CONF_CACHED_TOKEN,
     CONF_CLIENT_ID,
     CONF_CLIENT_SECRET,
     CONF_SELECTED_LISTINGS,
@@ -96,7 +97,7 @@ class TestAsyncSetupEntry:
                 CONF_CLIENT_ID: "test-client-id",
                 CONF_CLIENT_SECRET: "test-client-secret",
                 CONF_SELECTED_LISTINGS: [12345],
-                "cached_token": cached,
+                CONF_CACHED_TOKEN: cached,
             },
             unique_id="test-client-id",
         )
@@ -136,19 +137,19 @@ class TestAsyncSetupEntry:
         new_callable=AsyncMock,
         side_effect=HostawayAuthError("bad creds"),
     )
-    async def test_auth_error_raises_not_ready(
+    async def test_auth_error_raises_auth_failed(
         self,
         mock_test: AsyncMock,
         hass: HomeAssistant,
     ) -> None:
-        """Setup raises ConfigEntryNotReady on auth failure."""
+        """Setup raises ConfigEntryAuthFailed on auth failure."""
         entry = _make_entry()
         entry.add_to_hass(hass)
 
         await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
-        assert entry.state is ConfigEntryState.SETUP_RETRY
+        assert entry.state is ConfigEntryState.SETUP_ERROR
 
 
 class TestAsyncUnloadEntry:

@@ -14,3 +14,4 @@ DEFAULT_SCAN_INTERVAL: int = 5  # minutes
 MIN_SCAN_INTERVAL: int = 1  # minutes
 DEFAULT_RESERVATION_SCAN_INTERVAL: int = 2  # minutes
 PLATFORMS: list[Platform] = [Platform.SENSOR]
+CONF_CACHED_TOKEN: str = "cached_token"
