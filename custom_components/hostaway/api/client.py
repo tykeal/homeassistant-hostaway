@@ -63,7 +63,7 @@ class HostawayApiClient:
         """
         self._token_manager = token_manager
         self._http = http_client
-        self._base_url = base_url
+        self._base_url = base_url.rstrip("/")
 
     async def test_connection(self) -> bool:
         """Validate credentials and API access.

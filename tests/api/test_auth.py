@@ -137,7 +137,14 @@ class TestTokenAcquisition:
         """Test HostawayResponseError on missing access_token field."""
         respx.post(FAKE_TOKEN_URL).mock(
             return_value=httpx.Response(
-                200, json={"token_type": "Bearer", "expires_in": 86400}
+                200,
+                json={
+                    "status": "success",
+                    "result": {
+                        "token_type": "Bearer",
+                        "expires_in": 86400,
+                    },
+                },
             )
         )
 

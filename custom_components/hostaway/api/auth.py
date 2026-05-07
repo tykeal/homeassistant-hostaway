@@ -171,6 +171,10 @@ class HostawayTokenManager:
                 "Token response is not valid JSON",
             ) from exc
 
+        # Hostaway wraps token in {"status":"success","result":{...}}
+        if isinstance(data, dict) and "result" in data:
+            data = data["result"]
+
         try:
             token = AccessToken(
                 access_token=data["access_token"],
