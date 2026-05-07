@@ -192,8 +192,8 @@ rate limits and errors transparently
   tests in `tests/api/test_auth.py`: proactive refresh
   when token nears expiry, `invalidate()` clears cached
   token, concurrent `get_token()` calls share single HTTP
-  request via asyncio.Lock, refreshed token persisted to
-  config entry storage (FR-002)
+  request via asyncio.Lock, `seed_token()` for startup
+  loading (config entry persistence deferred to Phase 4)
 - [x] T021 [P] [US2] Write HTTP client core tests in
   `tests/api/test_client.py`: successful GET/PUT requests
   with auth header, 429 response triggers exponential

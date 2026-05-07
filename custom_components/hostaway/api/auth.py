@@ -179,8 +179,9 @@ class HostawayTokenManager:
         # Hostaway wraps token in {"status":"success","result":{...}}
         if "result" in data:
             if data.get("status") != "success":
+                err_detail = data.get("result", "unknown error")
                 raise HostawayResponseError(
-                    f"Token request failed: {data.get('status')}",
+                    f"Token request failed: {err_detail}",
                 )
             result = data["result"]
             if not isinstance(result, dict):

@@ -428,6 +428,11 @@ class HostawayApiClient:
             raise HostawayResponseError("Response missing 'result' field")
         if not isinstance(results, list):
             raise HostawayResponseError("'result' must be a list")
+        for item in results:
+            if not isinstance(item, dict):
+                raise HostawayResponseError(
+                    "'result' items must be JSON objects",
+                )
         return results
 
 
