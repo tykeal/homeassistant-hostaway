@@ -148,10 +148,15 @@ class TestAccessTokenSecondsUntilReady:
 
     def test_not_ready_immediately(self) -> None:
         """Token needs delay when just issued."""
-        issued = datetime.now(UTC)
-        token = _make_token(issued_at=issued)
-        assert token.seconds_until_ready > 0.0
-        assert token.seconds_until_ready <= 1.0
+        now = datetime(2025, 7, 18, 12, 0, 0, 0, tzinfo=UTC)
+        token = _make_token(issued_at=now)
+        with patch(
+            "custom_components.hostaway.api.models.datetime",
+        ) as mock_dt:
+            mock_dt.now.return_value = now
+            mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+            assert token.seconds_until_ready > 0.0
+            assert token.seconds_until_ready <= 1.0
 
     def test_returns_remaining_delay(self) -> None:
         """Returns remaining time until 1s post-generation."""

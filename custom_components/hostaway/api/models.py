@@ -17,9 +17,9 @@ class AccessToken:
 
     Attributes:
         access_token: The Bearer token value.
-        token_type: Token type (always "Bearer").
+        token_type: Token type (e.g. "Bearer"), must be non-empty.
         expires_in: Token lifetime in seconds.
-        issued_at: UTC timestamp when the token was acquired.
+        issued_at: Timezone-aware timestamp when the token was acquired.
     """
 
     access_token: str
