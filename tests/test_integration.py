@@ -267,12 +267,14 @@ class TestFullLifecycle:
         await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
-        # Collect unique IDs before unload
+        # Collect unique IDs and states before unload
         registry = er.async_get(hass)
         ids_before = {
             e.unique_id for e in registry.entities.values() if e.platform == DOMAIN
         }
         assert len(ids_before) > 0
+        states_before = hass.states.async_all("sensor")
+        before_ids = {s.entity_id for s in states_before}
 
         # Unload and reload
         await hass.config_entries.async_unload(entry.entry_id)
@@ -283,9 +285,11 @@ class TestFullLifecycle:
         # Verify reload succeeded
         assert entry.state is ConfigEntryState.LOADED
 
-        # Verify sensor entities have state again after reload
+        # Verify sensor entities restored after reload
         states_after = hass.states.async_all("sensor")
-        assert len(states_after) > 0
+        assert len(states_after) == len(states_before)
+        after_ids = {s.entity_id for s in states_after}
+        assert before_ids == after_ids
 
         ids_after = {
             e.unique_id for e in registry.entities.values() if e.platform == DOMAIN
