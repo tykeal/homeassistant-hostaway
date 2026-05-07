@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import timedelta
 from typing import TYPE_CHECKING
@@ -152,7 +153,7 @@ class HostawayReservationsCoordinator(
     async def _async_update_data(
         self,
     ) -> dict[int, list[HostawayReservation]]:
-        """Fetch reservations for each selected listing.
+        """Fetch reservations for each selected listing concurrently.
 
         Returns:
             Dictionary mapping listing ID to sorted reservation list.
@@ -162,11 +163,13 @@ class HostawayReservationsCoordinator(
             ConfigEntryAuthFailed: On authentication failure.
         """
         selected = self.config_entry.data.get(CONF_SELECTED_LISTINGS, [])
-        result: dict[int, list[HostawayReservation]] = {}
+        if not selected:
+            return {}
+
         try:
-            for listing_id in selected:
-                reservations = await self.api_client.get_all_reservations(listing_id)
-                result[listing_id] = sorted(reservations, key=lambda r: r.check_in)
+            results = await asyncio.gather(
+                *(self.api_client.get_all_reservations(lid) for lid in selected)
+            )
         except HostawayAuthError as exc:
             raise ConfigEntryAuthFailed(
                 f"Authentication failed: {exc}",
@@ -175,4 +178,8 @@ class HostawayReservationsCoordinator(
             raise UpdateFailed(
                 f"Failed to fetch reservations: {exc}",
             ) from exc
-        return result
+
+        return {
+            lid: sorted(reservations, key=lambda r: r.check_in)
+            for lid, reservations in zip(selected, results, strict=True)
+        }
