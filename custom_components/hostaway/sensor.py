@@ -41,7 +41,7 @@ _STATUS_PRIORITY: dict[str, int] = {
     "checked_in": 0,
     "confirmed": 1,
     "checked_out": 2,
-    "canceled": 3,
+    "cancelled": 3,
 }
 
 

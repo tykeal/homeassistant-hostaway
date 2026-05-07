@@ -40,7 +40,7 @@ trigger automations without accumulating stale entities.
    **When** data is polled,
    **Then** the sensor selects the highest-priority
    reservation (checked_in > confirmed > checked_out >
-   canceled) and lists all reservations in
+   cancelled) and lists all reservations in
    upcoming_reservations.
 4. **Given** a reservation completes (checked_out),
    **When** no other reservations exist,
@@ -53,10 +53,10 @@ trigger automations without accumulating stale entities.
   reservation-status sensor per monitored listing.
 - **FR-R02**: Sensor state MUST be an enum: checked_in,
   awaiting_checkin (maps from confirmed), checked_out,
-  canceled, no_reservation. Unknown statuses pass through.
+  cancelled, no_reservation. Unknown statuses pass through.
 - **FR-R03**: Sensor MUST select the highest-priority
   active reservation using priority order: checked_in >
-  confirmed > checked_out > canceled.
+  confirmed > checked_out > cancelled.
 - **FR-R04**: Sensor extra_state_attributes MUST include:
   reservation_id, guest_name, check_in, check_out,
   status, door_code, door_code_vendor,
