@@ -83,11 +83,12 @@ class HostawayEntity(
     def available(self) -> bool:
         """Return True only when listing is present in coordinator.
 
+        Does not gate on last_update_success so stale-but-valid
+        data remains available during transient API failures (FR-016).
+
         Returns:
             True when the listing is available, False otherwise.
         """
-        if not super().available:
-            return False
         if self.coordinator.data is None:
             return False
         return self._listing_id in self.coordinator.data

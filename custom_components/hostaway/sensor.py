@@ -197,11 +197,12 @@ class HostawayReservationSensor(
     def available(self) -> bool:
         """Return True only when reservation exists in coordinator.
 
+        Does not gate on last_update_success so stale-but-valid
+        data remains available during transient API failures (FR-016).
+
         Returns:
             True when the reservation is present, False otherwise.
         """
-        if not super().available:
-            return False
         return self._current_reservation is not None
 
     @property
