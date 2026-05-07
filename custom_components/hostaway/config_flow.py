@@ -216,6 +216,14 @@ class HostawayConfigFlow(ConfigFlow, domain=DOMAIN):
                     self._client_id,
                     self._client_secret,
                 )
+            except HostawayAuthError:
+                _LOGGER.exception("Auth failed fetching listings")
+                errors["base"] = "invalid_auth"
+                return self.async_show_form(
+                    step_id="listings",
+                    data_schema=vol.Schema({}),
+                    errors=errors,
+                )
             except Exception:
                 _LOGGER.exception("Failed to fetch listings")
                 errors["base"] = "cannot_connect"
@@ -312,11 +320,11 @@ class HostawayOptionsFlow(OptionsFlow):
                 vol.Required(
                     CONF_SCAN_INTERVAL,
                     default=current_scan,
-                ): int,
+                ): vol.Coerce(int),
                 vol.Required(
                     CONF_RESERVATION_SCAN_INTERVAL,
                     default=current_res_scan,
-                ): int,
+                ): vol.Coerce(int),
             }
         )
 

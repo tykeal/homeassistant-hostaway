@@ -18,7 +18,10 @@ from homeassistant.helpers.httpx_client import get_async_client
 
 from custom_components.hostaway.api.auth import HostawayTokenManager
 from custom_components.hostaway.api.client import HostawayApiClient
-from custom_components.hostaway.api.exceptions import HostawayApiError
+from custom_components.hostaway.api.exceptions import (
+    HostawayApiError,
+    HostawayAuthError,
+)
 from custom_components.hostaway.api.models import AccessToken
 from custom_components.hostaway.const import (
     CONF_CLIENT_ID,
@@ -73,6 +76,11 @@ async def async_setup_entry(
 
     try:
         await api_client.test_connection()
+    except HostawayAuthError as exc:
+        _LOGGER.error("Invalid Hostaway credentials: %s", exc)
+        raise ConfigEntryNotReady(
+            f"Authentication failed: {exc}",
+        ) from exc
     except HostawayApiError as exc:
         raise ConfigEntryNotReady(
             f"Unable to connect to Hostaway: {exc}",
@@ -106,7 +114,7 @@ async def async_unload_entry(
     """
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
-    if unload_ok:
+    if unload_ok and DOMAIN in hass.data:
         hass.data[DOMAIN].pop(entry.entry_id, None)
 
     return unload_ok
