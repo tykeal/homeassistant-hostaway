@@ -260,23 +260,23 @@ the Home Assistant UI (FR-004, FR-011)
 > **NOTE: Write these tests FIRST, ensure they FAIL before
 > implementation**
 
-- [ ] T027 [P] [US2] Write config flow `step_user` tests in
+- [x] T027 [P] [US2] Write config flow `step_user` tests in
   `tests/test_config_flow.py`: successful credential entry
   proceeds to listing selection, invalid credentials show
   `invalid_auth` error, connection failure shows
   `cannot_connect` error, duplicate `client_id` triggers
   `already_configured` abort (FR-004)
-- [ ] T028 [P] [US2] Write config flow `step_listings` tests
+- [x] T028 [P] [US2] Write config flow `step_listings` tests
   in `tests/test_config_flow.py`: all active listings
   displayed as selectable options, at least one listing
   must be selected, successful selection creates config
   entry with credentials and selected_listings (FR-004)
-- [ ] T029 [P] [US2] Write options flow tests in
+- [x] T029 [P] [US2] Write options flow tests in
   `tests/test_config_flow.py`: form displays current
   intervals, valid intervals accepted (min 1 minute),
   invalid intervals show error, updated intervals stored
   in config entry options (FR-008, FR-010, FR-011)
-- [ ] T030 [P] [US2] Write `async_setup_entry` and
+- [x] T030 [P] [US2] Write `async_setup_entry` and
   `async_unload_entry` tests in `tests/test_init.py`:
   setup creates `httpx.AsyncClient`,
   `HostawayTokenManager`, `HostawayApiClient` in
@@ -286,7 +286,7 @@ the Home Assistant UI (FR-004, FR-011)
 
 ### Implementation for Config Flow
 
-- [ ] T031 [P] [US2] Create HA-level constants in
+- [x] T031 [P] [US2] Create HA-level constants in
   `custom_components/hostaway/const.py`: `DOMAIN =
   "hostaway"`, `CONF_CLIENT_ID`, `CONF_CLIENT_SECRET`,
   `CONF_SELECTED_LISTINGS`, `CONF_SCAN_INTERVAL`,
@@ -294,14 +294,14 @@ the Home Assistant UI (FR-004, FR-011)
   `DEFAULT_SCAN_INTERVAL` (5), `MIN_SCAN_INTERVAL` (1),
   `DEFAULT_RESERVATION_SCAN_INTERVAL` (2),
   `PLATFORMS: list[Platform]` (sensor)
-- [ ] T032 [P] [US2] Create localized UI strings in
+- [x] T032 [P] [US2] Create localized UI strings in
   `custom_components/hostaway/strings.json` and
   `custom_components/hostaway/translations/en.json`:
   config flow steps `user` and `listings` with field
   descriptions, options flow step with interval fields,
   error messages (`invalid_auth`, `cannot_connect`,
   `unknown`), abort reasons (`already_configured`)
-- [ ] T033 [US2] Implement config flow in
+- [x] T033 [US2] Implement config flow in
   `custom_components/hostaway/config_flow.py`:
   `HostawayConfigFlow(ConfigFlow, domain=DOMAIN)` with
   `async_step_user` for credential entry and validation,
@@ -310,7 +310,7 @@ the Home Assistant UI (FR-004, FR-011)
   configuration; maps errors to UI messages; sets
   `unique_id` from `client_id` for duplicate detection
   (FR-004, FR-011)
-- [ ] T034 [US2] Implement entry lifecycle in
+- [x] T034 [US2] Implement entry lifecycle in
   `custom_components/hostaway/__init__.py`:
   `async_setup_entry` creates HTTP client, token manager,
   API client, loads persisted token, stores in
