@@ -40,7 +40,8 @@ trigger automations without accumulating stale entities.
    **When** data is polled,
    **Then** the sensor selects the highest-priority
    reservation (checked_in > confirmed > checked_out >
-   canceled) and lists others in upcoming_reservations.
+   canceled) and lists all reservations in
+   upcoming_reservations.
 4. **Given** a reservation completes (checked_out),
    **When** no other reservations exist,
    **Then** sensor transitions to "no_reservation"
