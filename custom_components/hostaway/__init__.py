@@ -113,6 +113,13 @@ async def async_setup_entry(
         "reservations_coordinator": reservations_coordinator,
     }
 
+    # Register services (idempotent, safe for multi-entry)
+    from custom_components.hostaway.services import (
+        async_setup_services,
+    )
+
+    async_setup_services(hass)
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     return True
@@ -140,5 +147,10 @@ async def async_unload_entry(
         if data:
             await data["listings_coordinator"].async_shutdown()
             await data["reservations_coordinator"].async_shutdown()
+
+        # Remove services when no entries remain
+        if not hass.data.get(DOMAIN):
+            hass.services.async_remove(DOMAIN, "set_door_code")
+            hass.services.async_remove(DOMAIN, "get_reservations")
 
     return unload_ok

@@ -1,0 +1,73 @@
+# SPDX-FileCopyrightText: 2026 Andrew Grimberg <tykeal@bardicgrove.org>
+# SPDX-License-Identifier: Apache-2.0
+set_door_code:
+  name: Set door code
+  description: >-
+    Set the door code on a Hostaway reservation.
+  fields:
+    reservation_id:
+      name: Reservation ID
+      description: The Hostaway reservation ID.
+      required: true
+      example: 12345
+      selector:
+        number:
+          min: 1
+          mode: box
+    door_code:
+      name: Door code
+      description: The door access code to set.
+      required: true
+      example: "1234"
+      selector:
+        text:
+    door_code_vendor:
+      name: Door code vendor
+      description: Optional vendor name for the door code.
+      required: false
+      example: "Yale"
+      selector:
+        text:
+    door_code_instruction:
+      name: Door code instruction
+      description: >-
+        Optional instructions for using the door code.
+      required: false
+      example: "Enter code on keypad"
+      selector:
+        text:
+          multiline: true
+    config_entry_id:
+      name: Config entry ID
+      description: >-
+        Target a specific Hostaway config entry. Required
+        only when multiple accounts are configured.
+      required: false
+      selector:
+        config_entry:
+          integration: hostaway
+
+get_reservations:
+  name: Get reservations
+  description: >-
+    Retrieve reservations for a listing and fire a
+    hostaway_reservations_retrieved event.
+  fields:
+    listing_id:
+      name: Listing ID
+      description: The Hostaway listing ID.
+      required: true
+      example: 67890
+      selector:
+        number:
+          min: 1
+          mode: box
+    config_entry_id:
+      name: Config entry ID
+      description: >-
+        Target a specific Hostaway config entry. Required
+        only when multiple accounts are configured.
+      required: false
+      selector:
+        config_entry:
+          integration: hostaway
