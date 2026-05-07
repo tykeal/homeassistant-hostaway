@@ -98,29 +98,28 @@ def _build_reservation_attributes(
     """Build extra_state_attributes for the reservation sensor.
 
     Includes the selected reservation's details and an
-    ``upcoming_reservations`` list sorted by check_in.
+    ``upcoming_reservations`` list. The coordinator already
+    sorts reservations by check_in, so order is preserved.
 
     Args:
         reservation: The selected reservation, or None.
-        all_reservations: All reservations for the listing.
+        all_reservations: All reservations for the listing
+            (pre-sorted by check_in from coordinator).
         listing_id: The listing ID.
 
     Returns:
         Dictionary of extra state attributes per FR-R04.
     """
-    upcoming = sorted(
-        [
-            {
-                "id": r.id,
-                "guest_name": r.guest_name,
-                "check_in": r.check_in,
-                "check_out": r.check_out,
-                "status": r.status,
-            }
-            for r in all_reservations
-        ],
-        key=lambda r: str(r["check_in"]),
-    )
+    upcoming = [
+        {
+            "id": r.id,
+            "guest_name": r.guest_name,
+            "check_in": r.check_in,
+            "check_out": r.check_out,
+            "status": r.status,
+        }
+        for r in all_reservations
+    ]
 
     if reservation is None:
         return {
@@ -307,15 +306,20 @@ class HostawayReservationStatusSensor(
 
     @property
     def available(self) -> bool:
-        """Return True when coordinator has data.
+        """Return True when both coordinators have data.
 
-        Not gated on a specific reservation existing so the
-        sensor remains available even with no reservations.
+        Checks that the listing still exists in the listings
+        coordinator and that the reservations coordinator has
+        data. Not gated on a specific reservation existing.
 
         Returns:
-            True when coordinator data is present.
+            True when listing and reservation data present.
         """
-        return self.coordinator.data is not None
+        if self.coordinator.data is None:
+            return False
+        if self._listings_coordinator.data is None:
+            return False
+        return self._listing_id in self._listings_coordinator.data
 
     @property
     def native_value(self) -> StateType:

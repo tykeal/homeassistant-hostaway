@@ -436,12 +436,12 @@ class TestBuildReservationAttributes:
         assert attrs["confirmation_code"] == "XYZ789"
         assert attrs["listing_id"] == 100
 
-    def test_upcoming_reservations_sorted_by_check_in(self) -> None:
-        """upcoming_reservations sorted by check_in date."""
-        r1 = _make_reservation(1, check_in="2025-09-01")
-        r2 = _make_reservation(2, check_in="2025-08-01")
+    def test_upcoming_reservations_preserve_order(self) -> None:
+        """upcoming_reservations preserves input order."""
+        r1 = _make_reservation(1, check_in="2025-08-01")
+        r2 = _make_reservation(2, check_in="2025-09-01")
         r3 = _make_reservation(3, check_in="2025-10-01")
-        attrs = _build_reservation_attributes(r2, [r1, r2, r3], 100)
+        attrs = _build_reservation_attributes(r1, [r1, r2, r3], 100)
         upcoming = attrs["upcoming_reservations"]
         assert len(upcoming) == 3
         assert upcoming[0]["check_in"] == "2025-08-01"
@@ -669,6 +669,31 @@ class TestReservationStatusSensor:
 
         sensor = HostawayReservationStatusSensor(res_coord, listings_coord, 100, entry)
         res_coord.data = None  # type: ignore[assignment]
+        assert sensor.available is False
+
+    async def test_unavailable_when_listing_removed(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Sensor unavailable when listing removed from listings."""
+        entry = _make_entry(selected=[100])
+        entry.add_to_hass(hass)
+        api_client = AsyncMock()
+        api_client.get_all_reservations = AsyncMock(return_value=[])
+
+        listings_api = AsyncMock()
+        listings_api.get_all_listings = AsyncMock(return_value=[_make_listing(100)])
+        listings_coord = HostawayListingsCoordinator(hass, entry, listings_api)
+        await listings_coord.async_refresh()
+
+        res_coord = HostawayReservationsCoordinator(hass, entry, api_client)
+        await res_coord.async_refresh()
+
+        sensor = HostawayReservationStatusSensor(res_coord, listings_coord, 100, entry)
+        assert sensor.available is True
+
+        # Remove listing from listings coordinator
+        listings_coord.data = {}
         assert sensor.available is False
 
     async def test_unique_id_format(
