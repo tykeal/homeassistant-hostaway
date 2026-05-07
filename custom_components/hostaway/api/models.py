@@ -113,11 +113,17 @@ class AccessToken:
 
         Args:
             buffer_seconds: Safety margin in seconds before actual
-                expiry to consider the token expired.
+                expiry to consider the token expired. Must be >= 0.
 
         Returns:
             True if the token is expired or within the buffer window.
+
+        Raises:
+            ValueError: If buffer_seconds is negative.
         """
+        if buffer_seconds < 0:
+            msg = "buffer_seconds must be non-negative"
+            raise ValueError(msg)
         return datetime.now(UTC) >= self.expires_at - timedelta(
             seconds=buffer_seconds,
         )
@@ -234,11 +240,13 @@ class HostawayListing:
             msg = "name must be non-empty"
             raise ValueError(msg)
 
-        # Map isActive to status
+        # Map isActive (0/1) to status
         is_active = data.get("isActive")
         status: str | None = None
-        if is_active is not None:
-            status = "active" if is_active == 1 else "inactive"
+        if is_active == 1:
+            status = "active"
+        elif is_active == 0:
+            status = "inactive"
 
         # Handle address (string or nested object)
         raw_address = data.get("address")
@@ -248,11 +256,13 @@ class HostawayListing:
         elif isinstance(raw_address, str):
             address = raw_address
 
-        # Map isListed
+        # Map isListed (0/1) to boolean
         raw_is_listed = data.get("isListed")
         is_listed: bool | None = None
-        if raw_is_listed is not None:
-            is_listed = bool(raw_is_listed)
+        if raw_is_listed == 1:
+            is_listed = True
+        elif raw_is_listed == 0:
+            is_listed = False
 
         # Validate optional numeric fields when present
         bedrooms = data.get("bedroomsNumber")
