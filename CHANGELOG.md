@@ -15,6 +15,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+Initial development — will become 0.1.0 on first release.
+
 ### Added
 
 - OAuth 2.0 client credentials authentication with

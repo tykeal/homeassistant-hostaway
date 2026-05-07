@@ -167,8 +167,9 @@ class TestFullLifecycle:
         entity_ids = [s.entity_id for s in states]
         # Listing sensors exist for both listings
         assert len(entity_ids) >= 10  # 5 sensors x 2 listings
-        # Reservation sensors exist
-        assert len(entity_ids) >= 12  # + 2 reservation sensors
+        # Verify reservation sensors exist specifically
+        reservation_ids = [eid for eid in entity_ids if "reservation" in eid]
+        assert len(reservation_ids) >= 2
 
     @patch(
         "custom_components.hostaway.HostawayApiClient.update_reservation",
@@ -263,6 +264,10 @@ class TestFullLifecycle:
 
         # Verify reload succeeded
         assert entry.state is ConfigEntryState.LOADED
+
+        # Verify sensor entities have state again after reload
+        states_after = hass.states.async_all("sensor")
+        assert len(states_after) > 0
 
         ids_after = {
             e.unique_id for e in registry.entities.values() if e.platform == DOMAIN
