@@ -44,7 +44,7 @@ class TestHttpClientCore:
         self, mock_httpx_client: httpx.AsyncClient
     ) -> None:
         """Test successful GET request with Bearer auth header."""
-        respx.get(f"{FAKE_BASE_URL}/v1/listings").mock(
+        route = respx.get(f"{FAKE_BASE_URL}/v1/listings").mock(
             return_value=httpx.Response(200, json={"status": "success", "result": []})
         )
 
@@ -55,14 +55,18 @@ class TestHttpClientCore:
 
         assert response.status_code == 200
         assert response.json()["status"] == "success"
+        # Verify Bearer auth header was sent
+        request = route.calls[0].request
+        assert request.headers["Authorization"] == f"Bearer {FAKE_TOKEN}"
 
     async def test_successful_put_request(
         self, mock_httpx_client: httpx.AsyncClient
     ) -> None:
         """Test successful PUT request with Bearer auth and JSON body."""
-        respx.put(f"{FAKE_BASE_URL}/v1/reservations/123").mock(
+        route = respx.put(f"{FAKE_BASE_URL}/v1/reservations/123").mock(
             return_value=httpx.Response(
-                200, json={"status": "success", "result": {"id": 123}}
+                200,
+                json={"status": "success", "result": {"id": 123}},
             )
         )
 
@@ -74,6 +78,10 @@ class TestHttpClientCore:
         )
 
         assert response.status_code == 200
+        # Verify Bearer auth header and JSON body were sent
+        request = route.calls[0].request
+        assert request.headers["Authorization"] == f"Bearer {FAKE_TOKEN}"
+        assert b"doorCode" in request.content
 
     async def test_429_triggers_backoff_retry(
         self, mock_httpx_client: httpx.AsyncClient

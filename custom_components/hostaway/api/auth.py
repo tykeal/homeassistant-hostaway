@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 from datetime import UTC, datetime
 
 import httpx
@@ -21,8 +20,6 @@ from custom_components.hostaway.api.exceptions import (
     HostawayResponseError,
 )
 from custom_components.hostaway.api.models import AccessToken
-
-_LOGGER = logging.getLogger(__name__)
 
 # Buffer seconds before expiry to trigger proactive refresh
 _REFRESH_BUFFER = 300
@@ -143,8 +140,6 @@ class HostawayTokenManager:
             HostawayConnectionError: On network failure.
             HostawayResponseError: On unexpected response format.
         """
-        now = datetime.now(UTC)
-
         try:
             response = await self._http.post(
                 self._token_url,
@@ -171,6 +166,10 @@ class HostawayTokenManager:
             raise HostawayResponseError(
                 f"Unexpected token response status: {response.status_code}",
             )
+
+        # Capture issued_at after successful response so
+        # post-generation delay is measured from acquisition time
+        now = datetime.now(UTC)
 
         try:
             data = response.json()

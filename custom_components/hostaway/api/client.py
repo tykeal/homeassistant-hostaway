@@ -21,6 +21,7 @@ from custom_components.hostaway.api.const import (
     MAX_RETRIES,
 )
 from custom_components.hostaway.api.exceptions import (
+    HostawayAuthError,
     HostawayConnectionError,
     HostawayRateLimitError,
     HostawayResponseError,
@@ -241,7 +242,11 @@ class HostawayApiClient:
             json=data,
         )
         parsed = self._parse_response(response)
-        result: dict[str, Any] = parsed.get("result", {})
+        result = parsed.get("result")
+        if not isinstance(result, dict):
+            raise HostawayResponseError(
+                "Update response missing 'result' object",
+            )
         return result
 
     async def _request(
@@ -313,7 +318,7 @@ class HostawayApiClient:
 
             if response.status_code == 403:
                 if _retried_auth:
-                    raise HostawayResponseError(
+                    raise HostawayAuthError(
                         "Forbidden after token refresh",
                     )
                 self._token_manager.invalidate()
@@ -367,6 +372,12 @@ class HostawayApiClient:
                 await asyncio.sleep(delay)
                 backoff = min(backoff * BACKOFF_MULTIPLIER, MAX_BACKOFF)
                 continue
+
+            # Raise on any other non-success status
+            if not response.is_success:
+                raise HostawayResponseError(
+                    f"Unexpected response status: {response.status_code}",
+                )
 
             return response
 
