@@ -274,6 +274,24 @@ class TestListingSensor:
         sensor = HostawayListingSensor(coordinator, 100, entry, status_desc)
         assert sensor.suggested_object_id == "hostaway_beach_house_status"
 
+    async def test_extra_state_attributes_listing_id(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """extra_state_attributes includes listing_id."""
+        entry = _make_entry(selected=[100])
+        entry.add_to_hass(hass)
+        api_client = AsyncMock()
+        api_client.get_all_listings = AsyncMock(return_value=[_make_listing(100)])
+
+        coordinator = HostawayListingsCoordinator(hass, entry, api_client)
+        await coordinator.async_refresh()
+
+        status_desc = next(d for d in LISTING_SENSOR_DESCRIPTIONS if d.key == "status")
+        sensor = HostawayListingSensor(coordinator, 100, entry, status_desc)
+        attrs = sensor.extra_state_attributes
+        assert attrs["listing_id"] == 100
+
     async def test_entity_ids_via_async_setup_entry(
         self,
         hass: HomeAssistant,
