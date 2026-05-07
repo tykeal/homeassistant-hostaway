@@ -149,7 +149,6 @@ class TestAsyncSetupEntry:
         await hass.async_block_till_done()
 
         assert entry.state is ConfigEntryState.SETUP_RETRY
-        assert entry.state is ConfigEntryState.SETUP_RETRY
 
 
 class TestAsyncUnloadEntry:

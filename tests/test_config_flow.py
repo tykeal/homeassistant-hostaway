@@ -74,7 +74,6 @@ class TestStepUser:
     @patch(
         "custom_components.hostaway.config_flow._fetch_listings",
         new_callable=AsyncMock,
-        return_value=[],
     )
     @patch(
         "custom_components.hostaway.config_flow._validate_credentials",
@@ -88,6 +87,12 @@ class TestStepUser:
         hass: HomeAssistant,
     ) -> None:
         """Valid credentials proceed to the listings step."""
+        from custom_components.hostaway.api.models import HostawayListing
+
+        mock_fetch.return_value = [
+            HostawayListing(id=101, name="Test Listing", status="active"),
+        ]
+
         result = await hass.config_entries.flow.async_init(
             DOMAIN,
             context={"source": SOURCE_USER},

@@ -218,23 +218,16 @@ class HostawayConfigFlow(ConfigFlow, domain=DOMAIN):
                 )
             except HostawayAuthError:
                 _LOGGER.exception("Auth failed fetching listings")
-                errors["base"] = "invalid_auth"
-                return self.async_show_form(
-                    step_id="listings",
-                    data_schema=vol.Schema({}),
-                    errors=errors,
-                )
+                return self.async_abort(reason="invalid_auth")
             except Exception:
                 _LOGGER.exception("Failed to fetch listings")
-                errors["base"] = "cannot_connect"
-                return self.async_show_form(
-                    step_id="listings",
-                    data_schema=vol.Schema({}),
-                    errors=errors,
-                )
+                return self.async_abort(reason="cannot_connect")
 
         # Filter to active listings only
         active_listings = [lst for lst in self._listings if lst.status == "active"]
+
+        if not active_listings:
+            return self.async_abort(reason="no_active_listings")
 
         options: list[SelectOptionDict] = []
         for listing in active_listings:
