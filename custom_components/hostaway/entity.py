@@ -19,6 +19,27 @@ if TYPE_CHECKING:
     )
 
 
+def build_device_info(
+    listing: HostawayListing,
+    entry_unique_id: str | None,
+) -> DeviceInfo:
+    """Build DeviceInfo for a Hostaway listing.
+
+    Args:
+        listing: The listing to build device info for.
+        entry_unique_id: The config entry unique_id for scoping.
+
+    Returns:
+        DeviceInfo with identifiers, name, manufacturer, model.
+    """
+    return DeviceInfo(
+        identifiers={(DOMAIN, f"{entry_unique_id}_{listing.id}")},
+        name=listing.name,
+        manufacturer="Hostaway",
+        model=listing.property_type or "Listing",
+    )
+
+
 class HostawayEntity(
     CoordinatorEntity["HostawayListingsCoordinator"],
 ):
@@ -72,12 +93,7 @@ class HostawayEntity(
         listing = self._listing
         if listing is None:
             return None
-        return DeviceInfo(
-            identifiers={(DOMAIN, f"{self._entry_unique_id}_{listing.id}")},
-            name=listing.name,
-            manufacturer="Hostaway",
-            model=listing.property_type or "Listing",
-        )
+        return build_device_info(listing, self._entry_unique_id)
 
     @property
     def available(self) -> bool:

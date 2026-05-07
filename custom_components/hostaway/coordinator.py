@@ -78,7 +78,7 @@ class HostawayListingsCoordinator(
             hass,
             _LOGGER,
             config_entry=entry,
-            name=f"{DOMAIN}_listings",
+            name=f"{DOMAIN}_listings_{entry.unique_id}",
             update_interval=timedelta(minutes=interval_minutes),
         )
 
@@ -145,7 +145,7 @@ class HostawayReservationsCoordinator(
             hass,
             _LOGGER,
             config_entry=entry,
-            name=f"{DOMAIN}_reservations",
+            name=f"{DOMAIN}_reservations_{entry.unique_id}",
             update_interval=timedelta(minutes=interval_minutes),
         )
 

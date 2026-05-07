@@ -22,7 +22,7 @@ from custom_components.hostaway.api.models import (
     HostawayReservation,
 )
 from custom_components.hostaway.const import DOMAIN
-from custom_components.hostaway.entity import HostawayEntity
+from custom_components.hostaway.entity import HostawayEntity, build_device_info
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -247,12 +247,7 @@ class HostawayReservationSensor(
         listing = self._listings_coordinator.data.get(self._listing_id)
         if listing is None:
             return None
-        return DeviceInfo(
-            identifiers={(DOMAIN, f"{self._entry_unique_id}_{listing.id}")},
-            name=listing.name,
-            manufacturer="Hostaway",
-            model=listing.property_type or "Listing",
-        )
+        return build_device_info(listing, self._entry_unique_id)
 
 
 async def async_setup_entry(
