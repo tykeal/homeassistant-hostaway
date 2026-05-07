@@ -475,12 +475,12 @@ assets, and release preparation
 
 ### Tests
 
-- [ ] T051 [P] Write integration tests in
+- [x] T051 [P] Write integration tests in
   `tests/test_integration.py`: full lifecycle test
   (config flow → coordinator refresh → sensor creation →
   service call), verify entity naming conventions, verify
   unique_id stability across restarts
-- [ ] T052 [P] Write edge case tests: token expiry during
+- [x] T052 [P] Write edge case tests: token expiry during
   coordinator refresh triggers transparent refresh,
   listing deleted in Hostaway marks sensor unavailable,
   pagination with >100 reservations, concurrent service
@@ -488,24 +488,24 @@ assets, and release preparation
 
 ### Documentation and Assets
 
-- [ ] T053 [P] Create `README.md` with installation
+- [x] T053 [P] Create `README.md` with installation
   instructions (HACS + manual), configuration guide,
   entity documentation, service documentation, and
   automation examples
-- [ ] T054 [P] Create brand assets in
+- [x] T054 [P] Create brand assets in
   `custom_components/hostaway/brand/`: icon.png and
   logo.png per HA custom component conventions
-- [ ] T055 [P] Create `CHANGELOG.md` with initial release
+- [x] T055 [P] Create `CHANGELOG.md` with initial release
   entry documenting all features
 
 ### Final Validation
 
-- [ ] T056 Run full test suite with coverage report, verify
+- [x] T056 Run full test suite with coverage report, verify
   all tests pass and coverage meets project requirements
-- [ ] T057 Run complete pre-commit hook suite, verify all
+- [x] T057 Run complete pre-commit hook suite, verify all
   checks pass including ruff, mypy, interrogate, reuse,
   markdownlint, and codespell
-- [ ] T058 Validate HACS compatibility: verify manifest
+- [x] T058 Validate HACS compatibility: verify manifest
   structure, confirm integration loads in HA dev
   environment
 
