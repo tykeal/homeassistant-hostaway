@@ -11,6 +11,52 @@ from typing import Any
 from custom_components.hostaway.api.const import TOKEN_READY_DELAY
 
 
+def _validate_non_negative(
+    value: object, field: str, *, types: tuple[type, ...] = (int,)
+) -> None:
+    """Validate that a value is a non-negative number of given type.
+
+    Args:
+        value: The value to validate (skip if None).
+        field: Field name for the error message.
+        types: Acceptable numeric types.
+
+    Raises:
+        ValueError: If value is wrong type or negative.
+    """
+    if value is None:
+        return
+    if not isinstance(value, types):
+        msg = f"{field} must be non-negative"
+        raise ValueError(msg)
+    if value < 0:  # type: ignore[operator]
+        msg = f"{field} must be non-negative"
+        raise ValueError(msg)
+
+
+def _validate_positive(
+    value: object, field: str, *, types: tuple[type, ...] = (int,)
+) -> None:
+    """Validate that a value is a positive number of given type.
+
+    Args:
+        value: The value to validate (skip if None).
+        field: Field name for the error message.
+        types: Acceptable numeric types.
+
+    Raises:
+        ValueError: If value is wrong type or not positive.
+    """
+    if value is None:
+        return
+    if not isinstance(value, types):
+        msg = f"{field} must be positive"
+        raise ValueError(msg)
+    if value <= 0:  # type: ignore[operator]
+        msg = f"{field} must be positive"
+        raise ValueError(msg)
+
+
 @dataclass(frozen=True)
 class AccessToken:
     """Immutable representation of a cached OAuth 2.0 access token.
@@ -39,6 +85,9 @@ class AccessToken:
             raise ValueError(msg)
         if not self.token_type:
             msg = "token_type must be non-empty"
+            raise ValueError(msg)
+        if not isinstance(self.expires_in, int):
+            msg = "expires_in must be an integer"
             raise ValueError(msg)
         if self.expires_in <= 0:
             msg = "expires_in must be positive"
@@ -207,21 +256,13 @@ class HostawayListing:
 
         # Validate optional numeric fields when present
         bedrooms = data.get("bedroomsNumber")
-        if bedrooms is not None and bedrooms < 0:
-            msg = "bedrooms must be non-negative"
-            raise ValueError(msg)
+        _validate_non_negative(bedrooms, "bedrooms")
         bathrooms = data.get("bathroomsNumber")
-        if bathrooms is not None and bathrooms < 0:
-            msg = "bathrooms must be non-negative"
-            raise ValueError(msg)
+        _validate_non_negative(bathrooms, "bathrooms", types=(int, float))
         max_guests = data.get("personCapacity")
-        if max_guests is not None and max_guests <= 0:
-            msg = "max_guests must be positive"
-            raise ValueError(msg)
+        _validate_positive(max_guests, "max_guests")
         base_price = data.get("price")
-        if base_price is not None and base_price < 0:
-            msg = "base_price must be non-negative"
-            raise ValueError(msg)
+        _validate_non_negative(base_price, "base_price", types=(int, float))
 
         return cls(
             id=data["id"],
@@ -311,7 +352,8 @@ class HostawayReservation:
         if not isinstance(data["id"], int) or data["id"] <= 0:
             msg = "id must be a positive integer"
             raise ValueError(msg)
-        if not isinstance(data["listingMapId"], int) or data["listingMapId"] <= 0:
+        listing_map_id = data["listingMapId"]
+        if not isinstance(listing_map_id, int) or listing_map_id <= 0:
             msg = "listing_id must be a positive integer"
             raise ValueError(msg)
         if not data["guestName"]:
@@ -320,17 +362,11 @@ class HostawayReservation:
 
         # Validate optional numeric fields when present
         num_guests = data.get("numberOfGuests")
-        if num_guests is not None and num_guests <= 0:
-            msg = "num_guests must be positive"
-            raise ValueError(msg)
+        _validate_positive(num_guests, "num_guests")
         total_price = data.get("totalPrice")
-        if total_price is not None and total_price < 0:
-            msg = "total_price must be non-negative"
-            raise ValueError(msg)
+        _validate_non_negative(total_price, "total_price", types=(int, float))
         nights = data.get("nights")
-        if nights is not None and nights <= 0:
-            msg = "nights must be positive"
-            raise ValueError(msg)
+        _validate_positive(nights, "nights")
 
         return cls(
             id=data["id"],
