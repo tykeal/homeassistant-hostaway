@@ -6,6 +6,8 @@ Public API surface for the Hostaway API client package. All symbols
 exported here are part of the stable public interface.
 """
 
+from custom_components.hostaway.api.auth import HostawayTokenManager
+from custom_components.hostaway.api.client import HostawayApiClient
 from custom_components.hostaway.api.const import (
     BASE_URL,
     TOKEN_URL,
@@ -27,6 +29,7 @@ __all__ = [
     "BASE_URL",
     "TOKEN_URL",
     "AccessToken",
+    "HostawayApiClient",
     "HostawayApiError",
     "HostawayAuthError",
     "HostawayConnectionError",
@@ -34,4 +37,5 @@ __all__ = [
     "HostawayRateLimitError",
     "HostawayReservation",
     "HostawayResponseError",
+    "HostawayTokenManager",
 ]
