@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -34,8 +33,6 @@ if TYPE_CHECKING:
         HostawayReservationsCoordinator,
     )
 
-_LOGGER = logging.getLogger(__name__)
-
 
 @dataclass(frozen=True, kw_only=True)
 class HostawayListingSensorDescription(SensorEntityDescription):
@@ -51,27 +48,27 @@ class HostawayListingSensorDescription(SensorEntityDescription):
 LISTING_SENSOR_DESCRIPTIONS: tuple[HostawayListingSensorDescription, ...] = (
     HostawayListingSensorDescription(
         key="status",
-        translation_key="listing_status",
+        name="Status",
         value_fn=lambda listing: listing.status,
     ),
     HostawayListingSensorDescription(
         key="base_price",
-        translation_key="listing_base_price",
+        name="Base price",
         value_fn=lambda listing: listing.base_price,
     ),
     HostawayListingSensorDescription(
         key="bedrooms",
-        translation_key="listing_bedrooms",
+        name="Bedrooms",
         value_fn=lambda listing: listing.bedrooms,
     ),
     HostawayListingSensorDescription(
         key="bathrooms",
-        translation_key="listing_bathrooms",
+        name="Bathrooms",
         value_fn=lambda listing: listing.bathrooms,
     ),
     HostawayListingSensorDescription(
         key="max_guests",
-        translation_key="listing_max_guests",
+        name="Max guests",
         value_fn=lambda listing: listing.max_guests,
     ),
 )
@@ -131,7 +128,8 @@ class HostawayReservationSensor(
     check-in/out, status, door code info, and guest count.
 
     Attributes:
-        _reservation: The reservation this sensor represents.
+        _reservation_id: The reservation ID this sensor tracks.
+        _listing_id: The listing ID for device info lookup.
         _listings_coordinator: Listings coordinator for device info.
         _entry: The config entry.
     """
@@ -154,25 +152,38 @@ class HostawayReservationSensor(
             entry: The config entry.
         """
         super().__init__(coordinator)
-        self._reservation = reservation
+        self._reservation_id = reservation.id
+        self._listing_id = reservation.listing_id
         self._listings_coordinator = listings_coordinator
         self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}_{reservation.id}"
+        self._attr_name = f"Reservation {reservation.id}"
 
     @property
     def _current_reservation(self) -> HostawayReservation | None:
         """Find current reservation data from coordinator.
 
         Returns:
-            The updated reservation, or the initial one.
+            The updated reservation, or None if not found.
         """
         if self.coordinator.data is None:
-            return self._reservation
+            return None
         for reservations in self.coordinator.data.values():
             for res in reservations:
-                if res.id == self._reservation.id:
+                if res.id == self._reservation_id:
                     return res
-        return self._reservation
+        return None
+
+    @property
+    def available(self) -> bool:
+        """Return True only when reservation exists in coordinator.
+
+        Returns:
+            True when the reservation is present, False otherwise.
+        """
+        if not super().available:
+            return False
+        return self._current_reservation is not None
 
     @property
     def native_value(self) -> StateType:
@@ -211,10 +222,9 @@ class HostawayReservationSensor(
         Returns:
             DeviceInfo for the associated listing.
         """
-        listing_id = self._reservation.listing_id
         if self._listings_coordinator.data is None:
             return None
-        listing = self._listings_coordinator.data.get(listing_id)
+        listing = self._listings_coordinator.data.get(self._listing_id)
         if listing is None:
             return None
         return DeviceInfo(
@@ -233,7 +243,8 @@ async def async_setup_entry(
     """Set up Hostaway sensor entities from a config entry.
 
     Creates listing sensors per listing per description and
-    reservation sensors per reservation.
+    reservation sensors per reservation. Registers listeners
+    to add new entities when coordinator data updates.
 
     Args:
         hass: Home Assistant instance.
@@ -247,11 +258,15 @@ async def async_setup_entry(
     ]
 
     entities: list[SensorEntity] = []
+    known_listing_sensor_ids: set[str] = set()
+    known_reservation_ids: set[int] = set()
 
-    # Create listing sensors
+    # Create listing sensors for current data
     if listings_coordinator.data:
         for listing_id in listings_coordinator.data:
             for description in LISTING_SENSOR_DESCRIPTIONS:
+                uid = f"{entry.entry_id}_{listing_id}_{description.key}"
+                known_listing_sensor_ids.add(uid)
                 entities.append(
                     HostawayListingSensor(
                         listings_coordinator,
@@ -261,10 +276,11 @@ async def async_setup_entry(
                     )
                 )
 
-    # Create reservation sensors
+    # Create reservation sensors for current data
     if reservations_coordinator.data:
         for _listing_id, reservations in reservations_coordinator.data.items():
             for reservation in reservations:
+                known_reservation_ids.add(reservation.id)
                 entities.append(
                     HostawayReservationSensor(
                         reservations_coordinator,
@@ -275,3 +291,47 @@ async def async_setup_entry(
                 )
 
     async_add_entities(entities)
+
+    def _async_add_new_listings() -> None:
+        """Add sensors for newly discovered listings."""
+        if not listings_coordinator.data:
+            return
+        new_entities: list[SensorEntity] = []
+        for listing_id in listings_coordinator.data:
+            for description in LISTING_SENSOR_DESCRIPTIONS:
+                uid = f"{entry.entry_id}_{listing_id}_{description.key}"
+                if uid not in known_listing_sensor_ids:
+                    known_listing_sensor_ids.add(uid)
+                    new_entities.append(
+                        HostawayListingSensor(
+                            listings_coordinator,
+                            listing_id,
+                            entry,
+                            description,
+                        )
+                    )
+        if new_entities:
+            async_add_entities(new_entities)
+
+    def _async_add_new_reservations() -> None:
+        """Add sensors for newly discovered reservations."""
+        if not reservations_coordinator.data:
+            return
+        new_entities: list[SensorEntity] = []
+        for _lid, reservations in reservations_coordinator.data.items():
+            for reservation in reservations:
+                if reservation.id not in known_reservation_ids:
+                    known_reservation_ids.add(reservation.id)
+                    new_entities.append(
+                        HostawayReservationSensor(
+                            reservations_coordinator,
+                            listings_coordinator,
+                            reservation,
+                            entry,
+                        )
+                    )
+        if new_entities:
+            async_add_entities(new_entities)
+
+    listings_coordinator.async_add_listener(_async_add_new_listings)
+    reservations_coordinator.async_add_listener(_async_add_new_reservations)
