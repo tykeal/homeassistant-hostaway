@@ -45,36 +45,36 @@ mapped to the phase where their prerequisites exist.
 **Purpose**: Create project directory structure, package
 scaffolding, CI configuration, and manifest files
 
-- [ ] T001 Create directory structure with `__init__.py`
+- [x] T001 Create directory structure with `__init__.py`
   packages for `custom_components/hostaway/`,
   `custom_components/hostaway/api/`, `tests/`, and
   `tests/api/` per plan.md project structure
-- [ ] T002 [P] Create integration manifest in
+- [x] T002 [P] Create integration manifest in
   `custom_components/hostaway/manifest.json`: domain
   `hostaway`, `config_flow: true`,
   `iot_class: cloud_polling`, HA version requirement,
   requirements `httpx>=0.27`, codeowners `@tykeal`,
   documentation URL
-- [ ] T003 [P] Verify and update existing `hacs.json`:
+- [x] T003 [P] Verify and update existing `hacs.json`:
   confirm name is `Hostaway`, `render_readme: true`, and
   homeassistant minimum version matches manifest.json
-- [ ] T004 [P] Create `pyproject.toml` with project metadata,
+- [x] T004 [P] Create `pyproject.toml` with project metadata,
   test dependencies (`pytest`, `pytest-asyncio`,
   `pytest-homeassistant-custom-component`, `respx`), ruff
   config, mypy config, and interrogate config
-- [ ] T005 [P] Update existing `.pre-commit-config.yaml` to
+- [x] T005 [P] Update existing `.pre-commit-config.yaml` to
   include any missing hooks needed for implementation:
   ruff, ruff-format, mypy, interrogate, yamllint,
   markdownlint, reuse-tool, gitlint, codespell, and
   validate-pyproject
-- [ ] T006 [P] Verify existing `.gitlint` enforces
+- [x] T006 [P] Verify existing `.gitlint` enforces
   title-max-length 50, body-max-line-length 72,
   conventional commits, and signed-off-by; update if
   needed
-- [ ] T007 [P] Update existing `REUSE.toml` with license
+- [x] T007 [P] Update existing `REUSE.toml` with license
   annotations for new file patterns added by this feature
   (Apache-2.0 for source, CC-BY-4.0 for docs/specs)
-- [ ] T008 [P] Verify existing GitHub Actions workflows
+- [x] T008 [P] Verify existing GitHub Actions workflows
   (e.g., `build-test.yaml`, `validate.yaml`) cover lint,
   type-check, and test matrix; extend or add workflow if
   gaps exist
