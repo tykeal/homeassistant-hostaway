@@ -20,9 +20,42 @@ from custom_components.hostaway.const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
+
+def _positive_int(value: Any) -> int:
+    """Validate and coerce a value to a positive integer.
+
+    Rejects booleans and floats with fractional parts to
+    prevent silent coercion of unintended values.
+
+    Args:
+        value: The value to validate.
+
+    Returns:
+        The validated positive integer.
+
+    Raises:
+        vol.Invalid: If the value is not a valid positive integer.
+    """
+    if isinstance(value, bool):
+        raise vol.Invalid("boolean is not a valid integer")
+    if isinstance(value, float):
+        if value != int(value):
+            raise vol.Invalid("float with fractional part is not valid")
+        value = int(value)
+    if not isinstance(value, int):
+        try:
+            value = int(value)
+        except (ValueError, TypeError) as exc:
+            raise vol.Invalid("expected an integer") from exc
+    if value <= 0:
+        raise vol.Invalid("must be a positive integer")
+    result: int = value
+    return result
+
+
 SERVICE_SET_DOOR_CODE_SCHEMA = vol.Schema(
     {
-        vol.Required("reservation_id"): vol.Coerce(int),
+        vol.Required("reservation_id"): _positive_int,
         vol.Required("door_code"): str,
         vol.Optional("door_code_vendor"): str,
         vol.Optional("door_code_instruction"): str,
@@ -32,7 +65,7 @@ SERVICE_SET_DOOR_CODE_SCHEMA = vol.Schema(
 
 SERVICE_GET_RESERVATIONS_SCHEMA = vol.Schema(
     {
-        vol.Required("listing_id"): vol.Coerce(int),
+        vol.Required("listing_id"): _positive_int,
         vol.Optional("config_entry_id"): str,
     }
 )
@@ -102,10 +135,6 @@ async def async_handle_set_door_code(
     reservation_id: int = call.data["reservation_id"]
     door_code: str = call.data["door_code"]
 
-    if reservation_id <= 0:
-        raise ServiceValidationError(
-            "reservation_id must be a positive integer",
-        )
     if not door_code or not door_code.strip():
         raise ServiceValidationError(
             "door_code must be a non-empty string",
@@ -156,11 +185,6 @@ async def async_handle_get_reservations(
         HomeAssistantError: On API failure.
     """
     listing_id: int = call.data["listing_id"]
-
-    if listing_id <= 0:
-        raise ServiceValidationError(
-            "listing_id must be a positive integer",
-        )
 
     entry_data = _resolve_entry_data(hass, call.data)
     api_client: HostawayApiClient = entry_data["api_client"]

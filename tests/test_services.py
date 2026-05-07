@@ -9,6 +9,7 @@ from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
+import voluptuous as vol
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -195,11 +196,11 @@ class TestSetDoorCode:
         self,
         hass: HomeAssistant,
     ) -> None:
-        """Raises ServiceValidationError for non-positive reservation_id."""
+        """Rejects non-positive reservation_id at schema level."""
         entry = _make_entry()
         await _setup_entry(hass, entry)
 
-        with pytest.raises(ServiceValidationError, match="positive"):
+        with pytest.raises(vol.MultipleInvalid, match="positive"):
             await hass.services.async_call(
                 DOMAIN,
                 "set_door_code",
@@ -207,7 +208,7 @@ class TestSetDoorCode:
                 blocking=True,
             )
 
-        with pytest.raises(ServiceValidationError, match="positive"):
+        with pytest.raises(vol.MultipleInvalid, match="positive"):
             await hass.services.async_call(
                 DOMAIN,
                 "set_door_code",
@@ -424,11 +425,11 @@ class TestGetReservations:
         self,
         hass: HomeAssistant,
     ) -> None:
-        """Raises ServiceValidationError for non-positive listing_id."""
+        """Rejects non-positive listing_id at schema level."""
         entry = _make_entry()
         await _setup_entry(hass, entry)
 
-        with pytest.raises(ServiceValidationError, match="positive"):
+        with pytest.raises(vol.MultipleInvalid, match="positive"):
             await hass.services.async_call(
                 DOMAIN,
                 "get_reservations",
