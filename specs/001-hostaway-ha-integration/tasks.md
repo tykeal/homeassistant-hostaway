@@ -422,7 +422,7 @@ reservation data programmatically (FR-013, FR-014, FR-015)
 > **NOTE: Write these tests FIRST, ensure they FAIL before
 > implementation**
 
-- [ ] T045 [P] [US1] Write `set_door_code` service tests in
+- [x] T045 [P] [US1] Write `set_door_code` service tests in
   `tests/test_services.py`: successful door code update
   calls PUT with correct payload, validates
   reservation_id is positive integer, validates door_code
@@ -430,7 +430,7 @@ reservation data programmatically (FR-013, FR-014, FR-015)
   404 raises ServiceValidationError, 429 retries with
   backoff, expired token refreshes transparently
   (FR-013, FR-015)
-- [ ] T046 [P] [US5] Write `get_reservations` service tests
+- [x] T046 [P] [US5] Write `get_reservations` service tests
   in `tests/test_services.py`: successful call fires
   `hostaway_reservations_retrieved` event with snake_case
   payload, validates listing_id is positive integer,
@@ -440,23 +440,23 @@ reservation data programmatically (FR-013, FR-014, FR-015)
 
 ### Implementation for Services
 
-- [ ] T047 [US1] Implement `set_door_code` service handler
+- [x] T047 [US1] Implement `set_door_code` service handler
   in `custom_components/hostaway/__init__.py` (or
   dedicated `services.py`): validate parameters per
   FR-015, build payload with only non-None optional
   fields, call `api_client.update_reservation()`, map
   404→ServiceValidationError (FR-013)
-- [ ] T048 [US5] Implement `get_reservations` service
+- [x] T048 [US5] Implement `get_reservations` service
   handler: validate listing_id, call
   `api_client.get_all_reservations(listing_id)`, resolve
   listing_name from ListingsCoordinator, fire
   `hostaway_reservations_retrieved` event with snake_case
   payload per FR-014
-- [ ] T049 Create `services.yaml` in
+- [x] T049 Create `services.yaml` in
   `custom_components/hostaway/services.yaml`: define
   `set_door_code` and `get_reservations` schemas per
   contracts/services.md
-- [ ] T050 Register services once per integration in
+- [x] T050 Register services once per integration in
   `async_setup` in `custom_components/hostaway/__init__.py`:
   register both service handlers with voluptuous schema
   validation; use a domain-level setup guard so services
