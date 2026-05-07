@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.sensor import (
+    SensorDeviceClass,
     SensorEntity,
     SensorEntityDescription,
 )
@@ -33,6 +34,123 @@ if TYPE_CHECKING:
         HostawayListingsCoordinator,
         HostawayReservationsCoordinator,
     )
+
+# Priority for selecting the most relevant reservation.
+# Lower number = higher priority.
+_STATUS_PRIORITY: dict[str, int] = {
+    "checked_in": 0,
+    "confirmed": 1,
+    "checked_out": 2,
+    "cancelled": 3,
+}
+
+
+def _select_reservation(
+    reservations: list[HostawayReservation],
+) -> HostawayReservation | None:
+    """Select the highest-priority reservation.
+
+    Uses ``_STATUS_PRIORITY`` to rank reservations. Unknown
+    statuses sort after all known statuses.
+
+    Args:
+        reservations: List of reservations for a listing.
+
+    Returns:
+        The highest-priority reservation, or None if empty.
+    """
+    if not reservations:
+        return None
+    fallback = max(_STATUS_PRIORITY.values()) + 1
+    return min(
+        reservations,
+        key=lambda r: _STATUS_PRIORITY.get(r.status, fallback),
+    )
+
+
+def _derive_state(
+    reservation: HostawayReservation | None,
+) -> str:
+    """Derive the sensor state from a reservation.
+
+    Maps ``confirmed`` to ``awaiting_checkin`` and returns
+    ``no_reservation`` when no reservation is selected.
+    Unknown statuses pass through unchanged.
+
+    Args:
+        reservation: The selected reservation, or None.
+
+    Returns:
+        The derived state string.
+    """
+    if reservation is None:
+        return "no_reservation"
+    if reservation.status == "confirmed":
+        return "awaiting_checkin"
+    return reservation.status
+
+
+def _build_reservation_attributes(
+    reservation: HostawayReservation | None,
+    all_reservations: list[HostawayReservation],
+    listing_id: int,
+) -> dict[str, Any]:
+    """Build extra_state_attributes for the reservation sensor.
+
+    Includes the selected reservation's details and an
+    ``upcoming_reservations`` list. The coordinator already
+    sorts reservations by check_in, so order is preserved.
+
+    Args:
+        reservation: The selected reservation, or None.
+        all_reservations: All reservations for the listing
+            (pre-sorted by check_in from coordinator).
+        listing_id: The listing ID.
+
+    Returns:
+        Dictionary of extra state attributes per FR-R04.
+    """
+    upcoming = [
+        {
+            "id": r.id,
+            "guest_name": r.guest_name,
+            "check_in": r.check_in,
+            "check_out": r.check_out,
+            "status": r.status,
+        }
+        for r in all_reservations
+    ]
+
+    if reservation is None:
+        return {
+            "reservation_id": None,
+            "guest_name": None,
+            "check_in": None,
+            "check_out": None,
+            "status": None,
+            "door_code": None,
+            "door_code_vendor": None,
+            "door_code_instruction": None,
+            "num_guests": None,
+            "confirmation_code": None,
+            "listing_id": listing_id,
+            "upcoming_reservations": upcoming,
+        }
+
+    return {
+        "reservation_id": reservation.id,
+        "guest_name": reservation.guest_name,
+        "check_in": reservation.check_in,
+        "check_out": reservation.check_out,
+        "status": reservation.status,
+        "door_code": reservation.door_code,
+        "door_code_vendor": reservation.door_code_vendor,
+        "door_code_instruction": reservation.door_code_instruction,
+        "num_guests": reservation.num_guests,
+        "confirmation_code": reservation.confirmation_code,
+        "listing_id": listing_id,
+        "upcoming_reservations": upcoming,
+    }
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -135,105 +253,101 @@ class HostawayListingSensor(HostawayEntity, SensorEntity):
         return self.entity_description.value_fn(listing)
 
 
-class HostawayReservationSensor(
+class HostawayReservationStatusSensor(
     CoordinatorEntity["HostawayReservationsCoordinator"],
     SensorEntity,
 ):
-    """Sensor entity for a Hostaway reservation.
+    """Per-listing reservation status sensor (FR-R01).
 
-    State is the guest name. Extra state attributes provide
-    check-in/out, status, door code info, and guest count.
+    Selects the highest-priority reservation for a listing
+    and exposes its status as the sensor state. Attributes
+    include reservation details and an upcoming list.
 
     Attributes:
-        _reservation_id: The reservation ID this sensor tracks.
-        _listing_id: The listing ID for device info lookup.
+        _listing_id: The listing ID this sensor monitors.
         _listings_coordinator: Listings coordinator for device info.
     """
 
     _attr_has_entity_name = True
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = [  # noqa: RUF012
+        "checked_in",
+        "awaiting_checkin",
+        "checked_out",
+        "cancelled",
+        "no_reservation",
+    ]
 
     def __init__(
         self,
         coordinator: HostawayReservationsCoordinator,
         listings_coordinator: HostawayListingsCoordinator,
-        reservation: HostawayReservation,
+        listing_id: int,
         entry: ConfigEntry,
     ) -> None:
-        """Initialize the reservation sensor.
+        """Initialize the reservation status sensor.
 
         Args:
             coordinator: The reservations coordinator.
             listings_coordinator: Listings coordinator for device info.
-            reservation: The reservation data.
+            listing_id: The listing ID to monitor.
             entry: The config entry.
         """
         super().__init__(coordinator)
-        self._reservation_id = reservation.id
-        self._listing_id = reservation.listing_id
+        self._listing_id = listing_id
         self._listings_coordinator = listings_coordinator
         self._entry_unique_id = entry.unique_id
-        self._attr_unique_id = f"{entry.unique_id}_{reservation.id}"
-        self._attr_name = f"Reservation {reservation.id}"
+        self._attr_unique_id = f"{entry.unique_id}_{listing_id}_reservation_status"
+        self._attr_name = "Reservation status"
 
     @property
-    def _current_reservation(self) -> HostawayReservation | None:
-        """Find current reservation data from coordinator.
-
-        Uses listing_id for efficient lookup rather than scanning
-        all listings.
+    def _reservations(self) -> list[HostawayReservation]:
+        """Return reservations for this listing.
 
         Returns:
-            The updated reservation, or None if not found.
+            List of reservations, empty if data unavailable.
         """
         if self.coordinator.data is None:
-            return None
-        reservations = self.coordinator.data.get(self._listing_id, [])
-        for res in reservations:
-            if res.id == self._reservation_id:
-                return res
-        return None
+            return []
+        return self.coordinator.data.get(self._listing_id, [])
 
     @property
     def available(self) -> bool:
-        """Return True only when reservation exists in coordinator.
+        """Return True when both coordinators have data.
 
-        Does not gate on last_update_success so stale-but-valid
-        data remains available during transient API failures (FR-016).
+        Checks that the listing still exists in the listings
+        coordinator and that the reservations coordinator has
+        data. Not gated on a specific reservation existing.
 
         Returns:
-            True when the reservation is present, False otherwise.
+            True when listing and reservation data present.
         """
-        return self._current_reservation is not None
+        if self.coordinator.data is None:
+            return False
+        if self._listings_coordinator.data is None:
+            return False
+        return self._listing_id in self._listings_coordinator.data
 
     @property
     def native_value(self) -> StateType:
-        """Return the guest name as sensor state.
+        """Return the derived reservation state.
 
         Returns:
-            The guest name string.
+            The reservation status string (FR-R02).
         """
-        res = self._current_reservation
-        return res.guest_name if res else None
+        selected = _select_reservation(self._reservations)
+        return _derive_state(selected)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return reservation details as extra attributes.
+        """Return reservation details and upcoming list.
 
         Returns:
-            Dictionary with reservation attributes.
+            Dictionary of attributes per FR-R04.
         """
-        res = self._current_reservation
-        if res is None:
-            return {}
-        return {
-            "check_in": res.check_in,
-            "check_out": res.check_out,
-            "status": res.status,
-            "door_code": res.door_code,
-            "door_code_vendor": res.door_code_vendor,
-            "door_code_instruction": res.door_code_instruction,
-            "num_guests": res.num_guests,
-        }
+        reservations = self._reservations
+        selected = _select_reservation(reservations)
+        return _build_reservation_attributes(selected, reservations, self._listing_id)
 
     @property
     def device_info(self) -> DeviceInfo | None:
@@ -258,8 +372,8 @@ async def async_setup_entry(
     """Set up Hostaway sensor entities from a config entry.
 
     Creates listing sensors per listing per description and
-    reservation sensors per reservation. Registers listeners
-    to add new entities when coordinator data updates.
+    one reservation status sensor per listing. Registers a
+    listener to add new entities when listings appear.
 
     Args:
         hass: Home Assistant instance.
@@ -273,15 +387,13 @@ async def async_setup_entry(
     ]
 
     entities: list[SensorEntity] = []
-    known_listing_sensor_ids: set[str] = set()
-    known_reservation_ids: set[int] = set()
+    known_listing_ids: set[int] = set()
 
-    # Create listing sensors for current data
+    # Create listing sensors and reservation status sensors
     if listings_coordinator.data:
         for listing_id in listings_coordinator.data:
+            known_listing_ids.add(listing_id)
             for description in LISTING_SENSOR_DESCRIPTIONS:
-                uid = f"{entry.unique_id}_{listing_id}_{description.key}"
-                known_listing_sensor_ids.add(uid)
                 entities.append(
                     HostawayListingSensor(
                         listings_coordinator,
@@ -290,20 +402,14 @@ async def async_setup_entry(
                         description,
                     )
                 )
-
-    # Create reservation sensors for current data
-    if reservations_coordinator.data:
-        for _listing_id, reservations in reservations_coordinator.data.items():
-            for reservation in reservations:
-                known_reservation_ids.add(reservation.id)
-                entities.append(
-                    HostawayReservationSensor(
-                        reservations_coordinator,
-                        listings_coordinator,
-                        reservation,
-                        entry,
-                    )
+            entities.append(
+                HostawayReservationStatusSensor(
+                    reservations_coordinator,
+                    listings_coordinator,
+                    listing_id,
+                    entry,
                 )
+            )
 
     async_add_entities(entities)
 
@@ -313,10 +419,9 @@ async def async_setup_entry(
             return
         new_entities: list[SensorEntity] = []
         for listing_id in listings_coordinator.data:
-            for description in LISTING_SENSOR_DESCRIPTIONS:
-                uid = f"{entry.unique_id}_{listing_id}_{description.key}"
-                if uid not in known_listing_sensor_ids:
-                    known_listing_sensor_ids.add(uid)
+            if listing_id not in known_listing_ids:
+                known_listing_ids.add(listing_id)
+                for description in LISTING_SENSOR_DESCRIPTIONS:
                     new_entities.append(
                         HostawayListingSensor(
                             listings_coordinator,
@@ -325,32 +430,17 @@ async def async_setup_entry(
                             description,
                         )
                     )
-        if new_entities:
-            async_add_entities(new_entities)
-
-    def _async_add_new_reservations() -> None:
-        """Add sensors for newly discovered reservations."""
-        if not reservations_coordinator.data:
-            return
-        new_entities: list[SensorEntity] = []
-        for _lid, reservations in reservations_coordinator.data.items():
-            for reservation in reservations:
-                if reservation.id not in known_reservation_ids:
-                    known_reservation_ids.add(reservation.id)
-                    new_entities.append(
-                        HostawayReservationSensor(
-                            reservations_coordinator,
-                            listings_coordinator,
-                            reservation,
-                            entry,
-                        )
+                new_entities.append(
+                    HostawayReservationStatusSensor(
+                        reservations_coordinator,
+                        listings_coordinator,
+                        listing_id,
+                        entry,
                     )
+                )
         if new_entities:
             async_add_entities(new_entities)
 
     entry.async_on_unload(
         listings_coordinator.async_add_listener(_async_add_new_listings)
-    )
-    entry.async_on_unload(
-        reservations_coordinator.async_add_listener(_async_add_new_reservations)
     )

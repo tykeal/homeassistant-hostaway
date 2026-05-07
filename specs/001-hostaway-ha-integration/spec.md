@@ -134,6 +134,11 @@ reservation data.
 
 **Acceptance Scenarios**:
 
+> **Note**: Per-reservation sensor design superseded by
+> spec 002 (reservation-sensor-refactor). See spec 002
+> for the current per-listing reservation status sensor
+> design.
+
 1. **Given** the integration is monitoring listings with active
    reservations,
    **When** data is polled,
@@ -228,6 +233,11 @@ event is fired containing the reservation data.
   1 minute) and update sensor state accordingly.
 - **FR-009**: System MUST expose reservation data as sensor
   entities for monitored listings.
+
+  > **Note**: Per-reservation sensor design superseded by
+  > spec 002 (reservation-sensor-refactor). See spec 002
+  > for the current per-listing reservation status sensor
+  > design.
 - **FR-010**: System MUST poll reservation data at a
   user-configurable interval (default: 2 minutes, minimum:
   1 minute) and update sensor state accordingly.

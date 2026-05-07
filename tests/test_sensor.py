@@ -26,7 +26,10 @@ from custom_components.hostaway.coordinator import (
 from custom_components.hostaway.sensor import (
     LISTING_SENSOR_DESCRIPTIONS,
     HostawayListingSensor,
-    HostawayReservationSensor,
+    HostawayReservationStatusSensor,
+    _build_reservation_attributes,
+    _derive_state,
+    _select_reservation,
 )
 
 
@@ -88,6 +91,7 @@ def _make_reservation(
     door_code_vendor: str | None = "smartlock",
     door_code_instruction: str | None = "Use keypad",
     num_guests: int | None = 3,
+    confirmation_code: str | None = "ABC123",
 ) -> HostawayReservation:
     """Create a HostawayReservation for testing.
 
@@ -102,6 +106,7 @@ def _make_reservation(
         door_code_vendor: Door code vendor.
         door_code_instruction: Door code instruction.
         num_guests: Number of guests.
+        confirmation_code: Confirmation code.
 
     Returns:
         A HostawayReservation instance.
@@ -117,6 +122,7 @@ def _make_reservation(
         door_code_vendor=door_code_vendor,
         door_code_instruction=door_code_instruction,
         num_guests=num_guests,
+        confirmation_code=confirmation_code,
     )
 
 
@@ -312,84 +318,189 @@ class TestListingSensor:
         await res_coord.async_shutdown()
 
 
-class TestReservationSensor:
-    """Tests for HostawayReservationSensor."""
+class TestSelectReservation:
+    """Tests for _select_reservation helper."""
 
-    async def test_state_is_guest_name(
-        self,
-        hass: HomeAssistant,
-    ) -> None:
-        """Entity state is guest_name."""
-        entry = _make_entry(selected=[100])
-        entry.add_to_hass(hass)
-        api_client = AsyncMock()
-        reservation = _make_reservation(1001, 100, "John Doe")
-        api_client.get_all_reservations = AsyncMock(return_value=[reservation])
+    def test_empty_returns_none(self) -> None:
+        """Empty list returns None."""
+        assert _select_reservation([]) is None
 
-        listings_api = AsyncMock()
-        listings_api.get_all_listings = AsyncMock(return_value=[_make_listing(100)])
-        listings_coord = HostawayListingsCoordinator(hass, entry, listings_api)
-        await listings_coord.async_refresh()
+    def test_checked_in_wins_over_confirmed(self) -> None:
+        """checked_in has higher priority than confirmed."""
+        confirmed = _make_reservation(1, status="confirmed")
+        checked_in = _make_reservation(2, status="checked_in")
+        result = _select_reservation([confirmed, checked_in])
+        assert result is not None
+        assert result.id == 2
 
-        res_coord = HostawayReservationsCoordinator(hass, entry, api_client)
-        await res_coord.async_refresh()
+    def test_confirmed_wins_over_checked_out(self) -> None:
+        """confirmed has higher priority than checked_out."""
+        checked_out = _make_reservation(1, status="checked_out")
+        confirmed = _make_reservation(2, status="confirmed")
+        result = _select_reservation([checked_out, confirmed])
+        assert result is not None
+        assert result.id == 2
 
-        sensor = HostawayReservationSensor(
-            res_coord, listings_coord, reservation, entry
+    def test_checked_out_wins_over_cancelled(self) -> None:
+        """checked_out has higher priority than cancelled."""
+        cancelled = _make_reservation(1, status="cancelled")
+        checked_out = _make_reservation(2, status="checked_out")
+        result = _select_reservation([cancelled, checked_out])
+        assert result is not None
+        assert result.id == 2
+
+    def test_unknown_status_sorts_last(self) -> None:
+        """Unknown status sorts after all known statuses."""
+        unknown = _make_reservation(1, status="pending")
+        cancelled = _make_reservation(2, status="cancelled")
+        result = _select_reservation([unknown, cancelled])
+        assert result is not None
+        assert result.id == 2
+
+    def test_single_reservation(self) -> None:
+        """Single reservation is selected."""
+        res = _make_reservation(42, status="confirmed")
+        result = _select_reservation([res])
+        assert result is not None
+        assert result.id == 42
+
+
+class TestDeriveState:
+    """Tests for _derive_state helper."""
+
+    def test_none_returns_no_reservation(self) -> None:
+        """None returns no_reservation."""
+        assert _derive_state(None) == "no_reservation"
+
+    def test_confirmed_maps_to_awaiting_checkin(self) -> None:
+        """confirmed maps to awaiting_checkin."""
+        res = _make_reservation(status="confirmed")
+        assert _derive_state(res) == "awaiting_checkin"
+
+    def test_checked_in_passes_through(self) -> None:
+        """checked_in passes through unchanged."""
+        res = _make_reservation(status="checked_in")
+        assert _derive_state(res) == "checked_in"
+
+    def test_checked_out_passes_through(self) -> None:
+        """checked_out passes through unchanged."""
+        res = _make_reservation(status="checked_out")
+        assert _derive_state(res) == "checked_out"
+
+    def test_cancelled_passes_through(self) -> None:
+        """cancelled passes through unchanged."""
+        res = _make_reservation(status="cancelled")
+        assert _derive_state(res) == "cancelled"
+
+    def test_unknown_status_passes_through(self) -> None:
+        """Unknown status passes through unchanged."""
+        res = _make_reservation(status="pending_review")
+        assert _derive_state(res) == "pending_review"
+
+
+class TestBuildReservationAttributes:
+    """Tests for _build_reservation_attributes helper."""
+
+    def test_none_reservation_returns_null_fields(self) -> None:
+        """None reservation returns null attribute fields."""
+        attrs = _build_reservation_attributes(None, [], 100)
+        assert attrs["reservation_id"] is None
+        assert attrs["guest_name"] is None
+        assert attrs["listing_id"] == 100
+        assert attrs["upcoming_reservations"] == []
+
+    def test_attributes_include_all_fr_r04_fields(self) -> None:
+        """Attributes include all FR-R04 required fields."""
+        res = _make_reservation(
+            res_id=1001,
+            guest_name="Alice",
+            check_in="2025-08-01",
+            check_out="2025-08-05",
+            status="checked_in",
+            door_code="9999",
+            door_code_vendor="yale",
+            door_code_instruction="Front door",
+            num_guests=2,
+            confirmation_code="XYZ789",
         )
-        assert sensor.native_value == "John Doe"
+        attrs = _build_reservation_attributes(res, [res], 100)
+        assert attrs["reservation_id"] == 1001
+        assert attrs["guest_name"] == "Alice"
+        assert attrs["check_in"] == "2025-08-01"
+        assert attrs["check_out"] == "2025-08-05"
+        assert attrs["status"] == "checked_in"
+        assert attrs["door_code"] == "9999"
+        assert attrs["door_code_vendor"] == "yale"
+        assert attrs["door_code_instruction"] == "Front door"
+        assert attrs["num_guests"] == 2
+        assert attrs["confirmation_code"] == "XYZ789"
+        assert attrs["listing_id"] == 100
 
-    async def test_extra_state_attributes(
-        self,
-        hass: HomeAssistant,
-    ) -> None:
-        """Extra state attributes include expected fields."""
-        entry = _make_entry(selected=[100])
-        entry.add_to_hass(hass)
-        api_client = AsyncMock()
-        reservation = _make_reservation(
-            1001,
-            100,
-            "Jane Smith",
+    def test_upcoming_reservations_preserve_order(self) -> None:
+        """upcoming_reservations preserves input order."""
+        r1 = _make_reservation(1, check_in="2025-08-01")
+        r2 = _make_reservation(2, check_in="2025-09-01")
+        r3 = _make_reservation(3, check_in="2025-10-01")
+        attrs = _build_reservation_attributes(r1, [r1, r2, r3], 100)
+        upcoming = attrs["upcoming_reservations"]
+        assert len(upcoming) == 3
+        assert upcoming[0]["check_in"] == "2025-08-01"
+        assert upcoming[1]["check_in"] == "2025-09-01"
+        assert upcoming[2]["check_in"] == "2025-10-01"
+
+    def test_upcoming_reservation_fields(self) -> None:
+        """Each upcoming reservation has required fields."""
+        res = _make_reservation(
+            res_id=42,
+            guest_name="Bob",
             check_in="2025-08-01",
             check_out="2025-08-05",
             status="confirmed",
-            door_code="5678",
-            door_code_vendor="yale",
-            door_code_instruction="Side door",
-            num_guests=2,
         )
-        api_client.get_all_reservations = AsyncMock(return_value=[reservation])
+        attrs = _build_reservation_attributes(res, [res], 100)
+        upcoming = attrs["upcoming_reservations"]
+        assert len(upcoming) == 1
+        entry = upcoming[0]
+        assert entry["id"] == 42
+        assert entry["guest_name"] == "Bob"
+        assert entry["check_in"] == "2025-08-01"
+        assert entry["check_out"] == "2025-08-05"
+        assert entry["status"] == "confirmed"
 
-        listings_api = AsyncMock()
-        listings_api.get_all_listings = AsyncMock(return_value=[_make_listing(100)])
-        listings_coord = HostawayListingsCoordinator(hass, entry, listings_api)
-        await listings_coord.async_refresh()
 
-        res_coord = HostawayReservationsCoordinator(hass, entry, api_client)
-        await res_coord.async_refresh()
+class TestReservationStatusSensor:
+    """Tests for HostawayReservationStatusSensor."""
 
-        sensor = HostawayReservationSensor(
-            res_coord, listings_coord, reservation, entry
-        )
-        attrs = sensor.extra_state_attributes
-        assert attrs["check_in"] == "2025-08-01"
-        assert attrs["check_out"] == "2025-08-05"
-        assert attrs["status"] == "confirmed"
-        assert attrs["door_code"] == "5678"
-        assert attrs["door_code_vendor"] == "yale"
-        assert attrs["door_code_instruction"] == "Side door"
-        assert attrs["num_guests"] == 2
-
-    async def test_unique_id_format(
+    async def test_state_no_reservation(
         self,
         hass: HomeAssistant,
     ) -> None:
-        """unique_id: {unique_id}_{reservation_id}."""
+        """State is no_reservation when listing has none."""
         entry = _make_entry(selected=[100])
         entry.add_to_hass(hass)
         api_client = AsyncMock()
-        reservation = _make_reservation(1001, 100)
+        api_client.get_all_reservations = AsyncMock(return_value=[])
+
+        listings_api = AsyncMock()
+        listings_api.get_all_listings = AsyncMock(return_value=[_make_listing(100)])
+        listings_coord = HostawayListingsCoordinator(hass, entry, listings_api)
+        await listings_coord.async_refresh()
+
+        res_coord = HostawayReservationsCoordinator(hass, entry, api_client)
+        await res_coord.async_refresh()
+
+        sensor = HostawayReservationStatusSensor(res_coord, listings_coord, 100, entry)
+        assert sensor.native_value == "no_reservation"
+
+    async def test_state_checked_in(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """State is checked_in when reservation is checked in."""
+        entry = _make_entry(selected=[100])
+        entry.add_to_hass(hass)
+        api_client = AsyncMock()
+        reservation = _make_reservation(1001, 100, status="checked_in")
         api_client.get_all_reservations = AsyncMock(return_value=[reservation])
 
         listings_api = AsyncMock()
@@ -400,17 +511,14 @@ class TestReservationSensor:
         res_coord = HostawayReservationsCoordinator(hass, entry, api_client)
         await res_coord.async_refresh()
 
-        sensor = HostawayReservationSensor(
-            res_coord, listings_coord, reservation, entry
-        )
-        expected = f"{entry.unique_id}_1001"
-        assert sensor.unique_id == expected
+        sensor = HostawayReservationStatusSensor(res_coord, listings_coord, 100, entry)
+        assert sensor.native_value == "checked_in"
 
-    async def test_status_change_updates_state(
+    async def test_state_awaiting_checkin_from_confirmed(
         self,
         hass: HomeAssistant,
     ) -> None:
-        """Status change updates entity attributes."""
+        """State is awaiting_checkin when confirmed."""
         entry = _make_entry(selected=[100])
         entry.add_to_hass(hass)
         api_client = AsyncMock()
@@ -425,18 +533,190 @@ class TestReservationSensor:
         res_coord = HostawayReservationsCoordinator(hass, entry, api_client)
         await res_coord.async_refresh()
 
-        sensor = HostawayReservationSensor(
-            res_coord, listings_coord, reservation, entry
-        )
-        assert sensor.extra_state_attributes["status"] == "confirmed"
+        sensor = HostawayReservationStatusSensor(res_coord, listings_coord, 100, entry)
+        assert sensor.native_value == "awaiting_checkin"
 
-        # Update reservation with new status
-        updated_res = _make_reservation(1001, 100, status="checked_in")
-        api_client.get_all_reservations = AsyncMock(return_value=[updated_res])
+    async def test_priority_checked_in_wins(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """checked_in wins over confirmed in priority."""
+        entry = _make_entry(selected=[100])
+        entry.add_to_hass(hass)
+        api_client = AsyncMock()
+        r1 = _make_reservation(1001, 100, status="confirmed")
+        r2 = _make_reservation(1002, 100, status="checked_in")
+        api_client.get_all_reservations = AsyncMock(return_value=[r1, r2])
+
+        listings_api = AsyncMock()
+        listings_api.get_all_listings = AsyncMock(return_value=[_make_listing(100)])
+        listings_coord = HostawayListingsCoordinator(hass, entry, listings_api)
+        await listings_coord.async_refresh()
+
+        res_coord = HostawayReservationsCoordinator(hass, entry, api_client)
         await res_coord.async_refresh()
 
-        # Same sensor instance reflects updated coordinator data
-        assert sensor.extra_state_attributes["status"] == "checked_in"
+        sensor = HostawayReservationStatusSensor(res_coord, listings_coord, 100, entry)
+        assert sensor.native_value == "checked_in"
+        attrs = sensor.extra_state_attributes
+        assert attrs["reservation_id"] == 1002
+
+    async def test_extra_state_attributes(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Attributes include guest_name, door_code, upcoming."""
+        entry = _make_entry(selected=[100])
+        entry.add_to_hass(hass)
+        api_client = AsyncMock()
+        reservation = _make_reservation(
+            1001,
+            100,
+            guest_name="Jane Smith",
+            check_in="2025-08-01",
+            check_out="2025-08-05",
+            status="checked_in",
+            door_code="5678",
+            door_code_vendor="yale",
+            door_code_instruction="Side door",
+            num_guests=2,
+            confirmation_code="XYZ789",
+        )
+        api_client.get_all_reservations = AsyncMock(return_value=[reservation])
+
+        listings_api = AsyncMock()
+        listings_api.get_all_listings = AsyncMock(return_value=[_make_listing(100)])
+        listings_coord = HostawayListingsCoordinator(hass, entry, listings_api)
+        await listings_coord.async_refresh()
+
+        res_coord = HostawayReservationsCoordinator(hass, entry, api_client)
+        await res_coord.async_refresh()
+
+        sensor = HostawayReservationStatusSensor(res_coord, listings_coord, 100, entry)
+        attrs = sensor.extra_state_attributes
+        assert attrs["guest_name"] == "Jane Smith"
+        assert attrs["door_code"] == "5678"
+        assert attrs["door_code_vendor"] == "yale"
+        assert attrs["door_code_instruction"] == "Side door"
+        assert attrs["num_guests"] == 2
+        assert attrs["confirmation_code"] == "XYZ789"
+        assert attrs["listing_id"] == 100
+        assert len(attrs["upcoming_reservations"]) == 1
+
+    async def test_upcoming_reservations_sorted(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """upcoming_reservations sorted by check_in."""
+        entry = _make_entry(selected=[100])
+        entry.add_to_hass(hass)
+        api_client = AsyncMock()
+        r1 = _make_reservation(1001, 100, check_in="2025-09-01", status="confirmed")
+        r2 = _make_reservation(1002, 100, check_in="2025-08-01", status="checked_in")
+        api_client.get_all_reservations = AsyncMock(return_value=[r1, r2])
+
+        listings_api = AsyncMock()
+        listings_api.get_all_listings = AsyncMock(return_value=[_make_listing(100)])
+        listings_coord = HostawayListingsCoordinator(hass, entry, listings_api)
+        await listings_coord.async_refresh()
+
+        res_coord = HostawayReservationsCoordinator(hass, entry, api_client)
+        await res_coord.async_refresh()
+
+        sensor = HostawayReservationStatusSensor(res_coord, listings_coord, 100, entry)
+        upcoming = sensor.extra_state_attributes["upcoming_reservations"]
+        assert upcoming[0]["check_in"] == "2025-08-01"
+        assert upcoming[1]["check_in"] == "2025-09-01"
+
+    async def test_available_with_coordinator_data(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Sensor available when coordinator has data."""
+        entry = _make_entry(selected=[100])
+        entry.add_to_hass(hass)
+        api_client = AsyncMock()
+        api_client.get_all_reservations = AsyncMock(return_value=[])
+
+        listings_api = AsyncMock()
+        listings_api.get_all_listings = AsyncMock(return_value=[_make_listing(100)])
+        listings_coord = HostawayListingsCoordinator(hass, entry, listings_api)
+        await listings_coord.async_refresh()
+
+        res_coord = HostawayReservationsCoordinator(hass, entry, api_client)
+        await res_coord.async_refresh()
+
+        sensor = HostawayReservationStatusSensor(res_coord, listings_coord, 100, entry)
+        assert sensor.available is True
+
+    async def test_unavailable_without_coordinator_data(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Sensor unavailable when coordinator data is None."""
+        entry = _make_entry(selected=[100])
+        entry.add_to_hass(hass)
+        api_client = AsyncMock()
+        api_client.get_all_reservations = AsyncMock(return_value=[])
+
+        listings_api = AsyncMock()
+        listings_api.get_all_listings = AsyncMock(return_value=[_make_listing(100)])
+        listings_coord = HostawayListingsCoordinator(hass, entry, listings_api)
+        await listings_coord.async_refresh()
+
+        res_coord = HostawayReservationsCoordinator(hass, entry, api_client)
+        await res_coord.async_refresh()
+
+        sensor = HostawayReservationStatusSensor(res_coord, listings_coord, 100, entry)
+        res_coord.data = None  # type: ignore[assignment]
+        assert sensor.available is False
+
+    async def test_unavailable_when_listing_removed(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Sensor unavailable when listing removed from listings."""
+        entry = _make_entry(selected=[100])
+        entry.add_to_hass(hass)
+        api_client = AsyncMock()
+        api_client.get_all_reservations = AsyncMock(return_value=[])
+
+        listings_api = AsyncMock()
+        listings_api.get_all_listings = AsyncMock(return_value=[_make_listing(100)])
+        listings_coord = HostawayListingsCoordinator(hass, entry, listings_api)
+        await listings_coord.async_refresh()
+
+        res_coord = HostawayReservationsCoordinator(hass, entry, api_client)
+        await res_coord.async_refresh()
+
+        sensor = HostawayReservationStatusSensor(res_coord, listings_coord, 100, entry)
+        assert sensor.available is True
+
+        # Remove listing from listings coordinator
+        listings_coord.data = {}
+        assert sensor.available is False
+
+    async def test_unique_id_format(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """unique_id: {uid}_{listing_id}_reservation_status."""
+        entry = _make_entry(selected=[100])
+        entry.add_to_hass(hass)
+        api_client = AsyncMock()
+        api_client.get_all_reservations = AsyncMock(return_value=[])
+
+        listings_api = AsyncMock()
+        listings_api.get_all_listings = AsyncMock(return_value=[_make_listing(100)])
+        listings_coord = HostawayListingsCoordinator(hass, entry, listings_api)
+        await listings_coord.async_refresh()
+
+        res_coord = HostawayReservationsCoordinator(hass, entry, api_client)
+        await res_coord.async_refresh()
+
+        sensor = HostawayReservationStatusSensor(res_coord, listings_coord, 100, entry)
+        expected = f"{entry.unique_id}_100_reservation_status"
+        assert sensor.unique_id == expected
 
     async def test_device_info_from_listings_coordinator(
         self,
@@ -446,8 +726,7 @@ class TestReservationSensor:
         entry = _make_entry(selected=[100])
         entry.add_to_hass(hass)
         api_client = AsyncMock()
-        reservation = _make_reservation(1001, 100)
-        api_client.get_all_reservations = AsyncMock(return_value=[reservation])
+        api_client.get_all_reservations = AsyncMock(return_value=[])
 
         listings_api = AsyncMock()
         listings_api.get_all_listings = AsyncMock(
@@ -459,10 +738,62 @@ class TestReservationSensor:
         res_coord = HostawayReservationsCoordinator(hass, entry, api_client)
         await res_coord.async_refresh()
 
-        sensor = HostawayReservationSensor(
-            res_coord, listings_coord, reservation, entry
-        )
+        sensor = HostawayReservationStatusSensor(res_coord, listings_coord, 100, entry)
         device_info = sensor.device_info
         assert device_info is not None
-        assert (DOMAIN, "test-client-id_100") in device_info["identifiers"]
+        assert (
+            DOMAIN,
+            "test-client-id_100",
+        ) in device_info["identifiers"]
         assert device_info["name"] == "Beach House"
+
+    async def test_status_change_updates_state(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Status change updates sensor state."""
+        entry = _make_entry(selected=[100])
+        entry.add_to_hass(hass)
+        api_client = AsyncMock()
+        reservation = _make_reservation(1001, 100, status="confirmed")
+        api_client.get_all_reservations = AsyncMock(return_value=[reservation])
+
+        listings_api = AsyncMock()
+        listings_api.get_all_listings = AsyncMock(return_value=[_make_listing(100)])
+        listings_coord = HostawayListingsCoordinator(hass, entry, listings_api)
+        await listings_coord.async_refresh()
+
+        res_coord = HostawayReservationsCoordinator(hass, entry, api_client)
+        await res_coord.async_refresh()
+
+        sensor = HostawayReservationStatusSensor(res_coord, listings_coord, 100, entry)
+        assert sensor.native_value == "awaiting_checkin"
+
+        # Update reservation status
+        updated = _make_reservation(1001, 100, status="checked_in")
+        api_client.get_all_reservations = AsyncMock(return_value=[updated])
+        await res_coord.async_refresh()
+        assert sensor.native_value == "checked_in"
+
+    async def test_device_class_is_enum(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Sensor device class is ENUM (FR-R07)."""
+        from homeassistant.components.sensor import SensorDeviceClass
+
+        entry = _make_entry(selected=[100])
+        entry.add_to_hass(hass)
+        api_client = AsyncMock()
+        api_client.get_all_reservations = AsyncMock(return_value=[])
+
+        listings_api = AsyncMock()
+        listings_api.get_all_listings = AsyncMock(return_value=[_make_listing(100)])
+        listings_coord = HostawayListingsCoordinator(hass, entry, listings_api)
+        await listings_coord.async_refresh()
+
+        res_coord = HostawayReservationsCoordinator(hass, entry, api_client)
+        await res_coord.async_refresh()
+
+        sensor = HostawayReservationStatusSensor(res_coord, listings_coord, 100, entry)
+        assert sensor.device_class == SensorDeviceClass.ENUM
