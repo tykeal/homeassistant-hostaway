@@ -15,6 +15,7 @@ from homeassistant.components.sensor import (
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.typing import StateType
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import slugify
 
 from custom_components.hostaway.api.models import (
     HostawayListing,
@@ -104,6 +105,12 @@ class HostawayListingSensor(HostawayEntity, SensorEntity):
         super().__init__(coordinator, listing_id, entry)
         self.entity_description = description
         self._attr_unique_id = f"{entry.unique_id}_{listing_id}_{description.key}"
+        # FR-007: entity_id convention sensor.hostaway_<listing>_<attr>
+        listing = coordinator.data.get(listing_id) if coordinator.data else None
+        if listing:
+            self._attr_suggested_object_id = (
+                f"hostaway_{slugify(listing.name)}_{description.key}"
+            )
 
     @property
     def native_value(self) -> StateType:
