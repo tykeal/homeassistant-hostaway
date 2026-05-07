@@ -32,6 +32,10 @@ from custom_components.hostaway.const import (
     DOMAIN,
     PLATFORMS,
 )
+from custom_components.hostaway.coordinator import (
+    HostawayListingsCoordinator,
+    HostawayReservationsCoordinator,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -42,8 +46,9 @@ async def async_setup_entry(
 ) -> bool:
     """Set up Hostaway from a config entry.
 
-    Creates the HTTP client, token manager, and API client.
-    Seeds persisted token if available and validates connectivity.
+    Creates the HTTP client, token manager, API client, and
+    coordinators. Seeds persisted token if available and validates
+    connectivity.
 
     Args:
         hass: Home Assistant instance.
@@ -92,10 +97,20 @@ async def async_setup_entry(
             f"Hostaway API error during setup: {exc}",
         ) from exc
 
+    # Create coordinators
+    listings_coordinator = HostawayListingsCoordinator(hass, entry, api_client)
+    reservations_coordinator = HostawayReservationsCoordinator(hass, entry, api_client)
+
+    # Perform initial data fetch
+    await listings_coordinator.async_config_entry_first_refresh()
+    await reservations_coordinator.async_config_entry_first_refresh()
+
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {
         "token_manager": token_manager,
         "api_client": api_client,
+        "listings_coordinator": listings_coordinator,
+        "reservations_coordinator": reservations_coordinator,
     }
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -121,6 +136,9 @@ async def async_unload_entry(
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
     if unload_ok and DOMAIN in hass.data:
-        hass.data[DOMAIN].pop(entry.entry_id, None)
+        data = hass.data[DOMAIN].pop(entry.entry_id, None)
+        if data:
+            await data["listings_coordinator"].async_shutdown()
+            await data["reservations_coordinator"].async_shutdown()
 
     return unload_ok

@@ -50,6 +50,16 @@ class TestAsyncSetupEntry:
     """Tests for async_setup_entry."""
 
     @patch(
+        "custom_components.hostaway.HostawayApiClient.get_all_reservations",
+        new_callable=AsyncMock,
+        return_value=[],
+    )
+    @patch(
+        "custom_components.hostaway.HostawayApiClient.get_all_listings",
+        new_callable=AsyncMock,
+        return_value=[],
+    )
+    @patch(
         "custom_components.hostaway.HostawayApiClient.test_connection",
         new_callable=AsyncMock,
         return_value=True,
@@ -57,6 +67,8 @@ class TestAsyncSetupEntry:
     async def test_setup_creates_runtime_data(
         self,
         mock_test: AsyncMock,
+        mock_listings: AsyncMock,
+        mock_reservations: AsyncMock,
         hass: HomeAssistant,
     ) -> None:
         """Setup creates token_manager, api_client in hass.data."""
@@ -72,7 +84,19 @@ class TestAsyncSetupEntry:
         data = hass.data[DOMAIN][entry.entry_id]
         assert "token_manager" in data
         assert "api_client" in data
+        assert "listings_coordinator" in data
+        assert "reservations_coordinator" in data
 
+    @patch(
+        "custom_components.hostaway.HostawayApiClient.get_all_reservations",
+        new_callable=AsyncMock,
+        return_value=[],
+    )
+    @patch(
+        "custom_components.hostaway.HostawayApiClient.get_all_listings",
+        new_callable=AsyncMock,
+        return_value=[],
+    )
     @patch(
         "custom_components.hostaway.HostawayApiClient.test_connection",
         new_callable=AsyncMock,
@@ -81,6 +105,8 @@ class TestAsyncSetupEntry:
     async def test_setup_loads_persisted_token(
         self,
         mock_test: AsyncMock,
+        mock_listings: AsyncMock,
+        mock_reservations: AsyncMock,
         hass: HomeAssistant,
     ) -> None:
         """Setup seeds token manager from cached_token in entry data."""
@@ -156,6 +182,16 @@ class TestAsyncUnloadEntry:
     """Tests for async_unload_entry."""
 
     @patch(
+        "custom_components.hostaway.HostawayApiClient.get_all_reservations",
+        new_callable=AsyncMock,
+        return_value=[],
+    )
+    @patch(
+        "custom_components.hostaway.HostawayApiClient.get_all_listings",
+        new_callable=AsyncMock,
+        return_value=[],
+    )
+    @patch(
         "custom_components.hostaway.HostawayApiClient.test_connection",
         new_callable=AsyncMock,
         return_value=True,
@@ -163,6 +199,8 @@ class TestAsyncUnloadEntry:
     async def test_unload_removes_data(
         self,
         mock_test: AsyncMock,
+        mock_listings: AsyncMock,
+        mock_reservations: AsyncMock,
         hass: HomeAssistant,
     ) -> None:
         """Unload removes entry data from hass.data."""
