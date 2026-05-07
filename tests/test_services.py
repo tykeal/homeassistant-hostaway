@@ -232,6 +232,22 @@ class TestSetDoorCode:
                 blocking=True,
             )
 
+    async def test_validates_door_code_whitespace_only(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Rejects whitespace-only door_code at schema level."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        with pytest.raises(vol.MultipleInvalid, match="non-empty"):
+            await hass.services.async_call(
+                DOMAIN,
+                "set_door_code",
+                {"reservation_id": 99001, "door_code": "   "},
+                blocking=True,
+            )
+
     @patch(
         "custom_components.hostaway.services.HostawayApiClient.update_reservation",
         new_callable=AsyncMock,

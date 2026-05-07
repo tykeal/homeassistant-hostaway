@@ -53,10 +53,30 @@ def _positive_int(value: Any) -> int:
     return result
 
 
+def _non_empty_string(value: Any) -> str:
+    """Validate a non-empty string, stripping whitespace.
+
+    Args:
+        value: The value to validate.
+
+    Returns:
+        The stripped string.
+
+    Raises:
+        vol.Invalid: If the value is not a non-empty string.
+    """
+    if not isinstance(value, str):
+        raise vol.Invalid("expected a string")
+    stripped = value.strip()
+    if not stripped:
+        raise vol.Invalid("must be a non-empty string")
+    return stripped
+
+
 SERVICE_SET_DOOR_CODE_SCHEMA = vol.Schema(
     {
         vol.Required("reservation_id"): _positive_int,
-        vol.Required("door_code"): vol.All(str, vol.Length(min=1)),
+        vol.Required("door_code"): _non_empty_string,
         vol.Optional("door_code_vendor"): vol.Maybe(str),
         vol.Optional("door_code_instruction"): vol.Maybe(str),
         vol.Optional("config_entry_id"): str,
@@ -133,7 +153,7 @@ async def async_handle_set_door_code(
         HomeAssistantError: On API failure.
     """
     reservation_id: int = call.data["reservation_id"]
-    door_code: str = call.data["door_code"].strip()
+    door_code: str = call.data["door_code"]
 
     payload: dict[str, Any] = {"doorCode": door_code}
     if call.data.get("door_code_vendor") is not None:
