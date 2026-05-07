@@ -15,7 +15,7 @@ from custom_components.hostaway.api.models import (
     HostawayListing,
     HostawayReservation,
 )
-from tests.conftest import make_listing_response, make_reservation_response
+from tests.helpers import make_listing_response, make_reservation_response
 
 
 def _make_token(**overrides: Any) -> AccessToken:

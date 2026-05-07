@@ -130,10 +130,10 @@ class AccessToken:
 
     @property
     def seconds_until_ready(self) -> float:
-        """Seconds remaining until the 1s post-generation delay passes.
+        """Seconds remaining until the post-generation delay passes.
 
-        Hostaway requires a minimum delay after token generation
-        before the token can be used.
+        Hostaway requires a minimum delay (TOKEN_READY_DELAY) after
+        token generation before the token can be used.
 
         Returns:
             Seconds to wait (0.0 if already ready).
@@ -256,7 +256,8 @@ class HostawayListing:
         raw_address = data.get("address")
         address: str | None = None
         if isinstance(raw_address, dict):
-            address = raw_address.get("full")
+            full = raw_address.get("full")
+            address = full if isinstance(full, str) else None
         elif isinstance(raw_address, str):
             address = raw_address
 

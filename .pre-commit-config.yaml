@@ -59,6 +59,7 @@ repos:
         args: ["--fix=lf"]
       - id: name-tests-test
         args: ["--pytest-test-first"]
+        exclude: "^tests/(conftest|helpers)\\.py$"
       # Disabled; TOX lint will otherwise fail
       - id: no-commit-to-branch
         args:
