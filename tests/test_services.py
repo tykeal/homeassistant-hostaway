@@ -275,14 +275,8 @@ class TestSetDoorCode:
                 blocking=True,
             )
 
-    @patch(
-        "custom_components.hostaway.services.HostawayApiClient.update_reservation",
-        new_callable=AsyncMock,
-        return_value={"id": 99001, "doorCode": "1234"},
-    )
     async def test_multi_entry_selects_correct_client(
         self,
-        mock_update: AsyncMock,
         hass: HomeAssistant,
     ) -> None:
         """config_entry_id selects correct entry's API client."""
@@ -309,6 +303,13 @@ class TestSetDoorCode:
         await _setup_entry(hass, entry1)
         await _setup_entry(hass, entry2)
 
+        # Spy on the specific api_client for entry2
+        entry2_client = hass.data[DOMAIN][entry2.entry_id]["api_client"]
+        mock_update = AsyncMock(
+            return_value={"id": 99001, "doorCode": "1234"},
+        )
+        entry2_client.update_reservation = mock_update
+
         await hass.services.async_call(
             DOMAIN,
             "set_door_code",
@@ -320,7 +321,10 @@ class TestSetDoorCode:
             blocking=True,
         )
 
-        mock_update.assert_called_once()
+        mock_update.assert_called_once_with(
+            99001,
+            {"doorCode": "1234"},
+        )
 
 
 class TestGetReservations:
@@ -514,3 +518,35 @@ class TestGetReservations:
                 {"listing_id": 12345},
                 blocking=True,
             )
+
+    @patch(
+        "custom_components.hostaway.services.HostawayApiClient.get_all_reservations",
+        new_callable=AsyncMock,
+        side_effect=HostawayResponseError("Resource not found: /v1/reservations"),
+    )
+    async def test_404_listing_fires_empty_event(
+        self,
+        mock_get: AsyncMock,
+        hass: HomeAssistant,
+    ) -> None:
+        """404 listing fires event with empty reservations list."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        events: list[Mapping[str, Any]] = []
+        hass.bus.async_listen(
+            "hostaway_reservations_retrieved",
+            lambda evt: events.append(evt.data),
+        )
+
+        await hass.services.async_call(
+            DOMAIN,
+            "get_reservations",
+            {"listing_id": 99999},
+            blocking=True,
+        )
+        await hass.async_block_till_done()
+
+        assert len(events) == 1
+        assert events[0]["listing_id"] == 99999
+        assert events[0]["reservations"] == []

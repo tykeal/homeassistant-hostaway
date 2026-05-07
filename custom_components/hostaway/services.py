@@ -7,6 +7,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import voluptuous as vol
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
@@ -18,6 +19,23 @@ from custom_components.hostaway.api.exceptions import (
 from custom_components.hostaway.const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
+
+SERVICE_SET_DOOR_CODE_SCHEMA = vol.Schema(
+    {
+        vol.Required("reservation_id"): vol.Coerce(int),
+        vol.Required("door_code"): str,
+        vol.Optional("door_code_vendor"): str,
+        vol.Optional("door_code_instruction"): str,
+        vol.Optional("config_entry_id"): str,
+    }
+)
+
+SERVICE_GET_RESERVATIONS_SCHEMA = vol.Schema(
+    {
+        vol.Required("listing_id"): vol.Coerce(int),
+        vol.Optional("config_entry_id"): str,
+    }
+)
 
 
 def _resolve_entry_data(
@@ -146,6 +164,17 @@ async def async_handle_get_reservations(
         reservations = await api_client.get_all_reservations(
             listing_id,
         )
+    except HostawayResponseError as exc:
+        if "not found" in str(exc).lower():
+            _LOGGER.debug(
+                "Listing %d not found, returning empty list",
+                listing_id,
+            )
+            reservations = []
+        else:
+            raise HomeAssistantError(
+                f"Failed to fetch reservations: {exc}",
+            ) from exc
     except HostawayApiError as exc:
         raise HomeAssistantError(
             f"Failed to fetch reservations: {exc}",
@@ -196,9 +225,11 @@ def async_setup_services(hass: HomeAssistant) -> None:
         DOMAIN,
         "set_door_code",
         _handle_set_door_code,
+        schema=SERVICE_SET_DOOR_CODE_SCHEMA,
     )
     hass.services.async_register(
         DOMAIN,
         "get_reservations",
         _handle_get_reservations,
+        schema=SERVICE_GET_RESERVATIONS_SCHEMA,
     )
