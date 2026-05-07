@@ -180,7 +180,7 @@ rate limits and errors transparently
 > **NOTE: Write these tests FIRST, ensure they FAIL before
 > implementation**
 
-- [ ] T019 [P] [US2] Write token acquisition unit tests in
+- [x] T019 [P] [US2] Write token acquisition unit tests in
   `tests/api/test_auth.py`: successful token acquisition
   via `get_token()`, 1-second post-generation delay
   enforcement (FR-003), cached token reuse on second call,
@@ -188,13 +188,13 @@ rate limits and errors transparently
   `HostawayConnectionError` on network failure/timeout,
   `HostawayResponseError` on malformed token response —
   all using `respx` to mock HTTP
-- [ ] T020 [P] [US2] Write token refresh and persistence
+- [x] T020 [P] [US2] Write token refresh and persistence
   tests in `tests/api/test_auth.py`: proactive refresh
   when token nears expiry, `invalidate()` clears cached
   token, concurrent `get_token()` calls share single HTTP
   request via asyncio.Lock, refreshed token persisted to
   config entry storage (FR-002)
-- [ ] T021 [P] [US2] Write HTTP client core tests in
+- [x] T021 [P] [US2] Write HTTP client core tests in
   `tests/api/test_client.py`: successful GET/PUT requests
   with auth header, 429 response triggers exponential
   backoff retry (FR-006), max 3 retries then
@@ -202,12 +202,12 @@ rate limits and errors transparently
   and single retry, 404 raises `HostawayResponseError`,
   5xx triggers retry with backoff, network error raises
   `HostawayConnectionError`
-- [ ] T022 [P] [US2] Write pagination tests in
+- [x] T022 [P] [US2] Write pagination tests in
   `tests/api/test_client.py`: offset-based pagination for
   listings (FR-012), cursor-based pagination with afterId
   for reservations (FR-012), handles empty result set,
   handles single page result
-- [ ] T023 [P] [US1] Write `test_connection` tests in
+- [x] T023 [P] [US1] Write `test_connection` tests in
   `tests/api/test_client.py`: successful connection test
   validates credentials, auth failure propagates
   `HostawayAuthError`, connection failure propagates
@@ -215,7 +215,7 @@ rate limits and errors transparently
 
 ### Implementation for API Client
 
-- [ ] T024 [US2] Implement `HostawayTokenManager` in
+- [x] T024 [US2] Implement `HostawayTokenManager` in
   `custom_components/hostaway/api/auth.py`: constructor
   accepting `client_id`, `client_secret`, `http_client`
   (`httpx.AsyncClient`); `get_token()` with POST to token
@@ -226,7 +226,7 @@ rate limits and errors transparently
   method; `seed_token()` for startup loading; maps HTTP
   401→`HostawayAuthError`, network→`HostawayConnectionError`,
   malformed→`HostawayResponseError`
-- [ ] T025 [US2] Implement `HostawayApiClient` in
+- [x] T025 [US2] Implement `HostawayApiClient` in
   `custom_components/hostaway/api/client.py`: constructor
   accepting `token_manager`, `http_client`, optional
   `base_url`; `_request()` helper adding Bearer auth
@@ -237,7 +237,7 @@ rate limits and errors transparently
   `get_all_listings()`, `get_all_reservations(listing_id)`;
   `update_reservation(reservation_id, data)` for PUT;
   `test_connection()` method
-- [ ] T026 Update public exports in
+- [x] T026 Update public exports in
   `custom_components/hostaway/api/__init__.py` to include
   `HostawayTokenManager` and `HostawayApiClient`
 
