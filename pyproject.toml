@@ -1,0 +1,77 @@
+# SPDX-FileCopyrightText: 2026 Andrew Grimberg <tykeal@bardicgrove.org>
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hostaway"
+dynamic = ["version"]
+description = "Hostaway integration for Home Assistant"
+requires-python = ">=3.14.2"
+license = { text = "Apache-2.0" }
+
+dependencies = [
+    "httpx==0.28.1",
+]
+
+[project.optional-dependencies]
+test = [
+    "homeassistant>=2026.4.0",
+    "httpx==0.28.1",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.25",
+    "pytest-cov>=6.0",
+    "pytest-homeassistant-custom-component>=0.13.0",
+    "respx>=0.22",
+]
+
+[dependency-groups]
+dev = [
+    "homeassistant>=2026.4.0",
+    "httpx==0.28.1",
+    "interrogate>=1.7",
+    "mypy>=1.20",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.25",
+    "pytest-cov>=6.0",
+    "pytest-homeassistant-custom-component>=0.13.0",
+    "respx>=0.22",
+    "ruff>=0.15",
+]
+
+[tool.hatch.version]
+source = "vcs"
+tag-pattern = "v(?P<version>.*)"
+
+[tool.hatch.build.targets.wheel]
+packages = ["custom_components"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.14"
+check_untyped_defs = true
+disallow_untyped_defs = true
+warn_return_any = true
+warn_unused_configs = true
+explicit_package_bases = true
+mypy_path = "."
+
+[[tool.mypy.overrides]]
+module = "pytest_homeassistant_custom_component.*"
+ignore_missing_imports = true
+
+[tool.ruff]
+target-version = "py314"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B", "SIM", "RUF"]
+
+[tool.interrogate]
+fail-under = 100
+verbose = 2
