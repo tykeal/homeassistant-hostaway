@@ -167,13 +167,16 @@ class HostawayApiClient:
             HostawayConnectionError: On network failure.
             HostawayRateLimitError: On rate limit exhaustion.
         """
-        params: dict[str, int] = {"limit": limit}
+        params: dict[str, int] = {
+            "listingId": listing_id,
+            "limit": limit,
+        }
         if after_id is not None:
             params["afterId"] = after_id
 
         response = await self._request(
             "GET",
-            f"/v1/listings/{listing_id}/reservations",
+            "/v1/reservations",
             params=params,
         )
         data = self._parse_response(response)

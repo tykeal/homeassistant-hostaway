@@ -239,7 +239,7 @@ class TestPagination:
             for i in range(DEFAULT_PAGE_LIMIT + 1, DEFAULT_PAGE_LIMIT + 6)
         ]
 
-        route = respx.get(f"{FAKE_BASE_URL}/v1/listings/100/reservations")
+        route = respx.get(f"{FAKE_BASE_URL}/v1/reservations")
         route.side_effect = [
             httpx.Response(200, json={"status": "success", "result": page1}),
             httpx.Response(200, json={"status": "success", "result": page2}),

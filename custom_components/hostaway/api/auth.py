@@ -171,9 +171,23 @@ class HostawayTokenManager:
                 "Token response is not valid JSON",
             ) from exc
 
+        if not isinstance(data, dict):
+            raise HostawayResponseError(
+                "Token response must be a JSON object",
+            )
+
         # Hostaway wraps token in {"status":"success","result":{...}}
-        if isinstance(data, dict) and "result" in data:
-            data = data["result"]
+        if "result" in data:
+            if data.get("status") != "success":
+                raise HostawayResponseError(
+                    f"Token request failed: {data.get('status')}",
+                )
+            result = data["result"]
+            if not isinstance(result, dict):
+                raise HostawayResponseError(
+                    "Token result must be a JSON object",
+                )
+            data = result
 
         try:
             token = AccessToken(
@@ -182,7 +196,7 @@ class HostawayTokenManager:
                 expires_in=data["expires_in"],
                 issued_at=now,
             )
-        except (KeyError, ValueError) as exc:
+        except (KeyError, TypeError, ValueError) as exc:
             raise HostawayResponseError(
                 f"Malformed token response: {exc}",
             ) from exc
