@@ -56,9 +56,9 @@ def _positive_int(value: Any) -> int:
 SERVICE_SET_DOOR_CODE_SCHEMA = vol.Schema(
     {
         vol.Required("reservation_id"): _positive_int,
-        vol.Required("door_code"): str,
-        vol.Optional("door_code_vendor"): str,
-        vol.Optional("door_code_instruction"): str,
+        vol.Required("door_code"): vol.All(str, vol.Length(min=1)),
+        vol.Optional("door_code_vendor"): vol.Maybe(str),
+        vol.Optional("door_code_instruction"): vol.Maybe(str),
         vol.Optional("config_entry_id"): str,
     }
 )
@@ -133,13 +133,7 @@ async def async_handle_set_door_code(
         HomeAssistantError: On API failure.
     """
     reservation_id: int = call.data["reservation_id"]
-    door_code: str = call.data["door_code"]
-
-    if not door_code or not door_code.strip():
-        raise ServiceValidationError(
-            "door_code must be a non-empty string",
-        )
-    door_code = door_code.strip()
+    door_code: str = call.data["door_code"].strip()
 
     payload: dict[str, Any] = {"doorCode": door_code}
     if call.data.get("door_code_vendor") is not None:

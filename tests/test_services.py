@@ -220,11 +220,11 @@ class TestSetDoorCode:
         self,
         hass: HomeAssistant,
     ) -> None:
-        """Raises ServiceValidationError for empty door_code."""
+        """Rejects empty door_code at schema level."""
         entry = _make_entry()
         await _setup_entry(hass, entry)
 
-        with pytest.raises(ServiceValidationError, match="non-empty"):
+        with pytest.raises(vol.MultipleInvalid):
             await hass.services.async_call(
                 DOMAIN,
                 "set_door_code",
@@ -326,6 +326,48 @@ class TestSetDoorCode:
             99001,
             {"doorCode": "1234"},
         )
+
+    async def test_multi_entry_no_id_raises_error(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Missing config_entry_id with multiple entries raises."""
+        entry1 = MockConfigEntry(
+            domain=DOMAIN,
+            title="Hostaway (client-1)",
+            data={
+                CONF_CLIENT_ID: "test-client-id-1",
+                CONF_CLIENT_SECRET: "test-client-secret-1",
+                CONF_SELECTED_LISTINGS: [12345],
+            },
+            unique_id="client-1",
+        )
+        entry2 = MockConfigEntry(
+            domain=DOMAIN,
+            title="Hostaway (client-2)",
+            data={
+                CONF_CLIENT_ID: "test-client-id-2",
+                CONF_CLIENT_SECRET: "test-client-secret-2",
+                CONF_SELECTED_LISTINGS: [67890],
+            },
+            unique_id="client-2",
+        )
+        await _setup_entry(hass, entry1)
+        await _setup_entry(hass, entry2)
+
+        with pytest.raises(
+            ServiceValidationError,
+            match="config_entry_id required",
+        ):
+            await hass.services.async_call(
+                DOMAIN,
+                "set_door_code",
+                {
+                    "reservation_id": 99001,
+                    "door_code": "1234",
+                },
+                blocking=True,
+            )
 
 
 class TestGetReservations:
