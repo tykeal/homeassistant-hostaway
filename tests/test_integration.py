@@ -79,6 +79,16 @@ def _make_entry() -> MockConfigEntry:
     )
 
 
+def _reservations_both(lid: int) -> list:
+    """Return reservations for both listings."""
+    return [RESERVATION_1] if lid == 101 else [RESERVATION_2]
+
+
+def _reservations_single(lid: int) -> list:
+    """Return reservations only for listing 101."""
+    return [RESERVATION_1] if lid == 101 else []
+
+
 class TestFullLifecycle:
     """Integration tests for the full entry lifecycle."""
 
@@ -109,9 +119,7 @@ class TestFullLifecycle:
         """Setup creates coordinators with fetched data."""
         mock_test.return_value = True
         mock_listings.return_value = [LISTING_1, LISTING_2]
-        mock_reservations.side_effect = lambda lid: (
-            [RESERVATION_1] if lid == 101 else [RESERVATION_2]
-        )
+        mock_reservations.side_effect = _reservations_both
 
         entry = _make_entry()
         entry.add_to_hass(hass)
@@ -154,9 +162,7 @@ class TestFullLifecycle:
         """Sensor entities are created for each listing attribute."""
         mock_test.return_value = True
         mock_listings.return_value = [LISTING_1, LISTING_2]
-        mock_reservations.side_effect = lambda lid: (
-            [RESERVATION_1] if lid == 101 else [RESERVATION_2]
-        )
+        mock_reservations.side_effect = _reservations_both
 
         entry = _make_entry()
         entry.add_to_hass(hass)
@@ -254,9 +260,7 @@ class TestFullLifecycle:
         """Unique IDs remain stable after unload and reload."""
         mock_test.return_value = True
         mock_listings.return_value = [LISTING_1]
-        mock_reservations.side_effect = lambda lid: (
-            [RESERVATION_1] if lid == 101 else []
-        )
+        mock_reservations.side_effect = _reservations_single
 
         entry = _make_entry()
         entry.add_to_hass(hass)
@@ -315,9 +319,7 @@ class TestFullLifecycle:
         """set_door_code service calls API with correct payload."""
         mock_test.return_value = True
         mock_listings.return_value = [LISTING_1]
-        mock_reservations.side_effect = lambda lid: (
-            [RESERVATION_1] if lid == 101 else []
-        )
+        mock_reservations.side_effect = _reservations_single
         mock_update.return_value = {
             "id": 5001,
             "doorCode": "9999",
