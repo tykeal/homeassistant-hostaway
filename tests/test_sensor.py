@@ -341,19 +341,19 @@ class TestSelectReservation:
         assert result is not None
         assert result.id == 2
 
-    def test_checked_out_wins_over_canceled(self) -> None:
-        """checked_out has higher priority than canceled."""
-        canceled = _make_reservation(1, status="cancelled")
+    def test_checked_out_wins_over_cancelled(self) -> None:
+        """checked_out has higher priority than cancelled."""
+        cancelled = _make_reservation(1, status="cancelled")
         checked_out = _make_reservation(2, status="checked_out")
-        result = _select_reservation([canceled, checked_out])
+        result = _select_reservation([cancelled, checked_out])
         assert result is not None
         assert result.id == 2
 
     def test_unknown_status_sorts_last(self) -> None:
         """Unknown status sorts after all known statuses."""
         unknown = _make_reservation(1, status="pending")
-        canceled = _make_reservation(2, status="cancelled")
-        result = _select_reservation([unknown, canceled])
+        cancelled = _make_reservation(2, status="cancelled")
+        result = _select_reservation([unknown, cancelled])
         assert result is not None
         assert result.id == 2
 
@@ -387,8 +387,8 @@ class TestDeriveState:
         res = _make_reservation(status="checked_out")
         assert _derive_state(res) == "checked_out"
 
-    def test_canceled_passes_through(self) -> None:
-        """canceled passes through unchanged."""
+    def test_cancelled_passes_through(self) -> None:
+        """cancelled passes through unchanged."""
         res = _make_reservation(status="cancelled")
         assert _derive_state(res) == "cancelled"
 
