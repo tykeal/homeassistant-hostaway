@@ -65,6 +65,14 @@ mypy_path = "."
 module = "pytest_homeassistant_custom_component.*"
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = "homeassistant.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "voluptuous.*"
+ignore_missing_imports = true
+
 [tool.ruff]
 target-version = "py314"
 line-length = 88

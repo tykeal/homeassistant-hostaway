@@ -1,0 +1,49 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "Connect to Hostaway",
+                "description": "Enter your Hostaway API credentials from the developer dashboard.",
+                "data": {
+                    "client_id": "Client ID",
+                    "client_secret": "Client Secret"
+                }
+            },
+            "listings": {
+                "title": "Select Listings",
+                "description": "Choose which Hostaway listings to track in Home Assistant.",
+                "data": {
+                    "selected_listings": "Listings to track"
+                }
+            }
+        },
+        "error": {
+            "invalid_auth": "Invalid credentials. Please check your client ID and secret.",
+            "cannot_connect": "Unable to connect to the Hostaway API. Please check your network.",
+            "unknown": "An unexpected error occurred. Please try again.",
+            "no_listings_selected": "At least one listing must be selected."
+        },
+        "abort": {
+            "already_configured": "This Hostaway account is already configured."
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Polling Configuration",
+                "description": "Configure how often the integration polls the Hostaway API.",
+                "data": {
+                    "scan_interval": "Listing scan interval (minutes)",
+                    "reservation_scan_interval": "Reservation scan interval (minutes)"
+                },
+                "data_description": {
+                    "scan_interval": "How often to poll for listing updates. Minimum 1 minute.",
+                    "reservation_scan_interval": "How often to poll for reservation updates. Minimum 1 minute."
+                }
+            }
+        },
+        "error": {
+            "invalid_scan_interval": "Scan interval must be at least 1 minute."
+        }
+    }
+}
