@@ -163,13 +163,26 @@ class TestFullLifecycle:
         await hass.async_block_till_done()
 
         # 5 listing sensors per listing + 1 reservation per listing
-        states = hass.states.async_all("sensor")
-        entity_ids = [s.entity_id for s in states]
-        # Listing sensors exist for both listings
-        assert len(entity_ids) >= 10  # 5 sensors x 2 listings
-        # Verify reservation sensors exist specifically
-        reservation_ids = [eid for eid in entity_ids if "reservation" in eid]
-        assert len(reservation_ids) >= 2
+        # Verify specific listing sensors for each listing
+        registry = er.async_get(hass)
+        for lid in (101, 202):
+            for key in ["status", "base_price", "bedrooms"]:
+                uid = f"{entry.unique_id}_{lid}_{key}"
+                eid = registry.async_get_entity_id(
+                    "sensor",
+                    DOMAIN,
+                    uid,
+                )
+                assert eid is not None, f"Missing {uid}"
+        # Verify reservation sensors exist
+        for rid in (5001, 5002):
+            uid = f"{entry.unique_id}_{rid}"
+            eid = registry.async_get_entity_id(
+                "sensor",
+                DOMAIN,
+                uid,
+            )
+            assert eid is not None, f"Missing res {uid}"
 
     @patch(
         "custom_components.hostaway.HostawayApiClient.update_reservation",

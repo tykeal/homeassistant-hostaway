@@ -146,8 +146,10 @@ automation:
           door_code_instruction: "Use the keypad"
 ```
 
-Reservation entity IDs follow the pattern:
-`sensor.<listing_name>_reservation_<id>`
+Reservation entity IDs follow the pattern
+`sensor.<listing_device_name>_reservation_<id>`, where
+the listing device name is the slugified listing name
+(e.g., `sensor.beach_villa_reservation_1234`).
 
 ### Notify on new reservations
 

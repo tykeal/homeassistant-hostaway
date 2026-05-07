@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Edge case tests for the Hostaway integration.
 
-Tests token expiry during coordinator refresh, listing
-deletion, pagination with >100 reservations, and concurrent
+Tests token invalidation and coordinator resilience,
+listing deletion, large reservation sets, and concurrent
 service calls without deadlock.
 """
 
