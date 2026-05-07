@@ -43,7 +43,7 @@
             }
         },
         "error": {
-            "invalid_scan_interval": "Scan interval must be at least 1 minute."
+            "invalid_scan_interval": "Scan intervals must be at least 1 minute each."
         }
     }
 }

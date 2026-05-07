@@ -108,9 +108,9 @@ class TestAsyncSetupEntry:
         assert entry.state is ConfigEntryState.LOADED
         data = hass.data[DOMAIN][entry.entry_id]
         tm = data["token_manager"]
-        # Token was seeded (cached_token is set internally)
-        assert tm._cached_token is not None
-        assert tm._cached_token.access_token == "persisted-token"
+        # Token was seeded - get_token returns it without network call
+        token = await tm.get_token()
+        assert token == "persisted-token"
 
     @patch(
         "custom_components.hostaway.HostawayApiClient.test_connection",

@@ -296,7 +296,7 @@ class TestStepListings:
         assert result["type"] is FlowResultType.CREATE_ENTRY
         assert result["data"][CONF_CLIENT_ID] == "test-client-id"
         assert result["data"][CONF_CLIENT_SECRET] == "test-client-secret"
-        assert result["data"][CONF_SELECTED_LISTINGS] == ["101", "102"]
+        assert result["data"][CONF_SELECTED_LISTINGS] == [101, 102]
 
     @patch(
         "custom_components.hostaway.config_flow._validate_credentials",

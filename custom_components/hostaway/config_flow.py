@@ -204,7 +204,7 @@ class HostawayConfigFlow(ConfigFlow, domain=DOMAIN):
                     data={
                         CONF_CLIENT_ID: self._client_id,
                         CONF_CLIENT_SECRET: self._client_secret,
-                        CONF_SELECTED_LISTINGS: selected,
+                        CONF_SELECTED_LISTINGS: [int(lid) for lid in selected],
                     },
                 )
 
@@ -218,10 +218,18 @@ class HostawayConfigFlow(ConfigFlow, domain=DOMAIN):
                 )
             except Exception:
                 _LOGGER.exception("Failed to fetch listings")
-                self._listings = []
+                errors["base"] = "cannot_connect"
+                return self.async_show_form(
+                    step_id="listings",
+                    data_schema=vol.Schema({}),
+                    errors=errors,
+                )
+
+        # Filter to active listings only
+        active_listings = [lst for lst in self._listings if lst.status == "active"]
 
         options: list[SelectOptionDict] = []
-        for listing in self._listings:
+        for listing in active_listings:
             label = f"{listing.name} (ID: {listing.id})"
             options.append(
                 SelectOptionDict(value=str(listing.id), label=label),
