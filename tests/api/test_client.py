@@ -10,6 +10,7 @@ import httpx
 import pytest
 import respx
 
+from custom_components.hostaway.api.auth import HostawayTokenManager
 from custom_components.hostaway.api.client import HostawayApiClient
 from custom_components.hostaway.api.const import DEFAULT_PAGE_LIMIT
 from custom_components.hostaway.api.exceptions import (
@@ -26,9 +27,9 @@ from tests.helpers import (
 )
 
 
-def _make_mock_token_manager() -> AsyncMock:
+def _make_mock_token_manager() -> Mock:
     """Create a mock token manager that returns FAKE_TOKEN."""
-    tm = AsyncMock()
+    tm = Mock(spec=HostawayTokenManager)
     tm.get_token = AsyncMock(return_value=FAKE_TOKEN)
     tm.invalidate = Mock()
     return tm

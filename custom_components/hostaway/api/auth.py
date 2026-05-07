@@ -101,12 +101,18 @@ class HostawayTokenManager:
             HostawayResponseError: If the response format is
                 unexpected.
         """
-        if self._is_cache_valid():
-            return self._cached_token.access_token  # type: ignore[union-attr]
+        cached = self._cached_token
+        if cached is not None and not cached.is_expired(
+            buffer_seconds=_REFRESH_BUFFER,
+        ):
+            return cached.access_token
 
         async with self._lock:
-            if self._is_cache_valid():
-                return self._cached_token.access_token  # type: ignore[union-attr]
+            cached = self._cached_token
+            if cached is not None and not cached.is_expired(
+                buffer_seconds=_REFRESH_BUFFER,
+            ):
+                return cached.access_token
 
             token = await self._request_token()
             # Enforce post-generation delay
@@ -115,19 +121,6 @@ class HostawayTokenManager:
                 await asyncio.sleep(delay)
             self._cached_token = token
             return token.access_token
-
-    def _is_cache_valid(self) -> bool:
-        """Check if the in-memory cached token is still valid.
-
-        Returns:
-            True if cached token exists and is not expired
-            (accounting for refresh buffer).
-        """
-        if self._cached_token is None:
-            return False
-        return not self._cached_token.is_expired(
-            buffer_seconds=_REFRESH_BUFFER,
-        )
 
     async def _request_token(self) -> AccessToken:
         """Request a new token from the Hostaway token endpoint.

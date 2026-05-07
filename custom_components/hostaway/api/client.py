@@ -80,15 +80,11 @@ class HostawayApiClient:
             HostawayRateLimitError: If rate limited.
             HostawayResponseError: If the API returns unexpected data.
         """
-        response = await self._request(
+        await self._request(
             "GET",
             "/v1/listings",
             params={"limit": 1},
         )
-        if not response.is_success:
-            raise HostawayResponseError(
-                f"Connection test failed: status {response.status_code}",
-            )
         return True
 
     async def get_listings_page(
