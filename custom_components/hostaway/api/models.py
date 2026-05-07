@@ -205,6 +205,24 @@ class HostawayListing:
         if raw_is_listed is not None:
             is_listed = bool(raw_is_listed)
 
+        # Validate optional numeric fields when present
+        bedrooms = data.get("bedroomsNumber")
+        if bedrooms is not None and bedrooms < 0:
+            msg = "bedrooms must be non-negative"
+            raise ValueError(msg)
+        bathrooms = data.get("bathroomsNumber")
+        if bathrooms is not None and bathrooms < 0:
+            msg = "bathrooms must be non-negative"
+            raise ValueError(msg)
+        max_guests = data.get("personCapacity")
+        if max_guests is not None and max_guests <= 0:
+            msg = "max_guests must be positive"
+            raise ValueError(msg)
+        base_price = data.get("price")
+        if base_price is not None and base_price < 0:
+            msg = "base_price must be non-negative"
+            raise ValueError(msg)
+
         return cls(
             id=data["id"],
             name=data["name"],
@@ -214,10 +232,10 @@ class HostawayListing:
             city=data.get("city"),
             country_code=data.get("countryCode"),
             property_type=data.get("propertyType"),
-            bedrooms=data.get("bedroomsNumber"),
-            bathrooms=data.get("bathroomsNumber"),
-            max_guests=data.get("personCapacity"),
-            base_price=data.get("price"),
+            bedrooms=bedrooms,
+            bathrooms=bathrooms,
+            max_guests=max_guests,
+            base_price=base_price,
             currency=data.get("currencyCode"),
             check_in_time_start=data.get("checkInTimeStart"),
             check_in_time_end=data.get("checkInTimeEnd"),
@@ -300,6 +318,20 @@ class HostawayReservation:
             msg = "guest_name must be non-empty"
             raise ValueError(msg)
 
+        # Validate optional numeric fields when present
+        num_guests = data.get("numberOfGuests")
+        if num_guests is not None and num_guests <= 0:
+            msg = "num_guests must be positive"
+            raise ValueError(msg)
+        total_price = data.get("totalPrice")
+        if total_price is not None and total_price < 0:
+            msg = "total_price must be non-negative"
+            raise ValueError(msg)
+        nights = data.get("nights")
+        if nights is not None and nights <= 0:
+            msg = "nights must be positive"
+            raise ValueError(msg)
+
         return cls(
             id=data["id"],
             listing_id=data["listingMapId"],
@@ -308,12 +340,12 @@ class HostawayReservation:
             check_out=data["departureDate"],
             status=data["status"],
             channel=data.get("channelName"),
-            num_guests=data.get("numberOfGuests"),
-            total_price=data.get("totalPrice"),
+            num_guests=num_guests,
+            total_price=total_price,
             currency=data.get("currency"),
             door_code=data.get("doorCode"),
             door_code_vendor=data.get("doorCodeVendor"),
             door_code_instruction=data.get("doorCodeInstruction"),
             confirmation_code=data.get("confirmationCode"),
-            nights=data.get("nights"),
+            nights=nights,
         )

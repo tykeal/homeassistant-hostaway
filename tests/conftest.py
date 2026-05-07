@@ -4,7 +4,12 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
 from typing import Any
+
+import httpx
+import pytest
+import respx
 
 # Common test constants
 FAKE_CLIENT_ID = "test-client-id-12345"
@@ -96,3 +101,14 @@ def make_reservation_response(**overrides: Any) -> dict[str, Any]:
     }
     defaults.update(overrides)
     return defaults
+
+
+@pytest.fixture
+async def mock_httpx_client() -> AsyncGenerator[httpx.AsyncClient]:
+    """Provide an httpx.AsyncClient with respx mocking enabled.
+
+    Yields:
+        An httpx.AsyncClient suitable for testing API interactions.
+    """
+    async with respx.mock, httpx.AsyncClient() as client:
+        yield client

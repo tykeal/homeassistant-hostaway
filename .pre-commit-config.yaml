@@ -182,6 +182,7 @@ repos:
         additional_dependencies:
           - "pytest"
           - "httpx"
+          - "respx"
 
   # - repo: local
   #   hooks:
