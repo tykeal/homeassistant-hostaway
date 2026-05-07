@@ -67,8 +67,8 @@ RESERVATION_1 = HostawayReservation.from_api_response(
 )
 
 
-class TestTokenExpiryDuringRefresh:
-    """Token invalidation during coordinator lifecycle."""
+class TestTokenInvalidation:
+    """Token invalidation and coordinator resilience."""
 
     @patch(
         "custom_components.hostaway.HostawayApiClient.get_all_reservations",
@@ -85,17 +85,19 @@ class TestTokenExpiryDuringRefresh:
         new_callable=AsyncMock,
         return_value=True,
     )
-    async def test_coordinator_refresh_after_token_invalidation(
+    async def test_seed_invalidate_coordinator_refresh(
         self,
         mock_test: AsyncMock,
         mock_listings: AsyncMock,
         mock_reservations: AsyncMock,
         hass: HomeAssistant,
     ) -> None:
-        """Coordinator refresh succeeds after token invalidation.
+        """Seed, invalidate, then coordinator still refreshes.
 
-        Verifies that invalidating a seeded token clears the
-        cache and coordinator refreshes still succeed.
+        Seeds a token via the public API, invalidates it, then
+        verifies the coordinator refresh returns valid data.
+        Uses only public methods (seed_token, invalidate,
+        get_token) to avoid coupling to private state.
         """
         entry = _make_entry()
         entry.add_to_hass(hass)
@@ -116,10 +118,11 @@ class TestTokenExpiryDuringRefresh:
                 issued_at=datetime.now(UTC),
             )
         )
-        assert tm._cached_token is not None
+        # Verify token is available via public API
+        token = await tm.get_token()
+        assert token == "seeded-token"
 
         tm.invalidate()
-        assert tm._cached_token is None
 
         # Coordinator refresh still works with mocked API
         await lc.async_refresh()
@@ -168,6 +171,7 @@ class TestListingDeletedInHostaway:
         # Second refresh returns empty (listing deleted)
         mock_listings.return_value = []
         await lc.async_refresh()
+        await hass.async_block_till_done()
 
         assert 101 not in lc.data
 
