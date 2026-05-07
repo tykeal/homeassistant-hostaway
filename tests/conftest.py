@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
@@ -104,7 +104,7 @@ def make_reservation_response(**overrides: Any) -> dict[str, Any]:
 
 
 @pytest.fixture
-async def mock_httpx_client() -> AsyncGenerator[httpx.AsyncClient]:
+async def mock_httpx_client() -> AsyncIterator[httpx.AsyncClient]:
     """Provide an httpx.AsyncClient with respx mocking enabled.
 
     Yields:

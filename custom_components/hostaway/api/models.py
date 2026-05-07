@@ -26,8 +26,8 @@ def _validate_non_negative(
     """
     if value is None:
         return
-    if not isinstance(value, types):
-        msg = f"{field} must be non-negative"
+    if isinstance(value, bool) or not isinstance(value, types):
+        msg = f"{field} must be a valid number"
         raise ValueError(msg)
     if value < 0:  # type: ignore[operator]
         msg = f"{field} must be non-negative"
@@ -49,8 +49,8 @@ def _validate_positive(
     """
     if value is None:
         return
-    if not isinstance(value, types):
-        msg = f"{field} must be positive"
+    if isinstance(value, bool) or not isinstance(value, types):
+        msg = f"{field} must be a valid number"
         raise ValueError(msg)
     if value <= 0:  # type: ignore[operator]
         msg = f"{field} must be positive"
@@ -368,6 +368,15 @@ class HostawayReservation:
             raise ValueError(msg)
         if not data["guestName"]:
             msg = "guest_name must be non-empty"
+            raise ValueError(msg)
+        if not data["arrivalDate"]:
+            msg = "check_in must be non-empty"
+            raise ValueError(msg)
+        if not data["departureDate"]:
+            msg = "check_out must be non-empty"
+            raise ValueError(msg)
+        if not data["status"]:
+            msg = "status must be non-empty"
             raise ValueError(msg)
 
         # Validate optional numeric fields when present
