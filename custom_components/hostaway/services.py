@@ -1,0 +1,204 @@
+# SPDX-FileCopyrightText: 2026 Andrew Grimberg <tykeal@bardicgrove.org>
+# SPDX-License-Identifier: Apache-2.0
+"""Service handlers for the Hostaway integration."""
+
+from __future__ import annotations
+
+import logging
+from typing import Any
+
+from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+
+from custom_components.hostaway.api.client import HostawayApiClient
+from custom_components.hostaway.api.exceptions import (
+    HostawayApiError,
+    HostawayResponseError,
+)
+from custom_components.hostaway.const import DOMAIN
+
+_LOGGER = logging.getLogger(__name__)
+
+
+def _resolve_entry_data(
+    hass: HomeAssistant,
+    call_data: dict[str, Any],
+) -> dict[str, Any]:
+    """Resolve the correct config entry data for a service call.
+
+    When multiple entries exist, the caller must provide
+    ``config_entry_id`` to disambiguate.
+
+    Args:
+        hass: Home Assistant instance.
+        call_data: Service call data dictionary.
+
+    Returns:
+        The runtime data dict for the resolved config entry.
+
+    Raises:
+        ServiceValidationError: If the entry cannot be resolved.
+    """
+    entries: dict[str, Any] = hass.data.get(DOMAIN, {})
+    config_entry_id = call_data.get("config_entry_id")
+
+    if config_entry_id:
+        if config_entry_id not in entries:
+            raise ServiceValidationError(
+                f"Config entry {config_entry_id} not found",
+            )
+        result: dict[str, Any] = entries[config_entry_id]
+        return result
+
+    if len(entries) == 1:
+        first: dict[str, Any] = next(iter(entries.values()))
+        return first
+
+    raise ServiceValidationError(
+        "config_entry_id required when multiple entries exist",
+    )
+
+
+async def async_handle_set_door_code(
+    hass: HomeAssistant,
+    call: ServiceCall,
+) -> None:
+    """Handle hostaway.set_door_code service call.
+
+    Validates inputs, builds a camelCase payload, and sends
+    a PUT request to update the reservation's door code.
+
+    Args:
+        hass: Home Assistant instance.
+        call: The incoming service call.
+
+    Raises:
+        ServiceValidationError: On invalid input or missing resource.
+        HomeAssistantError: On API failure.
+    """
+    reservation_id: int = call.data["reservation_id"]
+    door_code: str = call.data["door_code"]
+
+    if reservation_id <= 0:
+        raise ServiceValidationError(
+            "reservation_id must be a positive integer",
+        )
+    if not door_code or not door_code.strip():
+        raise ServiceValidationError(
+            "door_code must be a non-empty string",
+        )
+
+    payload: dict[str, str] = {"doorCode": door_code}
+    if call.data.get("door_code_vendor") is not None:
+        payload["doorCodeVendor"] = call.data["door_code_vendor"]
+    if call.data.get("door_code_instruction") is not None:
+        payload["doorCodeInstruction"] = call.data["door_code_instruction"]
+
+    entry_data = _resolve_entry_data(hass, call.data)
+    api_client: HostawayApiClient = entry_data["api_client"]
+
+    try:
+        await api_client.update_reservation(reservation_id, payload)
+    except HostawayResponseError as exc:
+        if "not found" in str(exc).lower():
+            raise ServiceValidationError(
+                f"Reservation {reservation_id} not found",
+            ) from exc
+        raise HomeAssistantError(
+            f"Failed to update reservation: {exc}",
+        ) from exc
+    except HostawayApiError as exc:
+        raise HomeAssistantError(
+            f"Failed to update reservation: {exc}",
+        ) from exc
+
+
+async def async_handle_get_reservations(
+    hass: HomeAssistant,
+    call: ServiceCall,
+) -> None:
+    """Handle hostaway.get_reservations service call.
+
+    Validates input, fetches reservations from the API, resolves
+    the listing name from the coordinator cache, and fires a
+    ``hostaway_reservations_retrieved`` event.
+
+    Args:
+        hass: Home Assistant instance.
+        call: The incoming service call.
+
+    Raises:
+        ServiceValidationError: On invalid input.
+        HomeAssistantError: On API failure.
+    """
+    listing_id: int = call.data["listing_id"]
+
+    if listing_id <= 0:
+        raise ServiceValidationError(
+            "listing_id must be a positive integer",
+        )
+
+    entry_data = _resolve_entry_data(hass, call.data)
+    api_client: HostawayApiClient = entry_data["api_client"]
+    listings_coordinator = entry_data["listings_coordinator"]
+
+    try:
+        reservations = await api_client.get_all_reservations(
+            listing_id,
+        )
+    except HostawayApiError as exc:
+        raise HomeAssistantError(
+            f"Failed to fetch reservations: {exc}",
+        ) from exc
+
+    listing_name = "Unknown"
+    if listings_coordinator.data:
+        listing = listings_coordinator.data.get(listing_id)
+        if listing:
+            listing_name = listing.name
+
+    event_data: dict[str, Any] = {
+        "listing_id": listing_id,
+        "listing_name": listing_name,
+        "reservations": [
+            {
+                "id": r.id,
+                "guest_name": r.guest_name,
+                "check_in": r.check_in,
+                "check_out": r.check_out,
+                "status": r.status,
+                "door_code": r.door_code,
+            }
+            for r in reservations
+        ],
+    }
+    hass.bus.async_fire("hostaway_reservations_retrieved", event_data)
+
+
+def async_setup_services(hass: HomeAssistant) -> None:
+    """Register Hostaway domain-level services.
+
+    Should be called once when the first config entry loads.
+
+    Args:
+        hass: Home Assistant instance.
+    """
+
+    async def _handle_set_door_code(call: ServiceCall) -> None:
+        """Delegate to set_door_code handler."""
+        await async_handle_set_door_code(hass, call)
+
+    async def _handle_get_reservations(call: ServiceCall) -> None:
+        """Delegate to get_reservations handler."""
+        await async_handle_get_reservations(hass, call)
+
+    hass.services.async_register(
+        DOMAIN,
+        "set_door_code",
+        _handle_set_door_code,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        "get_reservations",
+        _handle_get_reservations,
+    )
