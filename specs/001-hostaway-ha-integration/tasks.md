@@ -97,13 +97,13 @@ phase is complete
 > **NOTE: Write these tests FIRST, ensure they FAIL before
 > implementation**
 
-- [ ] T009 [P] Write exception hierarchy tests in
+- [x] T009 [P] Write exception hierarchy tests in
   `tests/api/test_exceptions.py`: verify
   `HostawayApiError` base class, `HostawayAuthError`,
   `HostawayRateLimitError` (with `retry_after` attr),
   `HostawayConnectionError`, `HostawayResponseError`
   inheritance chain and string representation
-- [ ] T010 [P] Write `AccessToken` frozen dataclass tests in
+- [x] T010 [P] Write `AccessToken` frozen dataclass tests in
   `tests/api/test_models.py`: creation with valid data,
   frozen immutability, `expires_at` computation,
   `is_expired` with and without buffer,
@@ -111,7 +111,7 @@ phase is complete
   delay, `to_dict`/`from_dict` round-trip serialization,
   validation (empty token raises, negative expiry raises,
   naive datetime raises)
-- [ ] T011 [P] Write `HostawayListing` and
+- [x] T011 [P] Write `HostawayListing` and
   `HostawayReservation` dataclass tests in
   `tests/api/test_models.py`: creation from API response
   dict with camelCase→snake_case mapping, validation of
@@ -120,14 +120,14 @@ phase is complete
 
 ### Implementation for Foundational
 
-- [ ] T012 [P] Implement exception hierarchy in
+- [x] T012 [P] Implement exception hierarchy in
   `custom_components/hostaway/api/exceptions.py`:
   `HostawayApiError` base with `message` attr;
   `HostawayAuthError`; `HostawayRateLimitError` with
   `retry_after: float | None`;
   `HostawayConnectionError`; `HostawayResponseError` —
   all with SPDX header, docstrings, type annotations
-- [ ] T013 [P] Implement API constants in
+- [x] T013 [P] Implement API constants in
   `custom_components/hostaway/api/const.py`: `TOKEN_URL`
   (`https://api.hostaway.com/v1/accessTokens`), `BASE_URL`
   (`https://api.hostaway.com`), `DEFAULT_TIMEOUT` (30s),
@@ -137,26 +137,26 @@ phase is complete
   `RATE_LIMIT_PER_ACCOUNT` (20/10s),
   `DEFAULT_PAGE_LIMIT` (100), `GRANT_TYPE`
   (`client_credentials`), `SCOPE` (`general`)
-- [ ] T014 [P] Implement `AccessToken` frozen dataclass in
+- [x] T014 [P] Implement `AccessToken` frozen dataclass in
   `custom_components/hostaway/api/models.py`:
   `access_token`, `token_type`, `expires_in`, `issued_at`
   fields; `expires_at` and `is_expired(buffer_seconds)`
   computed properties; `seconds_until_ready` property
   enforcing 1s delay; `to_dict()`/`from_dict()`
   serialization per data-model.md
-- [ ] T015 [P] Implement `HostawayListing` dataclass in
+- [x] T015 [P] Implement `HostawayListing` dataclass in
   `custom_components/hostaway/api/models.py`: all fields
   per data-model.md with `from_api_response(data: dict)`
   class method performing camelCase→snake_case mapping
-- [ ] T016 [P] Implement `HostawayReservation` dataclass in
+- [x] T016 [P] Implement `HostawayReservation` dataclass in
   `custom_components/hostaway/api/models.py`: all fields
   per data-model.md with `from_api_response(data: dict)`
   class method performing camelCase→snake_case mapping
-- [ ] T017 Create public API surface exports in
+- [x] T017 Create public API surface exports in
   `custom_components/hostaway/api/__init__.py`: export all
   exception classes, `AccessToken`, `HostawayListing`,
   `HostawayReservation`, and constants needed by consumers
-- [ ] T018 Create shared test fixtures in
+- [x] T018 Create shared test fixtures in
   `tests/conftest.py`: mock token response factory, common
   test constants (fake client ID/secret), mock listing and
   reservation API response factories,
