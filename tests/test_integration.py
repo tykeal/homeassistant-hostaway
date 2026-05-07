@@ -365,10 +365,14 @@ class TestFullLifecycle:
         await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
-        states = hass.states.async_all("sensor")
-        entity_ids = {s.entity_id for s in states}
-        # HA prepends device name to suggested_object_id
-        # The entity_id includes the listing name slug
-        matching = [eid for eid in entity_ids if "beach_villa" in eid]
-        # Should have status, base_price, bedrooms, etc.
-        assert len(matching) >= 5
+        # Verify via entity registry that unique_ids resolve
+        # to entity_ids containing the hostaway prefix and
+        # listing slug
+        registry = er.async_get(hass)
+        expected_keys = ["status", "base_price", "bedrooms", "bathrooms", "max_guests"]
+        for key in expected_keys:
+            uid = f"{entry.unique_id}_101_{key}"
+            entity_id = registry.async_get_entity_id("sensor", DOMAIN, uid)
+            assert entity_id is not None, f"Missing entity for {uid}"
+            assert "hostaway" in entity_id
+            assert "beach_villa" in entity_id

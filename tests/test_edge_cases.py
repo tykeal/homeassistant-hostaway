@@ -94,7 +94,8 @@ class TestTokenExpiryDuringRefresh:
 
         Verifies that invalidating the cached token does not
         prevent subsequent coordinator refreshes from returning
-        valid data when the API client is mocked.
+        valid data when the API client is mocked. Confirms that
+        invalidate() clears the cache correctly.
         """
         entry = _make_entry()
         entry.add_to_hass(hass)
@@ -105,12 +106,13 @@ class TestTokenExpiryDuringRefresh:
         data = hass.data[DOMAIN][entry.entry_id]
         lc = data["listings_coordinator"]
 
-        # Token manager invalidate simulates expiry
+        # Token manager invalidate clears cached token
         tm = data["token_manager"]
         tm.invalidate()
+        # Verify the cache is cleared
+        assert tm._cached_token is None
 
-        # Coordinator refresh still works (get_all_listings
-        # internally calls get_token which re-acquires)
+        # Coordinator refresh still works with mocked API
         await lc.async_refresh()
         assert lc.data is not None
         assert 101 in lc.data
