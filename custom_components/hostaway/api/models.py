@@ -244,13 +244,13 @@ class HostawayListing:
             msg = "name must be a non-empty string"
             raise ValueError(msg)
 
-        # Map isActive (0/1) to status
+        # Map isActive to status; default to "active" when absent
         is_active = data.get("isActive")
-        status: str | None = None
-        if is_active == 1:
-            status = "active"
-        elif is_active == 0:
+        special_status = data.get("specialStatus")
+        if special_status == "archived" or is_active == 0:
             status = "inactive"
+        else:
+            status = "active"
 
         # Handle address (string or nested object)
         raw_address = data.get("address")

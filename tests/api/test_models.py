@@ -238,6 +238,33 @@ class TestHostawayListingFromApiResponse:
         listing = HostawayListing.from_api_response(data)
         assert listing.status == "inactive"
 
+    def test_is_active_absent_defaults_to_active(self) -> None:
+        """Missing isActive defaults to status='active'."""
+        data = make_listing_response()
+        del data["isActive"]
+        listing = HostawayListing.from_api_response(data)
+        assert listing.status == "active"
+
+    def test_special_status_archived_maps_to_inactive(self) -> None:
+        """specialStatus='archived' maps to status='inactive'."""
+        data = make_listing_response(specialStatus="archived")
+        del data["isActive"]
+        listing = HostawayListing.from_api_response(data)
+        assert listing.status == "inactive"
+
+    def test_special_status_archived_overrides_is_active(self) -> None:
+        """specialStatus='archived' takes precedence over isActive=1."""
+        data = make_listing_response(isActive=1, specialStatus="archived")
+        listing = HostawayListing.from_api_response(data)
+        assert listing.status == "inactive"
+
+    def test_special_status_none_with_no_is_active(self) -> None:
+        """specialStatus=None with no isActive defaults to active."""
+        data = make_listing_response(specialStatus=None)
+        del data["isActive"]
+        listing = HostawayListing.from_api_response(data)
+        assert listing.status == "active"
+
     def test_address_as_string(self) -> None:
         """String address is stored directly."""
         data = make_listing_response(address="456 Main St")
