@@ -131,7 +131,6 @@ class HostawayReservationSensor(
         _reservation_id: The reservation ID this sensor tracks.
         _listing_id: The listing ID for device info lookup.
         _listings_coordinator: Listings coordinator for device info.
-        _entry: The config entry.
     """
 
     _attr_has_entity_name = True
@@ -155,7 +154,6 @@ class HostawayReservationSensor(
         self._reservation_id = reservation.id
         self._listing_id = reservation.listing_id
         self._listings_coordinator = listings_coordinator
-        self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}_{reservation.id}"
         self._attr_name = f"Reservation {reservation.id}"
 
@@ -163,15 +161,18 @@ class HostawayReservationSensor(
     def _current_reservation(self) -> HostawayReservation | None:
         """Find current reservation data from coordinator.
 
+        Uses listing_id for efficient lookup rather than scanning
+        all listings.
+
         Returns:
             The updated reservation, or None if not found.
         """
         if self.coordinator.data is None:
             return None
-        for reservations in self.coordinator.data.values():
-            for res in reservations:
-                if res.id == self._reservation_id:
-                    return res
+        reservations = self.coordinator.data.get(self._listing_id, [])
+        for res in reservations:
+            if res.id == self._reservation_id:
+                return res
         return None
 
     @property
@@ -333,5 +334,9 @@ async def async_setup_entry(
         if new_entities:
             async_add_entities(new_entities)
 
-    listings_coordinator.async_add_listener(_async_add_new_listings)
-    reservations_coordinator.async_add_listener(_async_add_new_reservations)
+    entry.async_on_unload(
+        listings_coordinator.async_add_listener(_async_add_new_listings)
+    )
+    entry.async_on_unload(
+        reservations_coordinator.async_add_listener(_async_add_new_reservations)
+    )

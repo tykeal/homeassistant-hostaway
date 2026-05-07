@@ -8,12 +8,16 @@ import logging
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
     UpdateFailed,
 )
 
-from custom_components.hostaway.api.exceptions import HostawayApiError
+from custom_components.hostaway.api.exceptions import (
+    HostawayApiError,
+    HostawayAuthError,
+)
 from custom_components.hostaway.api.models import (
     HostawayListing,
     HostawayReservation,
@@ -88,10 +92,15 @@ class HostawayListingsCoordinator(
 
         Raises:
             UpdateFailed: On any Hostaway API error.
+            ConfigEntryAuthFailed: On authentication failure.
         """
         selected = self.config_entry.data.get(CONF_SELECTED_LISTINGS, [])
         try:
             listings = await self.api_client.get_all_listings()
+        except HostawayAuthError as exc:
+            raise ConfigEntryAuthFailed(
+                f"Authentication failed: {exc}",
+            ) from exc
         except HostawayApiError as exc:
             raise UpdateFailed(
                 f"Failed to fetch listings: {exc}",
@@ -150,6 +159,7 @@ class HostawayReservationsCoordinator(
 
         Raises:
             UpdateFailed: On any Hostaway API error.
+            ConfigEntryAuthFailed: On authentication failure.
         """
         selected = self.config_entry.data.get(CONF_SELECTED_LISTINGS, [])
         result: dict[int, list[HostawayReservation]] = {}
@@ -157,6 +167,10 @@ class HostawayReservationsCoordinator(
             for listing_id in selected:
                 reservations = await self.api_client.get_all_reservations(listing_id)
                 result[listing_id] = sorted(reservations, key=lambda r: r.check_in)
+        except HostawayAuthError as exc:
+            raise ConfigEntryAuthFailed(
+                f"Authentication failed: {exc}",
+            ) from exc
         except HostawayApiError as exc:
             raise UpdateFailed(
                 f"Failed to fetch reservations: {exc}",

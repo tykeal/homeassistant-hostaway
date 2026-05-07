@@ -31,7 +31,6 @@ class HostawayEntity(
 
     Attributes:
         _listing_id: The Hostaway listing ID this entity belongs to.
-        _entry: The config entry for unique_id derivation.
     """
 
     _attr_has_entity_name = True
@@ -47,11 +46,10 @@ class HostawayEntity(
         Args:
             coordinator: The listings coordinator.
             listing_id: The Hostaway listing ID.
-            entry: The config entry.
+            entry: The config entry (used by subclasses).
         """
         super().__init__(coordinator)
         self._listing_id = listing_id
-        self._entry = entry
 
     @property
     def _listing(self) -> HostawayListing | None:
