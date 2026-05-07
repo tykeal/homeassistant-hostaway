@@ -112,7 +112,7 @@ async def async_handle_set_door_code(
         )
     door_code = door_code.strip()
 
-    payload: dict[str, str] = {"doorCode": door_code}
+    payload: dict[str, Any] = {"doorCode": door_code}
     if call.data.get("door_code_vendor") is not None:
         payload["doorCodeVendor"] = call.data["door_code_vendor"]
     if call.data.get("door_code_instruction") is not None:
