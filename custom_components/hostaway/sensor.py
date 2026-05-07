@@ -270,6 +270,13 @@ class HostawayReservationStatusSensor(
 
     _attr_has_entity_name = True
     _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = [  # noqa: RUF012
+        "checked_in",
+        "awaiting_checkin",
+        "checked_out",
+        "cancelled",
+        "no_reservation",
+    ]
 
     def __init__(
         self,
