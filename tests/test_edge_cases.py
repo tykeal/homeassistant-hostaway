@@ -66,7 +66,7 @@ RESERVATION_1 = HostawayReservation.from_api_response(
 
 
 class TestTokenExpiryDuringRefresh:
-    """Token expiry during coordinator refresh is transparent."""
+    """Token invalidation during coordinator lifecycle."""
 
     @patch(
         "custom_components.hostaway.HostawayApiClient.get_all_reservations",
@@ -83,14 +83,19 @@ class TestTokenExpiryDuringRefresh:
         new_callable=AsyncMock,
         return_value=True,
     )
-    async def test_coordinator_refresh_survives_token_refresh(
+    async def test_coordinator_refresh_after_token_invalidation(
         self,
         mock_test: AsyncMock,
         mock_listings: AsyncMock,
         mock_reservations: AsyncMock,
         hass: HomeAssistant,
     ) -> None:
-        """Coordinator refresh succeeds when token refreshes."""
+        """Coordinator refresh succeeds after token invalidation.
+
+        Verifies that invalidating the cached token does not
+        prevent subsequent coordinator refreshes from returning
+        valid data when the API client is mocked.
+        """
         entry = _make_entry()
         entry.add_to_hass(hass)
         await hass.config_entries.async_setup(entry.entry_id)
@@ -167,8 +172,8 @@ class TestListingDeletedInHostaway:
             assert sensor.state == "unavailable"
 
 
-class TestPaginationOver100Reservations:
-    """Pagination handles >100 reservations across pages."""
+class TestLargeReservationSets:
+    """Coordinator handles large numbers of reservations."""
 
     @patch(
         "custom_components.hostaway.HostawayApiClient.get_all_reservations",
@@ -184,14 +189,14 @@ class TestPaginationOver100Reservations:
         new_callable=AsyncMock,
         return_value=True,
     )
-    async def test_many_reservations_all_collected(
+    async def test_coordinator_stores_all_250_reservations(
         self,
         mock_test: AsyncMock,
         mock_listings: AsyncMock,
         mock_reservations: AsyncMock,
         hass: HomeAssistant,
     ) -> None:
-        """All 250 reservations collected from paginated API."""
+        """Coordinator stores all 250 reservations from API."""
         # Build 250 unique reservations
         all_reservations = [
             HostawayReservation.from_api_response(

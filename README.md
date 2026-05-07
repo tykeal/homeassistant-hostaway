@@ -137,7 +137,7 @@ automation:
         attribute: status
         to: "confirmed"
     action:
-      - action: hostaway.set_door_code
+      - service: hostaway.set_door_code
         data:
           reservation_id: 1234
           door_code: "{{ range(1000, 9999) | random }}"
@@ -154,7 +154,7 @@ automation:
       - platform: time_pattern
         hours: "/1"
     action:
-      - action: hostaway.get_reservations
+      - service: hostaway.get_reservations
         data:
           listing_id: 12345
   - alias: "Notify on reservation data"
@@ -162,7 +162,7 @@ automation:
       - platform: event
         event_type: hostaway_reservations_retrieved
     action:
-      - action: notify.mobile_app
+      - service: notify.mobile_app
         data:
           title: "Hostaway Update"
           message: >-

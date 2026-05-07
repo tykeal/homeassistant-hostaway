@@ -261,6 +261,9 @@ class TestFullLifecycle:
         await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
+        # Verify reload succeeded
+        assert entry.state is ConfigEntryState.LOADED
+
         ids_after = {
             e.unique_id for e in registry.entities.values() if e.platform == DOMAIN
         }
