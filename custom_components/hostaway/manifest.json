@@ -2,7 +2,7 @@
     "domain": "hostaway",
     "name": "Hostaway",
     "codeowners": ["@tykeal"],
-    "config_flow": true,
+    "config_flow": false,
     "dependencies": [],
     "documentation": "https://github.com/tykeal/homeassistant-hostaway",
     "integration_type": "hub",
