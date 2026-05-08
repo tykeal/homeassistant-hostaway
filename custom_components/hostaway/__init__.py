@@ -152,5 +152,6 @@ async def async_unload_entry(
         if not hass.data.get(DOMAIN):
             hass.services.async_remove(DOMAIN, "set_door_code")
             hass.services.async_remove(DOMAIN, "get_reservations")
+            hass.services.async_remove(DOMAIN, "find_reservation")
 
     return unload_ok

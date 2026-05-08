@@ -113,6 +113,16 @@ SERVICE_GET_RESERVATIONS_SCHEMA = vol.Schema(
     }
 )
 
+SERVICE_FIND_RESERVATION_SCHEMA = vol.Schema(
+    {
+        vol.Required("guest_name"): _non_empty_string,
+        vol.Required("check_in"): _non_empty_string,
+        vol.Required("check_out"): _non_empty_string,
+        vol.Optional("listing_id"): _positive_int,
+        vol.Optional("config_entry_id"): _strict_string,
+    }
+)
+
 
 def _resolve_entry_data(
     hass: HomeAssistant,
@@ -293,6 +303,97 @@ async def async_handle_get_reservations(
     return None
 
 
+async def async_handle_find_reservation(
+    hass: HomeAssistant,
+    call: ServiceCall,
+) -> dict[str, Any]:
+    """Handle hostaway.find_reservation service call.
+
+    Searches for a reservation by guest name and dates, first in
+    the coordinator cache and optionally via the API.
+
+    Args:
+        hass: Home Assistant instance.
+        call: The incoming service call.
+
+    Returns:
+        Dict with found flag and reservation data if matched.
+
+    Raises:
+        ServiceValidationError: On invalid input.
+        HomeAssistantError: On API failure.
+    """
+    guest_name: str = call.data["guest_name"]
+    check_in: str = call.data["check_in"]
+    check_out: str = call.data["check_out"]
+    listing_id: int | None = call.data.get("listing_id")
+
+    entry_data = _resolve_entry_data(hass, call.data)
+    reservations_coordinator = entry_data["reservations_coordinator"]
+
+    def _match(r: Any) -> bool:
+        """Check if reservation matches search criteria."""
+        return (
+            guest_name.lower() in r.guest_name.lower()
+            and r.check_in == check_in
+            and r.check_out == check_out
+        )
+
+    # Search coordinator cache
+    if reservations_coordinator.data:
+        if listing_id is not None:
+            cached = reservations_coordinator.data.get(listing_id, [])
+            for r in cached:
+                if _match(r):
+                    return _reservation_result(r)
+        else:
+            for res_list in reservations_coordinator.data.values():
+                for r in res_list:
+                    if _match(r):
+                        return _reservation_result(r)
+
+    # Fall back to API if listing_id provided
+    if listing_id is not None:
+        api_client: HostawayApiClient = entry_data["api_client"]
+        try:
+            reservations = await api_client.get_all_reservations(
+                listing_id,
+            )
+        except HostawayApiError as exc:
+            raise HomeAssistantError(
+                f"Failed to fetch reservations: {exc}",
+            ) from exc
+        for r in reservations:
+            if _match(r):
+                return _reservation_result(r)
+
+    return {"found": False, "reservation": None}
+
+
+def _reservation_result(r: Any) -> dict[str, Any]:
+    """Build a successful find_reservation result dict.
+
+    Args:
+        r: The matched reservation object.
+
+    Returns:
+        Dict with found=True and reservation details.
+    """
+    return {
+        "found": True,
+        "reservation": {
+            "id": r.id,
+            "listing_id": r.listing_id,
+            "guest_name": r.guest_name,
+            "check_in": r.check_in,
+            "check_out": r.check_out,
+            "status": r.status,
+            "door_code": r.door_code,
+            "confirmation_code": r.confirmation_code,
+        },
+    }
+
+
 def async_setup_services(hass: HomeAssistant) -> None:
     """Register Hostaway domain-level services.
 
@@ -327,4 +428,19 @@ def async_setup_services(hass: HomeAssistant) -> None:
             _handle_get_reservations,
             schema=SERVICE_GET_RESERVATIONS_SCHEMA,
             supports_response=SupportsResponse.OPTIONAL,
+        )
+
+    async def _handle_find_reservation(
+        call: ServiceCall,
+    ) -> dict[str, Any]:
+        """Delegate to find_reservation handler."""
+        return await async_handle_find_reservation(hass, call)
+
+    if not hass.services.has_service(DOMAIN, "find_reservation"):
+        hass.services.async_register(
+            DOMAIN,
+            "find_reservation",
+            _handle_find_reservation,
+            schema=SERVICE_FIND_RESERVATION_SCHEMA,
+            supports_response=SupportsResponse.ONLY,
         )
