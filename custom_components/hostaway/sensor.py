@@ -376,6 +376,7 @@ class HostawayReservationStatusSensor(
         self._entry = entry
         self._entry_unique_id = entry.unique_id
         self._attr_unique_id = f"{entry.unique_id}_{listing_id}_reservation_status"
+        self._attr_translation_key = "reservation_status"
         self._attr_name = "Reservation status"
 
     @property
