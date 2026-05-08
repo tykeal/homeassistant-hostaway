@@ -219,9 +219,10 @@ async def async_handle_get_reservations(
 ) -> dict[str, Any] | None:
     """Handle hostaway.get_reservations service call.
 
-    Returns cached reservations when available, or fetches from
-    the API when force_refresh is True. Fires a backwards-compat
-    event and returns the data for SupportsResponse.
+    Returns cached reservations when available. Falls back to
+    the API when the listing is not in cache or when
+    force_refresh is True. Fires a backwards-compat event and
+    returns the data for SupportsResponse.
 
     Args:
         hass: Home Assistant instance.

@@ -50,9 +50,10 @@ set_door_code:
 get_reservations:
   name: Get reservations
   description: >-
-    Retrieve reservations for a listing from local cache
-    (or API with force_refresh) and fire a
-    hostaway_reservations_retrieved event.
+    Retrieve reservations for a listing. Returns cached data
+    when the listing is tracked locally, falls back to the
+    Hostaway API when the listing is not in cache or when
+    force_refresh is true.
   fields:
     listing_id:
       name: Listing ID

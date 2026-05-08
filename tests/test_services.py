@@ -1005,3 +1005,102 @@ class TestFindReservation:
         await hass.async_block_till_done()
 
         assert not hass.services.has_service(DOMAIN, "find_reservation")
+
+    async def test_multi_entry_no_id_raises_error(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Missing config_entry_id with multiple entries raises."""
+        entry1 = MockConfigEntry(
+            domain=DOMAIN,
+            title="Hostaway (client-1)",
+            data={
+                CONF_CLIENT_ID: "test-client-id-1",
+                CONF_CLIENT_SECRET: "test-client-secret-1",
+                CONF_SELECTED_LISTINGS: [12345],
+            },
+            unique_id="client-1",
+        )
+        entry2 = MockConfigEntry(
+            domain=DOMAIN,
+            title="Hostaway (client-2)",
+            data={
+                CONF_CLIENT_ID: "test-client-id-2",
+                CONF_CLIENT_SECRET: "test-client-secret-2",
+                CONF_SELECTED_LISTINGS: [67890],
+            },
+            unique_id="client-2",
+        )
+        await _setup_entry(hass, entry1)
+        await _setup_entry(hass, entry2)
+
+        with pytest.raises(
+            ServiceValidationError,
+            match="config_entry_id required",
+        ):
+            await hass.services.async_call(
+                DOMAIN,
+                "find_reservation",
+                {
+                    "guest_name": "John Doe",
+                    "check_in": "2025-08-01",
+                    "check_out": "2025-08-05",
+                },
+                blocking=True,
+                return_response=True,
+            )
+
+    async def test_multi_entry_selects_correct_cache(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """config_entry_id searches the correct entry's cache."""
+        entry1 = MockConfigEntry(
+            domain=DOMAIN,
+            title="Hostaway (client-1)",
+            data={
+                CONF_CLIENT_ID: "test-client-id-1",
+                CONF_CLIENT_SECRET: "test-client-secret-1",
+                CONF_SELECTED_LISTINGS: [12345],
+            },
+            unique_id="client-1",
+        )
+        entry2 = MockConfigEntry(
+            domain=DOMAIN,
+            title="Hostaway (client-2)",
+            data={
+                CONF_CLIENT_ID: "test-client-id-2",
+                CONF_CLIENT_SECRET: "test-client-secret-2",
+                CONF_SELECTED_LISTINGS: [67890],
+            },
+            unique_id="client-2",
+        )
+        await _setup_entry(hass, entry1)
+        await _setup_entry(hass, entry2)
+
+        # Seed entry2's coordinator with a reservation
+        reservation = _make_reservation(
+            id=88001,
+            listing_id=67890,
+            guest_name="Entry2 Guest",
+            check_in="2025-12-01",
+            check_out="2025-12-05",
+            status="confirmed",
+        )
+        res_coord = hass.data[DOMAIN][entry2.entry_id]["reservations_coordinator"]
+        res_coord.async_set_updated_data({67890: [reservation]})
+
+        result = await hass.services.async_call(
+            DOMAIN,
+            "find_reservation",
+            {
+                "guest_name": "Entry2 Guest",
+                "check_in": "2025-12-01",
+                "check_out": "2025-12-05",
+                "config_entry_id": entry2.entry_id,
+            },
+            blocking=True,
+            return_response=True,
+        )
+
+        assert result["found"] is True  # type: ignore[index]
