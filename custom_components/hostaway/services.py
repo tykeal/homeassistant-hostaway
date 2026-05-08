@@ -9,7 +9,7 @@ import math
 from typing import Any
 
 import voluptuous as vol
-from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
 from custom_components.hostaway.api.client import HostawayApiClient
@@ -108,6 +108,7 @@ SERVICE_SET_DOOR_CODE_SCHEMA = vol.Schema(
 SERVICE_GET_RESERVATIONS_SCHEMA = vol.Schema(
     {
         vol.Required("listing_id"): _positive_int,
+        vol.Optional("force_refresh"): bool,
         vol.Optional("config_entry_id"): _strict_string,
     }
 )
@@ -205,46 +206,60 @@ async def async_handle_set_door_code(
 async def async_handle_get_reservations(
     hass: HomeAssistant,
     call: ServiceCall,
-) -> None:
+) -> dict[str, Any] | None:
     """Handle hostaway.get_reservations service call.
 
-    Validates input, fetches reservations from the API, resolves
-    the listing name from the coordinator cache, and fires a
-    ``hostaway_reservations_retrieved`` event.
+    Returns cached reservations when available, or fetches from
+    the API when force_refresh is True. Fires a backwards-compat
+    event and returns the data for SupportsResponse.
 
     Args:
         hass: Home Assistant instance.
         call: The incoming service call.
+
+    Returns:
+        Event data dict if return_response is True, else None.
 
     Raises:
         ServiceValidationError: On invalid input.
         HomeAssistantError: On API failure.
     """
     listing_id: int = call.data["listing_id"]
+    force_refresh: bool = call.data.get("force_refresh", False)
 
     entry_data = _resolve_entry_data(hass, call.data)
-    api_client: HostawayApiClient = entry_data["api_client"]
     listings_coordinator = entry_data["listings_coordinator"]
+    reservations_coordinator = entry_data["reservations_coordinator"]
 
-    try:
-        reservations = await api_client.get_all_reservations(
-            listing_id,
-        )
-    except HostawayResponseError as exc:
-        if "not found" in str(exc).lower():
-            _LOGGER.debug(
-                "Listing %d not found, returning empty list",
+    reservations = None
+
+    # Use cached data unless force_refresh is requested
+    if not force_refresh and reservations_coordinator.data:
+        cached = reservations_coordinator.data.get(listing_id)
+        if cached is not None:
+            reservations = cached
+
+    if reservations is None:
+        api_client: HostawayApiClient = entry_data["api_client"]
+        try:
+            reservations = await api_client.get_all_reservations(
                 listing_id,
             )
-            reservations = []
-        else:
+        except HostawayResponseError as exc:
+            if "not found" in str(exc).lower():
+                _LOGGER.debug(
+                    "Listing %d not found, returning empty list",
+                    listing_id,
+                )
+                reservations = []
+            else:
+                raise HomeAssistantError(
+                    f"Failed to fetch reservations: {exc}",
+                ) from exc
+        except HostawayApiError as exc:
             raise HomeAssistantError(
                 f"Failed to fetch reservations: {exc}",
             ) from exc
-    except HostawayApiError as exc:
-        raise HomeAssistantError(
-            f"Failed to fetch reservations: {exc}",
-        ) from exc
 
     listing_name = "Unknown"
     if listings_coordinator.data:
@@ -273,6 +288,10 @@ async def async_handle_get_reservations(
         context=call.context,
     )
 
+    if call.return_response:
+        return event_data
+    return None
+
 
 def async_setup_services(hass: HomeAssistant) -> None:
     """Register Hostaway domain-level services.
@@ -288,9 +307,11 @@ def async_setup_services(hass: HomeAssistant) -> None:
         """Delegate to set_door_code handler."""
         await async_handle_set_door_code(hass, call)
 
-    async def _handle_get_reservations(call: ServiceCall) -> None:
+    async def _handle_get_reservations(
+        call: ServiceCall,
+    ) -> dict[str, Any] | None:
         """Delegate to get_reservations handler."""
-        await async_handle_get_reservations(hass, call)
+        return await async_handle_get_reservations(hass, call)
 
     if not hass.services.has_service(DOMAIN, "set_door_code"):
         hass.services.async_register(
@@ -305,4 +326,5 @@ def async_setup_services(hass: HomeAssistant) -> None:
             "get_reservations",
             _handle_get_reservations,
             schema=SERVICE_GET_RESERVATIONS_SCHEMA,
+            supports_response=SupportsResponse.OPTIONAL,
         )

@@ -451,29 +451,25 @@ class TestSetDoorCode:
 class TestGetReservations:
     """Tests for the hostaway.get_reservations service."""
 
-    @patch(
-        "custom_components.hostaway.services.HostawayApiClient.get_all_reservations",
-        new_callable=AsyncMock,
-    )
     async def test_fires_event_with_correct_payload(
         self,
-        mock_get: AsyncMock,
         hass: HomeAssistant,
     ) -> None:
         """Successful call fires event with snake_case payload."""
-        mock_get.return_value = [
-            _make_reservation(
-                id=99001,
-                guest_name="John Doe",
-                check_in="2025-08-01",
-                check_out="2025-08-05",
-                status="confirmed",
-                door_code="1234",
-            ),
-        ]
-
         entry = _make_entry()
         await _setup_entry(hass, entry)
+
+        # Seed reservations coordinator cache
+        reservation = _make_reservation(
+            id=99001,
+            guest_name="John Doe",
+            check_in="2025-08-01",
+            check_out="2025-08-05",
+            status="confirmed",
+            door_code="1234",
+        )
+        res_coord = hass.data[DOMAIN][entry.entry_id]["reservations_coordinator"]
+        res_coord.async_set_updated_data({12345: [reservation]})
 
         # Inject a listing into the coordinator cache
         listing = HostawayListing(id=12345, name="Beach House")
@@ -636,7 +632,7 @@ class TestGetReservations:
             await hass.services.async_call(
                 DOMAIN,
                 "get_reservations",
-                {"listing_id": 12345},
+                {"listing_id": 12345, "force_refresh": True},
                 blocking=True,
             )
 
@@ -716,6 +712,7 @@ class TestGetReservations:
             {
                 "listing_id": 67890,
                 "config_entry_id": entry2.entry_id,
+                "force_refresh": True,
             },
             blocking=True,
         )
@@ -762,3 +759,83 @@ class TestGetReservations:
                 {"listing_id": 12345},
                 blocking=True,
             )
+
+    async def test_returns_data_from_coordinator_cache(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Returns cached data without hitting the API."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        # Seed coordinator cache
+        reservation = _make_reservation(
+            id=99001,
+            listing_id=12345,
+            guest_name="Jane Doe",
+            check_in="2025-09-01",
+            check_out="2025-09-05",
+            status="confirmed",
+            door_code="4321",
+        )
+        res_coord = hass.data[DOMAIN][entry.entry_id]["reservations_coordinator"]
+        res_coord.async_set_updated_data({12345: [reservation]})
+
+        listing = HostawayListing(id=12345, name="Beach House")
+        coord = hass.data[DOMAIN][entry.entry_id]["listings_coordinator"]
+        coord.async_set_updated_data({12345: listing})
+
+        # Spy on API client to ensure it is NOT called
+        api_client = hass.data[DOMAIN][entry.entry_id]["api_client"]
+        api_client.get_all_reservations = AsyncMock()
+
+        result = await hass.services.async_call(
+            DOMAIN,
+            "get_reservations",
+            {"listing_id": 12345},
+            blocking=True,
+            return_response=True,
+        )
+
+        api_client.get_all_reservations.assert_not_called()
+        assert result["listing_id"] == 12345  # type: ignore[index]
+        assert result["listing_name"] == "Beach House"  # type: ignore[index]
+        assert len(result["reservations"]) == 1  # type: ignore[arg-type, index]
+        assert result["reservations"][0]["guest_name"] == "Jane Doe"  # type: ignore[call-overload, index]
+
+    @patch(
+        "custom_components.hostaway.services.HostawayApiClient.get_all_reservations",
+        new_callable=AsyncMock,
+    )
+    async def test_force_refresh_hits_api(
+        self,
+        mock_get: AsyncMock,
+        hass: HomeAssistant,
+    ) -> None:
+        """force_refresh=True bypasses cache and hits API."""
+        mock_get.return_value = [
+            _make_reservation(
+                id=99002,
+                guest_name="Fresh Data",
+                check_in="2025-10-01",
+                check_out="2025-10-05",
+            ),
+        ]
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        # Seed coordinator with stale data
+        stale = _make_reservation(id=99001, guest_name="Stale Data")
+        res_coord = hass.data[DOMAIN][entry.entry_id]["reservations_coordinator"]
+        res_coord.async_set_updated_data({12345: [stale]})
+
+        result = await hass.services.async_call(
+            DOMAIN,
+            "get_reservations",
+            {"listing_id": 12345, "force_refresh": True},
+            blocking=True,
+            return_response=True,
+        )
+
+        mock_get.assert_called_once_with(12345)
+        assert result["reservations"][0]["guest_name"] == "Fresh Data"  # type: ignore[call-overload, index]
