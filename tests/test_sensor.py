@@ -344,6 +344,39 @@ class TestListingSensor:
         assert sensor.native_value == 100
         assert lid_desc.entity_category == EntityCategory.DIAGNOSTIC
 
+    async def test_external_name_sensor(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """External name sensor returns listing.name."""
+        from homeassistant.const import EntityCategory
+
+        entry = _make_entry(selected=[100])
+        entry.add_to_hass(hass)
+        api_client = AsyncMock()
+        api_client.get_all_listings = AsyncMock(
+            return_value=[_make_listing(100, "Oceanview Villa")]
+        )
+
+        coordinator = HostawayListingsCoordinator(hass, entry, api_client)
+        await coordinator.async_refresh()
+
+        ext_desc = next(
+            d for d in LISTING_SENSOR_DESCRIPTIONS if d.key == "external_name"
+        )
+        sensor = HostawayListingSensor(coordinator, 100, entry, ext_desc)
+        assert sensor.native_value == "Oceanview Villa"
+        assert ext_desc.entity_category == EntityCategory.DIAGNOSTIC
+
+    def test_all_listing_sensors_are_diagnostic(self) -> None:
+        """Every listing sensor description has DIAGNOSTIC category."""
+        from homeassistant.const import EntityCategory
+
+        for desc in LISTING_SENSOR_DESCRIPTIONS:
+            assert desc.entity_category == EntityCategory.DIAGNOSTIC, (
+                f"{desc.key} missing EntityCategory.DIAGNOSTIC"
+            )
+
     async def test_entity_ids_via_async_setup_entry(
         self,
         hass: HomeAssistant,
