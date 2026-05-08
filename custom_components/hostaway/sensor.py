@@ -135,9 +135,11 @@ def _derive_state(
     derived = _STATUS_TO_DERIVED.get(reservation.status)
     if derived is not None:
         return derived
-    if reservation.status not in _warned_statuses:
-        if len(_warned_statuses) < _MAX_WARNED_STATUSES:
-            _warned_statuses.add(reservation.status)
+    if (
+        reservation.status not in _warned_statuses
+        and len(_warned_statuses) < _MAX_WARNED_STATUSES
+    ):
+        _warned_statuses.add(reservation.status)
         _LOGGER.warning(
             "Unknown Hostaway reservation status '%s'; reporting as 'unknown'",
             reservation.status,
