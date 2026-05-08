@@ -39,6 +39,8 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 # Statuses already warned about to avoid log spam.
+# Capped to prevent unbounded growth from pathological API data.
+_MAX_WARNED_STATUSES = 50
 _warned_statuses: set[str] = set()
 
 # Priority for selecting the most relevant reservation.
@@ -134,7 +136,8 @@ def _derive_state(
     if derived is not None:
         return derived
     if reservation.status not in _warned_statuses:
-        _warned_statuses.add(reservation.status)
+        if len(_warned_statuses) < _MAX_WARNED_STATUSES:
+            _warned_statuses.add(reservation.status)
         _LOGGER.warning(
             "Unknown Hostaway reservation status '%s'; reporting as 'unknown'",
             reservation.status,

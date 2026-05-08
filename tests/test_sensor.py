@@ -33,7 +33,6 @@ from custom_components.hostaway.sensor import (
     _build_reservation_attributes,
     _derive_state,
     _select_reservation,
-    _warned_statuses,
 )
 
 
@@ -510,9 +509,13 @@ class TestDeriveState:
     def test_truly_unknown_status_maps_to_unknown(
         self,
         caplog: pytest.LogCaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Unrecognised status maps to unknown with warning."""
-        _warned_statuses.discard("totally_new_status")
+        monkeypatch.setattr(
+            "custom_components.hostaway.sensor._warned_statuses",
+            set(),
+        )
         res = _make_reservation(status="totally_new_status")
         with caplog.at_level(logging.WARNING):
             assert _derive_state(res) == "unknown"
@@ -521,16 +524,19 @@ class TestDeriveState:
     def test_unknown_warning_logged_once(
         self,
         caplog: pytest.LogCaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Warning for same unknown status only logged once."""
-        _warned_statuses.discard("repeat_status")
+        monkeypatch.setattr(
+            "custom_components.hostaway.sensor._warned_statuses",
+            set(),
+        )
         res = _make_reservation(status="repeat_status")
         with caplog.at_level(logging.WARNING):
             _derive_state(res)
             _derive_state(res)
         count = caplog.text.count("repeat_status")
         assert count == 1
-        _warned_statuses.discard("repeat_status")
 
     def test_all_status_to_derived_values_in_options(
         self,
