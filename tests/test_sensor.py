@@ -323,11 +323,13 @@ class TestListingSensor:
         sensor = HostawayListingSensor(coordinator, 100, entry, status_desc)
         assert sensor.suggested_object_id == "hostaway_suite_1_status"
 
-    async def test_extra_state_attributes_listing_id(
+    async def test_listing_id_diagnostic_sensor(
         self,
         hass: HomeAssistant,
     ) -> None:
-        """extra_state_attributes includes listing_id."""
+        """Listing ID sensor is a standalone diagnostic."""
+        from homeassistant.const import EntityCategory
+
         entry = _make_entry(selected=[100])
         entry.add_to_hass(hass)
         api_client = AsyncMock()
@@ -336,10 +338,10 @@ class TestListingSensor:
         coordinator = HostawayListingsCoordinator(hass, entry, api_client)
         await coordinator.async_refresh()
 
-        status_desc = next(d for d in LISTING_SENSOR_DESCRIPTIONS if d.key == "status")
-        sensor = HostawayListingSensor(coordinator, 100, entry, status_desc)
-        attrs = sensor.extra_state_attributes
-        assert attrs["listing_id"] == 100
+        lid_desc = next(d for d in LISTING_SENSOR_DESCRIPTIONS if d.key == "listing_id")
+        sensor = HostawayListingSensor(coordinator, 100, entry, lid_desc)
+        assert sensor.native_value == 100
+        assert lid_desc.entity_category == EntityCategory.DIAGNOSTIC
 
     async def test_entity_ids_via_async_setup_entry(
         self,

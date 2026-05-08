@@ -14,6 +14,7 @@ from homeassistant.components.sensor import (
     SensorEntity,
     SensorEntityDescription,
 )
+from homeassistant.const import EntityCategory
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.typing import StateType
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -223,6 +224,12 @@ class HostawayListingSensorDescription(SensorEntityDescription):
 
 LISTING_SENSOR_DESCRIPTIONS: tuple[HostawayListingSensorDescription, ...] = (
     HostawayListingSensorDescription(
+        key="listing_id",
+        name="Listing ID",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda listing: listing.id,
+    ),
+    HostawayListingSensorDescription(
         key="status",
         name="Status",
         value_fn=lambda listing: listing.status,
@@ -307,15 +314,6 @@ class HostawayListingSensor(HostawayEntity, SensorEntity):
         if listing is None:
             return None
         return self.entity_description.value_fn(listing)
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return listing_id so users can discover it in the UI.
-
-        Returns:
-            Dictionary with the listing_id attribute.
-        """
-        return {"listing_id": self._listing_id}
 
 
 class HostawayReservationStatusSensor(
