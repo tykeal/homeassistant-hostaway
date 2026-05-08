@@ -18,6 +18,7 @@ from custom_components.hostaway.api.models import (
 from custom_components.hostaway.const import (
     CONF_CLIENT_ID,
     CONF_CLIENT_SECRET,
+    CONF_FILTER_CANCELLED,
     CONF_SELECTED_LISTINGS,
     DOMAIN,
 )
@@ -60,12 +61,17 @@ def _make_entry(
     )
 
 
-def _make_listing(listing_id: int = 100, name: str = "Beach House") -> HostawayListing:
+def _make_listing(
+    listing_id: int = 100,
+    name: str = "Beach House",
+    internal_name: str | None = None,
+) -> HostawayListing:
     """Create a HostawayListing for testing.
 
     Args:
         listing_id: The listing ID.
         name: The listing name.
+        internal_name: The internal reference name.
 
     Returns:
         A HostawayListing instance.
@@ -73,6 +79,7 @@ def _make_listing(listing_id: int = 100, name: str = "Beach House") -> HostawayL
     return HostawayListing(
         id=listing_id,
         name=name,
+        internal_name=internal_name,
         status="active",
         property_type="apartment",
         bedrooms=2,
@@ -258,6 +265,27 @@ class TestListingSensor:
         assert device_info["manufacturer"] == "Hostaway"
         assert device_info["model"] == "apartment"
 
+    async def test_device_info_prefers_internal_name(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Device name uses internal_name when available."""
+        entry = _make_entry(selected=[100])
+        entry.add_to_hass(hass)
+        api_client = AsyncMock()
+        api_client.get_all_listings = AsyncMock(
+            return_value=[_make_listing(100, "Beach House", internal_name="Suite 1")]
+        )
+
+        coordinator = HostawayListingsCoordinator(hass, entry, api_client)
+        await coordinator.async_refresh()
+
+        status_desc = next(d for d in LISTING_SENSOR_DESCRIPTIONS if d.key == "status")
+        sensor = HostawayListingSensor(coordinator, 100, entry, status_desc)
+        device_info = sensor.device_info
+        assert device_info is not None
+        assert device_info["name"] == "Suite 1"
+
     async def test_suggested_object_id_follows_fr007(
         self,
         hass: HomeAssistant,
@@ -277,11 +305,32 @@ class TestListingSensor:
         sensor = HostawayListingSensor(coordinator, 100, entry, status_desc)
         assert sensor.suggested_object_id == "hostaway_beach_house_status"
 
-    async def test_extra_state_attributes_listing_id(
+    async def test_suggested_object_id_prefers_internal_name(
         self,
         hass: HomeAssistant,
     ) -> None:
-        """extra_state_attributes includes listing_id."""
+        """suggested_object_id uses internal_name when set."""
+        entry = _make_entry(selected=[100])
+        entry.add_to_hass(hass)
+        api_client = AsyncMock()
+        api_client.get_all_listings = AsyncMock(
+            return_value=[_make_listing(100, "Beach House", internal_name="Suite 1")]
+        )
+
+        coordinator = HostawayListingsCoordinator(hass, entry, api_client)
+        await coordinator.async_refresh()
+
+        status_desc = next(d for d in LISTING_SENSOR_DESCRIPTIONS if d.key == "status")
+        sensor = HostawayListingSensor(coordinator, 100, entry, status_desc)
+        assert sensor.suggested_object_id == "hostaway_suite_1_status"
+
+    async def test_listing_id_diagnostic_sensor(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Listing ID sensor is a standalone diagnostic."""
+        from homeassistant.const import EntityCategory
+
         entry = _make_entry(selected=[100])
         entry.add_to_hass(hass)
         api_client = AsyncMock()
@@ -290,10 +339,10 @@ class TestListingSensor:
         coordinator = HostawayListingsCoordinator(hass, entry, api_client)
         await coordinator.async_refresh()
 
-        status_desc = next(d for d in LISTING_SENSOR_DESCRIPTIONS if d.key == "status")
-        sensor = HostawayListingSensor(coordinator, 100, entry, status_desc)
-        attrs = sensor.extra_state_attributes
-        assert attrs["listing_id"] == 100
+        lid_desc = next(d for d in LISTING_SENSOR_DESCRIPTIONS if d.key == "listing_id")
+        sensor = HostawayListingSensor(coordinator, 100, entry, lid_desc)
+        assert sensor.native_value == 100
+        assert lid_desc.entity_category == EntityCategory.DIAGNOSTIC
 
     async def test_entity_ids_via_async_setup_entry(
         self,
@@ -971,3 +1020,93 @@ class TestReservationStatusSensor:
 
         sensor = HostawayReservationStatusSensor(res_coord, listings_coord, 100, entry)
         assert sensor.device_class == SensorDeviceClass.ENUM
+
+    async def test_filter_cancelled_excludes_cancelled(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Cancelled reservations excluded when filter enabled."""
+        entry = _make_entry(selected=[100])
+        entry.add_to_hass(hass)
+        hass.config_entries.async_update_entry(
+            entry, options={CONF_FILTER_CANCELLED: True}
+        )
+        api_client = AsyncMock()
+        r1 = _make_reservation(1, 100, status="confirmed")
+        r2 = _make_reservation(2, 100, status="cancelled")
+        r3 = _make_reservation(3, 100, status="declined")
+        r4 = _make_reservation(4, 100, status="expired")
+        api_client.get_all_reservations = AsyncMock(
+            return_value=[r1, r2, r3, r4],
+        )
+
+        listings_api = AsyncMock()
+        listings_api.get_all_listings = AsyncMock(
+            return_value=[_make_listing(100)],
+        )
+        listings_coord = HostawayListingsCoordinator(
+            hass,
+            entry,
+            listings_api,
+        )
+        await listings_coord.async_refresh()
+        res_coord = HostawayReservationsCoordinator(
+            hass,
+            entry,
+            api_client,
+        )
+        await res_coord.async_refresh()
+
+        sensor = HostawayReservationStatusSensor(
+            res_coord,
+            listings_coord,
+            100,
+            entry,
+        )
+        assert sensor.native_value == "awaiting_checkin"
+        upcoming = sensor.extra_state_attributes["upcoming_reservations"]
+        assert len(upcoming) == 1
+        assert upcoming[0]["id"] == 1
+
+    async def test_filter_cancelled_disabled_shows_all(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """All reservations shown when filter disabled."""
+        entry = _make_entry(selected=[100])
+        entry.add_to_hass(hass)
+        hass.config_entries.async_update_entry(
+            entry, options={CONF_FILTER_CANCELLED: False}
+        )
+        api_client = AsyncMock()
+        r1 = _make_reservation(1, 100, status="confirmed")
+        r2 = _make_reservation(2, 100, status="cancelled")
+        api_client.get_all_reservations = AsyncMock(
+            return_value=[r1, r2],
+        )
+
+        listings_api = AsyncMock()
+        listings_api.get_all_listings = AsyncMock(
+            return_value=[_make_listing(100)],
+        )
+        listings_coord = HostawayListingsCoordinator(
+            hass,
+            entry,
+            listings_api,
+        )
+        await listings_coord.async_refresh()
+        res_coord = HostawayReservationsCoordinator(
+            hass,
+            entry,
+            api_client,
+        )
+        await res_coord.async_refresh()
+
+        sensor = HostawayReservationStatusSensor(
+            res_coord,
+            listings_coord,
+            100,
+            entry,
+        )
+        upcoming = sensor.extra_state_attributes["upcoming_reservations"]
+        assert len(upcoming) == 2

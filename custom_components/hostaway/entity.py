@@ -34,7 +34,7 @@ def build_device_info(
     """
     return DeviceInfo(
         identifiers={(DOMAIN, f"{entry_unique_id}_{listing.id}")},
-        name=listing.name,
+        name=listing.internal_name or listing.name,
         manufacturer="Hostaway",
         model=listing.property_type or "Listing",
     )

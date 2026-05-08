@@ -14,6 +14,7 @@ from homeassistant.components.sensor import (
     SensorEntity,
     SensorEntityDescription,
 )
+from homeassistant.const import EntityCategory
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.typing import StateType
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -23,7 +24,11 @@ from custom_components.hostaway.api.models import (
     HostawayListing,
     HostawayReservation,
 )
-from custom_components.hostaway.const import DOMAIN
+from custom_components.hostaway.const import (
+    CONF_FILTER_CANCELLED,
+    DEFAULT_FILTER_CANCELLED,
+    DOMAIN,
+)
 from custom_components.hostaway.entity import HostawayEntity, build_device_info
 
 if TYPE_CHECKING:
@@ -147,6 +152,11 @@ def _derive_state(
     return "unknown"
 
 
+_CANCELLED_STATUSES: frozenset[str] = frozenset(
+    {"cancelled", "declined", "expired"},
+)
+
+
 def _build_reservation_attributes(
     reservation: HostawayReservation | None,
     all_reservations: list[HostawayReservation],
@@ -223,6 +233,12 @@ class HostawayListingSensorDescription(SensorEntityDescription):
 
 LISTING_SENSOR_DESCRIPTIONS: tuple[HostawayListingSensorDescription, ...] = (
     HostawayListingSensorDescription(
+        key="listing_id",
+        name="Listing ID",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda listing: listing.id,
+    ),
+    HostawayListingSensorDescription(
         key="status",
         name="Status",
         value_fn=lambda listing: listing.status,
@@ -284,9 +300,8 @@ class HostawayListingSensor(HostawayEntity, SensorEntity):
         listing = coordinator.data.get(listing_id) if coordinator.data else None
         self._suggested_object_id: str | None = None
         if listing:
-            self._suggested_object_id = (
-                f"hostaway_{slugify(listing.name)}_{description.key}"
-            )
+            slug = slugify(listing.internal_name or listing.name)
+            self._suggested_object_id = f"hostaway_{slug}_{description.key}"
 
     @property
     def suggested_object_id(self) -> str | None:
@@ -308,15 +323,6 @@ class HostawayListingSensor(HostawayEntity, SensorEntity):
         if listing is None:
             return None
         return self.entity_description.value_fn(listing)
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return listing_id so users can discover it in the UI.
-
-        Returns:
-            Dictionary with the listing_id attribute.
-        """
-        return {"listing_id": self._listing_id}
 
 
 class HostawayReservationStatusSensor(
@@ -367,20 +373,40 @@ class HostawayReservationStatusSensor(
         super().__init__(coordinator)
         self._listing_id = listing_id
         self._listings_coordinator = listings_coordinator
+        self._entry = entry
         self._entry_unique_id = entry.unique_id
         self._attr_unique_id = f"{entry.unique_id}_{listing_id}_reservation_status"
         self._attr_name = "Reservation status"
 
     @property
+    def _filter_cancelled(self) -> bool:
+        """Read filter_cancelled from current entry options.
+
+        Returns:
+            True when cancelled reservations should be hidden.
+        """
+        result: bool = self._entry.options.get(
+            CONF_FILTER_CANCELLED,
+            DEFAULT_FILTER_CANCELLED,
+        )
+        return result
+
+    @property
     def _reservations(self) -> list[HostawayReservation]:
         """Return reservations for this listing.
+
+        Excludes cancelled/declined/expired reservations when
+        ``_filter_cancelled`` is enabled.
 
         Returns:
             List of reservations, empty if data unavailable.
         """
         if self.coordinator.data is None:
             return []
-        return self.coordinator.data.get(self._listing_id, [])
+        all_res = self.coordinator.data.get(self._listing_id, [])
+        if self._filter_cancelled:
+            return [r for r in all_res if r.status not in _CANCELLED_STATUSES]
+        return all_res
 
     @property
     def available(self) -> bool:

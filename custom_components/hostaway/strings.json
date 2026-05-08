@@ -46,11 +46,13 @@
                 "description": "Configure how often the integration polls the Hostaway API.",
                 "data": {
                     "scan_interval": "Listing scan interval (minutes)",
-                    "reservation_scan_interval": "Reservation scan interval (minutes)"
+                    "reservation_scan_interval": "Reservation scan interval (minutes)",
+                    "filter_cancelled": "Exclude inactive reservations"
                 },
                 "data_description": {
                     "scan_interval": "How often to poll for listing updates. Minimum 1 minute.",
-                    "reservation_scan_interval": "How often to poll for reservation updates. Minimum 1 minute."
+                    "reservation_scan_interval": "How often to poll for reservation updates. Minimum 1 minute.",
+                    "filter_cancelled": "When enabled, cancelled, declined, and expired reservations are excluded from sensor state and attributes."
                 }
             }
         },
