@@ -239,28 +239,39 @@ LISTING_SENSOR_DESCRIPTIONS: tuple[HostawayListingSensorDescription, ...] = (
         value_fn=lambda listing: listing.id,
     ),
     HostawayListingSensorDescription(
+        key="external_name",
+        name="External name",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda listing: listing.name,
+    ),
+    HostawayListingSensorDescription(
         key="status",
         name="Status",
+        entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda listing: listing.status,
     ),
     HostawayListingSensorDescription(
         key="base_price",
         name="Base price",
+        entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda listing: listing.base_price,
     ),
     HostawayListingSensorDescription(
         key="bedrooms",
         name="Bedrooms",
+        entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda listing: listing.bedrooms,
     ),
     HostawayListingSensorDescription(
         key="bathrooms",
         name="Bathrooms",
+        entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda listing: listing.bathrooms,
     ),
     HostawayListingSensorDescription(
         key="max_guests",
         name="Max guests",
+        entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda listing: listing.max_guests,
     ),
 )
