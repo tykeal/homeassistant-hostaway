@@ -50,13 +50,73 @@ set_door_code:
 get_reservations:
   name: Get reservations
   description: >-
-    Retrieve reservations for a listing and fire a
+    Retrieve reservations for a listing from local cache
+    (or API with force_refresh) and fire a
     hostaway_reservations_retrieved event.
   fields:
     listing_id:
       name: Listing ID
       description: The Hostaway listing ID.
       required: true
+      example: 67890
+      selector:
+        number:
+          min: 1
+          mode: box
+    force_refresh:
+      name: Force refresh
+      description: >-
+        Bypass the local cache and fetch directly from
+        the Hostaway API.
+      required: false
+      default: false
+      selector:
+        boolean:
+    config_entry_id:
+      name: Config entry ID
+      description: >-
+        Target a specific Hostaway config entry. Required
+        only when multiple accounts are configured.
+      required: false
+      selector:
+        config_entry:
+          integration: hostaway
+
+find_reservation:
+  name: Find reservation
+  description: >-
+    Look up a reservation by guest name and dates.
+    Returns the matching reservation or not-found.
+  fields:
+    guest_name:
+      name: Guest name
+      description: >-
+        Guest name to search for (case-insensitive
+        substring match).
+      required: true
+      example: "John Doe"
+      selector:
+        text:
+    check_in:
+      name: Check-in date
+      description: Arrival date (exact match).
+      required: true
+      example: "2025-08-01"
+      selector:
+        text:
+    check_out:
+      name: Check-out date
+      description: Departure date (exact match).
+      required: true
+      example: "2025-08-05"
+      selector:
+        text:
+    listing_id:
+      name: Listing ID
+      description: >-
+        Limit search to a specific listing. If not found
+        in cache, will fetch from API for this listing.
+      required: false
       example: 67890
       selector:
         number:

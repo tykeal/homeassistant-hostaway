@@ -108,7 +108,7 @@ SERVICE_SET_DOOR_CODE_SCHEMA = vol.Schema(
 SERVICE_GET_RESERVATIONS_SCHEMA = vol.Schema(
     {
         vol.Required("listing_id"): _positive_int,
-        vol.Optional("force_refresh"): bool,
+        vol.Optional("force_refresh"): vol.Boolean(),
         vol.Optional("config_entry_id"): _strict_string,
     }
 )
@@ -359,6 +359,12 @@ async def async_handle_find_reservation(
             reservations = await api_client.get_all_reservations(
                 listing_id,
             )
+        except HostawayResponseError as exc:
+            if "not found" in str(exc).lower():
+                return {"found": False, "reservation": None}
+            raise HomeAssistantError(
+                f"Failed to fetch reservations: {exc}",
+            ) from exc
         except HostawayApiError as exc:
             raise HomeAssistantError(
                 f"Failed to fetch reservations: {exc}",

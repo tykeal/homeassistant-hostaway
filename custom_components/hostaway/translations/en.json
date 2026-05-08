@@ -59,5 +59,24 @@
         "error": {
             "invalid_scan_interval": "Scan intervals must be at least 1 minute each."
         }
+    },
+    "entity": {
+        "sensor": {
+            "reservation_status": {
+                "name": "Reservation status",
+                "state": {
+                    "no_reservation": "No reservation",
+                    "awaiting_checkin": "Awaiting check-in",
+                    "checked_in": "Checked in",
+                    "pending_approval": "Pending approval",
+                    "awaiting_guest": "Awaiting guest",
+                    "owner_stay": "Owner stay",
+                    "checked_out": "Checked out",
+                    "cancelled": "Cancelled",
+                    "inquiry": "Inquiry",
+                    "unknown": "Unknown"
+                }
+            }
+        }
     }
 }

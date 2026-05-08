@@ -177,11 +177,7 @@ class TestListingDeletedInHostaway:
 
         # Sensor states should show unavailable
         states = hass.states.async_all("sensor")
-        listing_sensors = [
-            s
-            for s in states
-            if "ocean_suite_1" in s.entity_id and "reservation" not in s.entity_id
-        ]
+        listing_sensors = [s for s in states if "ocean_suite_1_hostaway" in s.entity_id]
         assert len(listing_sensors) > 0
         for sensor in listing_sensors:
             assert sensor.state == "unavailable"
