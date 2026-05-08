@@ -252,6 +252,15 @@ class HostawayListingSensor(HostawayEntity, SensorEntity):
             return None
         return self.entity_description.value_fn(listing)
 
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return listing_id so users can discover it in the UI.
+
+        Returns:
+            Dictionary with the listing_id attribute.
+        """
+        return {"listing_id": self._listing_id}
+
 
 class HostawayReservationStatusSensor(
     CoordinatorEntity["HostawayReservationsCoordinator"],
