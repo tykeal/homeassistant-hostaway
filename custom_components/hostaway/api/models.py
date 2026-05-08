@@ -282,7 +282,7 @@ class HostawayListing:
         return cls(
             id=data["id"],
             name=data["name"],
-            internal_name=data.get("internalName"),
+            internal_name=data.get("internalListingName") or data.get("internalName"),
             status=status,
             address=address,
             city=data.get("city"),

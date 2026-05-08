@@ -180,7 +180,8 @@ class TestListingDeletedInHostaway:
         listing_sensors = [
             s
             for s in states
-            if "ocean_suite_1" in s.entity_id and "reservation" not in s.entity_id
+            if "ocean_suite_1" in s.entity_id
+            and "reservation_status" not in s.entity_id
         ]
         assert len(listing_sensors) > 0
         for sensor in listing_sensors:

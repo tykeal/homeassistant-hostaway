@@ -451,29 +451,25 @@ class TestSetDoorCode:
 class TestGetReservations:
     """Tests for the hostaway.get_reservations service."""
 
-    @patch(
-        "custom_components.hostaway.services.HostawayApiClient.get_all_reservations",
-        new_callable=AsyncMock,
-    )
     async def test_fires_event_with_correct_payload(
         self,
-        mock_get: AsyncMock,
         hass: HomeAssistant,
     ) -> None:
         """Successful call fires event with snake_case payload."""
-        mock_get.return_value = [
-            _make_reservation(
-                id=99001,
-                guest_name="John Doe",
-                check_in="2025-08-01",
-                check_out="2025-08-05",
-                status="confirmed",
-                door_code="1234",
-            ),
-        ]
-
         entry = _make_entry()
         await _setup_entry(hass, entry)
+
+        # Seed reservations coordinator cache
+        reservation = _make_reservation(
+            id=99001,
+            guest_name="John Doe",
+            check_in="2025-08-01",
+            check_out="2025-08-05",
+            status="confirmed",
+            door_code="1234",
+        )
+        res_coord = hass.data[DOMAIN][entry.entry_id]["reservations_coordinator"]
+        res_coord.async_set_updated_data({12345: [reservation]})
 
         # Inject a listing into the coordinator cache
         listing = HostawayListing(id=12345, name="Beach House")
@@ -636,7 +632,7 @@ class TestGetReservations:
             await hass.services.async_call(
                 DOMAIN,
                 "get_reservations",
-                {"listing_id": 12345},
+                {"listing_id": 12345, "force_refresh": True},
                 blocking=True,
             )
 
@@ -716,6 +712,7 @@ class TestGetReservations:
             {
                 "listing_id": 67890,
                 "config_entry_id": entry2.entry_id,
+                "force_refresh": True,
             },
             blocking=True,
         )
@@ -762,3 +759,348 @@ class TestGetReservations:
                 {"listing_id": 12345},
                 blocking=True,
             )
+
+    async def test_returns_data_from_coordinator_cache(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Returns cached data without hitting the API."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        # Seed coordinator cache
+        reservation = _make_reservation(
+            id=99001,
+            listing_id=12345,
+            guest_name="Jane Doe",
+            check_in="2025-09-01",
+            check_out="2025-09-05",
+            status="confirmed",
+            door_code="4321",
+        )
+        res_coord = hass.data[DOMAIN][entry.entry_id]["reservations_coordinator"]
+        res_coord.async_set_updated_data({12345: [reservation]})
+
+        listing = HostawayListing(id=12345, name="Beach House")
+        coord = hass.data[DOMAIN][entry.entry_id]["listings_coordinator"]
+        coord.async_set_updated_data({12345: listing})
+
+        # Spy on API client to ensure it is NOT called
+        api_client = hass.data[DOMAIN][entry.entry_id]["api_client"]
+        api_client.get_all_reservations = AsyncMock()
+
+        result = await hass.services.async_call(
+            DOMAIN,
+            "get_reservations",
+            {"listing_id": 12345},
+            blocking=True,
+            return_response=True,
+        )
+
+        api_client.get_all_reservations.assert_not_called()
+        assert result["listing_id"] == 12345  # type: ignore[index]
+        assert result["listing_name"] == "Beach House"  # type: ignore[index]
+        reservations = result["reservations"]  # type: ignore[index]
+        assert len(reservations) == 1  # type: ignore[arg-type]
+        assert reservations[0]["guest_name"] == "Jane Doe"  # type: ignore[call-overload, index]
+
+    @patch(
+        "custom_components.hostaway.services.HostawayApiClient.get_all_reservations",
+        new_callable=AsyncMock,
+    )
+    async def test_force_refresh_hits_api(
+        self,
+        mock_get: AsyncMock,
+        hass: HomeAssistant,
+    ) -> None:
+        """force_refresh=True bypasses cache and hits API."""
+        mock_get.return_value = [
+            _make_reservation(
+                id=99002,
+                guest_name="Fresh Data",
+                check_in="2025-10-01",
+                check_out="2025-10-05",
+            ),
+        ]
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        # Seed coordinator with stale data
+        stale = _make_reservation(id=99001, guest_name="Stale Data")
+        res_coord = hass.data[DOMAIN][entry.entry_id]["reservations_coordinator"]
+        res_coord.async_set_updated_data({12345: [stale]})
+
+        result = await hass.services.async_call(
+            DOMAIN,
+            "get_reservations",
+            {"listing_id": 12345, "force_refresh": True},
+            blocking=True,
+            return_response=True,
+        )
+
+        mock_get.assert_called_once_with(12345)
+        reservations = result["reservations"]  # type: ignore[index]
+        assert reservations[0]["guest_name"] == "Fresh Data"  # type: ignore[call-overload, index]
+
+
+class TestFindReservation:
+    """Tests for the hostaway.find_reservation service."""
+
+    async def test_finds_match_in_local_cache(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Finds a reservation from coordinator cache."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        reservation = _make_reservation(
+            id=99001,
+            listing_id=12345,
+            guest_name="John Doe",
+            check_in="2025-08-01",
+            check_out="2025-08-05",
+            status="confirmed",
+            door_code="1234",
+        )
+        res_coord = hass.data[DOMAIN][entry.entry_id]["reservations_coordinator"]
+        res_coord.async_set_updated_data({12345: [reservation]})
+
+        result = await hass.services.async_call(
+            DOMAIN,
+            "find_reservation",
+            {
+                "guest_name": "John Doe",
+                "check_in": "2025-08-01",
+                "check_out": "2025-08-05",
+            },
+            blocking=True,
+            return_response=True,
+        )
+
+        assert result["found"] is True  # type: ignore[index]
+        assert result["reservation"]["id"] == 99001  # type: ignore[call-overload, index]
+        assert result["reservation"]["door_code"] == "1234"  # type: ignore[call-overload, index]
+
+    async def test_case_insensitive_match(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Guest name match is case-insensitive."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        reservation = _make_reservation(
+            id=99002,
+            listing_id=12345,
+            guest_name="Jane Smith",
+            check_in="2025-09-01",
+            check_out="2025-09-05",
+        )
+        res_coord = hass.data[DOMAIN][entry.entry_id]["reservations_coordinator"]
+        res_coord.async_set_updated_data({12345: [reservation]})
+
+        result = await hass.services.async_call(
+            DOMAIN,
+            "find_reservation",
+            {
+                "guest_name": "jane smith",
+                "check_in": "2025-09-01",
+                "check_out": "2025-09-05",
+            },
+            blocking=True,
+            return_response=True,
+        )
+
+        assert result["found"] is True  # type: ignore[index]
+        assert result["reservation"]["id"] == 99002  # type: ignore[call-overload, index]
+
+    async def test_returns_not_found(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Returns not-found when no match exists."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        result = await hass.services.async_call(
+            DOMAIN,
+            "find_reservation",
+            {
+                "guest_name": "Nobody Here",
+                "check_in": "2025-01-01",
+                "check_out": "2025-01-05",
+            },
+            blocking=True,
+            return_response=True,
+        )
+
+        assert result["found"] is False  # type: ignore[index]
+        assert result["reservation"] is None  # type: ignore[index]
+
+    @patch(
+        "custom_components.hostaway.services.HostawayApiClient.get_all_reservations",
+        new_callable=AsyncMock,
+    )
+    async def test_falls_back_to_api(
+        self,
+        mock_get: AsyncMock,
+        hass: HomeAssistant,
+    ) -> None:
+        """Falls back to API when not in cache."""
+        mock_get.return_value = [
+            _make_reservation(
+                id=99003,
+                listing_id=12345,
+                guest_name="API Guest",
+                check_in="2025-11-01",
+                check_out="2025-11-05",
+                status="confirmed",
+                door_code="9999",
+            ),
+        ]
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        # Cache has no matching reservation
+        res_coord = hass.data[DOMAIN][entry.entry_id]["reservations_coordinator"]
+        res_coord.async_set_updated_data({12345: []})
+
+        result = await hass.services.async_call(
+            DOMAIN,
+            "find_reservation",
+            {
+                "guest_name": "API Guest",
+                "check_in": "2025-11-01",
+                "check_out": "2025-11-05",
+                "listing_id": 12345,
+            },
+            blocking=True,
+            return_response=True,
+        )
+
+        mock_get.assert_called_once_with(12345)
+        assert result["found"] is True  # type: ignore[index]
+        assert result["reservation"]["id"] == 99003  # type: ignore[call-overload, index]
+
+    async def test_service_registered(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """find_reservation service is registered on setup."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        assert hass.services.has_service(DOMAIN, "find_reservation")
+
+    async def test_service_removed_on_unload(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """find_reservation service removed on last entry unload."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()
+
+        assert not hass.services.has_service(DOMAIN, "find_reservation")
+
+    async def test_multi_entry_no_id_raises_error(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Missing config_entry_id with multiple entries raises."""
+        entry1 = MockConfigEntry(
+            domain=DOMAIN,
+            title="Hostaway (client-1)",
+            data={
+                CONF_CLIENT_ID: "test-client-id-1",
+                CONF_CLIENT_SECRET: "test-client-secret-1",
+                CONF_SELECTED_LISTINGS: [12345],
+            },
+            unique_id="client-1",
+        )
+        entry2 = MockConfigEntry(
+            domain=DOMAIN,
+            title="Hostaway (client-2)",
+            data={
+                CONF_CLIENT_ID: "test-client-id-2",
+                CONF_CLIENT_SECRET: "test-client-secret-2",
+                CONF_SELECTED_LISTINGS: [67890],
+            },
+            unique_id="client-2",
+        )
+        await _setup_entry(hass, entry1)
+        await _setup_entry(hass, entry2)
+
+        with pytest.raises(
+            ServiceValidationError,
+            match="config_entry_id required",
+        ):
+            await hass.services.async_call(
+                DOMAIN,
+                "find_reservation",
+                {
+                    "guest_name": "John Doe",
+                    "check_in": "2025-08-01",
+                    "check_out": "2025-08-05",
+                },
+                blocking=True,
+                return_response=True,
+            )
+
+    async def test_multi_entry_selects_correct_cache(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """config_entry_id searches the correct entry's cache."""
+        entry1 = MockConfigEntry(
+            domain=DOMAIN,
+            title="Hostaway (client-1)",
+            data={
+                CONF_CLIENT_ID: "test-client-id-1",
+                CONF_CLIENT_SECRET: "test-client-secret-1",
+                CONF_SELECTED_LISTINGS: [12345],
+            },
+            unique_id="client-1",
+        )
+        entry2 = MockConfigEntry(
+            domain=DOMAIN,
+            title="Hostaway (client-2)",
+            data={
+                CONF_CLIENT_ID: "test-client-id-2",
+                CONF_CLIENT_SECRET: "test-client-secret-2",
+                CONF_SELECTED_LISTINGS: [67890],
+            },
+            unique_id="client-2",
+        )
+        await _setup_entry(hass, entry1)
+        await _setup_entry(hass, entry2)
+
+        # Seed entry2's coordinator with a reservation
+        reservation = _make_reservation(
+            id=88001,
+            listing_id=67890,
+            guest_name="Entry2 Guest",
+            check_in="2025-12-01",
+            check_out="2025-12-05",
+            status="confirmed",
+        )
+        res_coord = hass.data[DOMAIN][entry2.entry_id]["reservations_coordinator"]
+        res_coord.async_set_updated_data({67890: [reservation]})
+
+        result = await hass.services.async_call(
+            DOMAIN,
+            "find_reservation",
+            {
+                "guest_name": "Entry2 Guest",
+                "check_in": "2025-12-01",
+                "check_out": "2025-12-05",
+                "config_entry_id": entry2.entry_id,
+            },
+            blocking=True,
+            return_response=True,
+        )
+
+        assert result["found"] is True  # type: ignore[index]
