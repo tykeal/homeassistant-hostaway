@@ -17,6 +17,7 @@ from custom_components.hostaway.api.exceptions import (
     HostawayApiError,
     HostawayResponseError,
 )
+from custom_components.hostaway.api.models import HostawayReservation
 from custom_components.hostaway.const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -333,7 +334,7 @@ async def async_handle_find_reservation(
     entry_data = _resolve_entry_data(hass, call.data)
     reservations_coordinator = entry_data["reservations_coordinator"]
 
-    def _match(r: Any) -> bool:
+    def _match(r: HostawayReservation) -> bool:
         """Check if reservation matches search criteria."""
         return (
             guest_name.lower() in r.guest_name.lower()
@@ -378,7 +379,7 @@ async def async_handle_find_reservation(
     return {"found": False, "reservation": None}
 
 
-def _reservation_result(r: Any) -> dict[str, Any]:
+def _reservation_result(r: HostawayReservation) -> dict[str, Any]:
     """Build a successful find_reservation result dict.
 
     Args:
