@@ -38,6 +38,9 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
+# Statuses already warned about to avoid log spam.
+_warned_statuses: set[str] = set()
+
 # Priority for selecting the most relevant reservation.
 # Lower number = higher priority.
 _STATUS_PRIORITY: dict[str, int] = {
@@ -130,10 +133,12 @@ def _derive_state(
     derived = _STATUS_TO_DERIVED.get(reservation.status)
     if derived is not None:
         return derived
-    _LOGGER.warning(
-        "Unknown Hostaway reservation status '%s'; reporting as 'unknown'",
-        reservation.status,
-    )
+    if reservation.status not in _warned_statuses:
+        _warned_statuses.add(reservation.status)
+        _LOGGER.warning(
+            "Unknown Hostaway reservation status '%s'; reporting as 'unknown'",
+            reservation.status,
+        )
     return "unknown"
 
 

@@ -4,8 +4,10 @@
 
 from __future__ import annotations
 
+import logging
 from unittest.mock import AsyncMock
 
+import pytest
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -31,6 +33,7 @@ from custom_components.hostaway.sensor import (
     _build_reservation_attributes,
     _derive_state,
     _select_reservation,
+    _warned_statuses,
 )
 
 
@@ -504,25 +507,61 @@ class TestDeriveState:
         res = _make_reservation(status="unknown")
         assert _derive_state(res) == "unknown"
 
-    def test_truly_unknown_status_maps_to_unknown(self) -> None:
+    def test_truly_unknown_status_maps_to_unknown(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
         """Unrecognised status maps to unknown with warning."""
+        _warned_statuses.discard("totally_new_status")
         res = _make_reservation(status="totally_new_status")
-        assert _derive_state(res) == "unknown"
+        with caplog.at_level(logging.WARNING):
+            assert _derive_state(res) == "unknown"
+        assert "totally_new_status" in caplog.text
 
-    def test_all_status_to_derived_values_in_options(self) -> None:
+    def test_unknown_warning_logged_once(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Warning for same unknown status only logged once."""
+        _warned_statuses.discard("repeat_status")
+        res = _make_reservation(status="repeat_status")
+        with caplog.at_level(logging.WARNING):
+            _derive_state(res)
+            _derive_state(res)
+        count = caplog.text.count("repeat_status")
+        assert count == 1
+        _warned_statuses.discard("repeat_status")
+
+    def test_all_status_to_derived_values_in_options(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
         """Every derived state is a valid ENUM option."""
-        valid = {
-            "checked_in",
-            "awaiting_checkin",
-            "pending_approval",
-            "awaiting_guest",
-            "owner_stay",
-            "checked_out",
-            "cancelled",
-            "inquiry",
-            "unknown",
-            "no_reservation",
-        }
+        entry = _make_entry(selected=[100])
+        entry.add_to_hass(hass)
+        api = AsyncMock()
+        api.get_all_reservations = AsyncMock(return_value=[])
+        listings_api = AsyncMock()
+        listings_api.get_all_listings = AsyncMock(
+            return_value=[_make_listing(100)],
+        )
+        l_coord = HostawayListingsCoordinator(
+            hass,
+            entry,
+            listings_api,
+        )
+        r_coord = HostawayReservationsCoordinator(
+            hass,
+            entry,
+            api,
+        )
+        sensor = HostawayReservationStatusSensor(
+            r_coord,
+            l_coord,
+            100,
+            entry,
+        )
+        valid = set(sensor.options or [])
         for derived in _STATUS_TO_DERIVED.values():
             assert derived in valid, f"{derived} not in options"
 
