@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
 
+import voluptuous as vol
 from homeassistant.config_entries import SOURCE_USER
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
@@ -294,7 +295,7 @@ class TestStepListings:
 
         assert result["data_schema"] is not None
         schema = result["data_schema"].schema
-        selector = schema[CONF_SELECTED_LISTINGS]
+        selector = schema[vol.Required(CONF_SELECTED_LISTINGS)]
         options = selector.config["options"]
         assert options[0]["label"] == "beach-1 (ID: 101)"
 
@@ -335,7 +336,7 @@ class TestStepListings:
 
         assert result["data_schema"] is not None
         schema = result["data_schema"].schema
-        selector = schema[CONF_SELECTED_LISTINGS]
+        selector = schema[vol.Required(CONF_SELECTED_LISTINGS)]
         options = selector.config["options"]
         assert options[0]["label"] == "Mountain Cabin (ID: 201)"
 
