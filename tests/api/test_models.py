@@ -226,6 +226,20 @@ class TestHostawayListingFromApiResponse:
         assert listing.base_price == 150.00
         assert listing.currency == "USD"
 
+    def test_internal_listing_name_preferred(self) -> None:
+        """internalListingName is preferred over internalName."""
+        data = make_listing_response(internalName="fallback-name")
+        listing = HostawayListing.from_api_response(data)
+        assert listing.internal_name == "ocean-suite-1"
+
+    def test_internal_name_fallback(self) -> None:
+        """Falls back to internalName when internalListingName absent."""
+        data = make_listing_response()
+        del data["internalListingName"]
+        data["internalName"] = "legacy-name"
+        listing = HostawayListing.from_api_response(data)
+        assert listing.internal_name == "legacy-name"
+
     def test_is_active_maps_to_status_active(self) -> None:
         """isActive=1 maps to status='active'."""
         data = make_listing_response(isActive=1)

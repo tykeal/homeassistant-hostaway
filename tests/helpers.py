@@ -49,7 +49,7 @@ def make_listing_response(**overrides: Any) -> dict[str, Any]:
     defaults: dict[str, Any] = {
         "id": 12345,
         "name": "Oceanview Suite",
-        "internalName": "ocean-suite-1",
+        "internalListingName": "ocean-suite-1",
         "isActive": 1,
         "address": "123 Beach Road",
         "city": "Miami",
