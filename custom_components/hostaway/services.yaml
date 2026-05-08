@@ -53,7 +53,10 @@ get_reservations:
     Retrieve reservations for a listing. Returns cached data
     when the listing is tracked locally, falls back to the
     Hostaway API when the listing is not in cache or when
-    force_refresh is true.
+    force_refresh is true. Also fires a
+    hostaway_reservations_retrieved event for backwards
+    compatibility. Supports return_response for direct data
+    access.
   fields:
     listing_id:
       name: Listing ID
