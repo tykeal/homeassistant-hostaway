@@ -24,6 +24,7 @@ from custom_components.hostaway.coordinator import (
     HostawayReservationsCoordinator,
 )
 from custom_components.hostaway.sensor import (
+    _STATUS_TO_DERIVED,
     LISTING_SENSOR_DESCRIPTIONS,
     HostawayListingSensor,
     HostawayReservationStatusSensor,
@@ -369,9 +370,25 @@ class TestSelectReservation:
 
     def test_unknown_status_sorts_last(self) -> None:
         """Unknown status sorts after all known statuses."""
-        unknown = _make_reservation(1, status="pending")
+        unknown = _make_reservation(1, status="totally_unknown")
         cancelled = _make_reservation(2, status="cancelled")
         result = _select_reservation([unknown, cancelled])
+        assert result is not None
+        assert result.id == 2
+
+    def test_new_status_wins_over_checked_out(self) -> None:
+        """new has higher priority than checked_out."""
+        checked_out = _make_reservation(1, status="checked_out")
+        new = _make_reservation(2, status="new")
+        result = _select_reservation([checked_out, new])
+        assert result is not None
+        assert result.id == 2
+
+    def test_pending_wins_over_owner_stay(self) -> None:
+        """pending has higher priority than ownerStay."""
+        owner = _make_reservation(1, status="ownerStay")
+        pending = _make_reservation(2, status="pending")
+        result = _select_reservation([owner, pending])
         assert result is not None
         assert result.id == 2
 
@@ -396,24 +413,118 @@ class TestDeriveState:
         assert _derive_state(res) == "awaiting_checkin"
 
     def test_checked_in_passes_through(self) -> None:
-        """checked_in passes through unchanged."""
+        """checked_in maps to checked_in."""
         res = _make_reservation(status="checked_in")
         assert _derive_state(res) == "checked_in"
 
     def test_checked_out_passes_through(self) -> None:
-        """checked_out passes through unchanged."""
+        """checked_out maps to checked_out."""
         res = _make_reservation(status="checked_out")
         assert _derive_state(res) == "checked_out"
 
-    def test_cancelled_passes_through(self) -> None:
-        """cancelled passes through unchanged."""
+    def test_cancelled_maps_to_cancelled(self) -> None:
+        """cancelled maps to cancelled."""
         res = _make_reservation(status="cancelled")
         assert _derive_state(res) == "cancelled"
 
-    def test_unknown_status_passes_through(self) -> None:
-        """Unknown status passes through unchanged."""
-        res = _make_reservation(status="pending_review")
-        assert _derive_state(res) == "pending_review"
+    def test_new_maps_to_awaiting_checkin(self) -> None:
+        """new maps to awaiting_checkin."""
+        res = _make_reservation(status="new")
+        assert _derive_state(res) == "awaiting_checkin"
+
+    def test_modified_maps_to_awaiting_checkin(self) -> None:
+        """modified maps to awaiting_checkin."""
+        res = _make_reservation(status="modified")
+        assert _derive_state(res) == "awaiting_checkin"
+
+    def test_pending_maps_to_pending_approval(self) -> None:
+        """pending maps to pending_approval."""
+        res = _make_reservation(status="pending")
+        assert _derive_state(res) == "pending_approval"
+
+    def test_unconfirmed_maps_to_pending_approval(self) -> None:
+        """unconfirmed maps to pending_approval."""
+        res = _make_reservation(status="unconfirmed")
+        assert _derive_state(res) == "pending_approval"
+
+    def test_awaiting_payment_maps_to_awaiting_guest(self) -> None:
+        """awaitingPayment maps to awaiting_guest."""
+        res = _make_reservation(status="awaitingPayment")
+        assert _derive_state(res) == "awaiting_guest"
+
+    def test_awaiting_verification_maps_to_awaiting_guest(
+        self,
+    ) -> None:
+        """awaitingGuestVerification maps to awaiting_guest."""
+        res = _make_reservation(status="awaitingGuestVerification")
+        assert _derive_state(res) == "awaiting_guest"
+
+    def test_owner_stay_maps_to_owner_stay(self) -> None:
+        """ownerStay maps to owner_stay."""
+        res = _make_reservation(status="ownerStay")
+        assert _derive_state(res) == "owner_stay"
+
+    def test_declined_maps_to_cancelled(self) -> None:
+        """declined maps to cancelled."""
+        res = _make_reservation(status="declined")
+        assert _derive_state(res) == "cancelled"
+
+    def test_expired_maps_to_cancelled(self) -> None:
+        """expired maps to cancelled."""
+        res = _make_reservation(status="expired")
+        assert _derive_state(res) == "cancelled"
+
+    def test_inquiry_maps_to_inquiry(self) -> None:
+        """inquiry maps to inquiry."""
+        res = _make_reservation(status="inquiry")
+        assert _derive_state(res) == "inquiry"
+
+    def test_inquiry_preapproved_maps_to_inquiry(self) -> None:
+        """inquiryPreapproved maps to inquiry."""
+        res = _make_reservation(status="inquiryPreapproved")
+        assert _derive_state(res) == "inquiry"
+
+    def test_inquiry_denied_maps_to_inquiry(self) -> None:
+        """inquiryDenied maps to inquiry."""
+        res = _make_reservation(status="inquiryDenied")
+        assert _derive_state(res) == "inquiry"
+
+    def test_inquiry_timedout_maps_to_inquiry(self) -> None:
+        """inquiryTimedout maps to inquiry."""
+        res = _make_reservation(status="inquiryTimedout")
+        assert _derive_state(res) == "inquiry"
+
+    def test_inquiry_not_possible_maps_to_inquiry(self) -> None:
+        """inquiryNotPossible maps to inquiry."""
+        res = _make_reservation(status="inquiryNotPossible")
+        assert _derive_state(res) == "inquiry"
+
+    def test_unknown_api_status_maps_to_unknown(self) -> None:
+        """unknown API status maps to unknown."""
+        res = _make_reservation(status="unknown")
+        assert _derive_state(res) == "unknown"
+
+    def test_truly_unknown_status_maps_to_unknown(self) -> None:
+        """Unrecognised status maps to unknown with warning."""
+        res = _make_reservation(status="totally_new_status")
+        assert _derive_state(res) == "unknown"
+
+    def test_all_status_to_derived_values_in_options(self) -> None:
+        """Every derived state is a valid ENUM option."""
+        valid = {
+            "checked_in",
+            "awaiting_checkin",
+            "pending_approval",
+            "awaiting_guest",
+            "owner_stay",
+            "checked_out",
+            "cancelled",
+            "inquiry",
+            "unknown",
+            "no_reservation",
+        }
+        for derived in _STATUS_TO_DERIVED.values():
+            assert derived in valid, f"{derived} not in options"
 
 
 class TestBuildReservationAttributes:

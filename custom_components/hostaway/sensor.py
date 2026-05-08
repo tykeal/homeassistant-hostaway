@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -35,13 +36,53 @@ if TYPE_CHECKING:
         HostawayReservationsCoordinator,
     )
 
+_LOGGER = logging.getLogger(__name__)
+
 # Priority for selecting the most relevant reservation.
 # Lower number = higher priority.
 _STATUS_PRIORITY: dict[str, int] = {
     "checked_in": 0,
     "confirmed": 1,
-    "checked_out": 2,
-    "cancelled": 3,
+    "new": 1,
+    "modified": 1,
+    "pending": 2,
+    "unconfirmed": 2,
+    "awaitingPayment": 3,
+    "awaitingGuestVerification": 3,
+    "ownerStay": 4,
+    "checked_out": 5,
+    "cancelled": 6,
+    "declined": 7,
+    "expired": 7,
+    "inquiry": 8,
+    "inquiryPreapproved": 8,
+    "inquiryDenied": 9,
+    "inquiryTimedout": 9,
+    "inquiryNotPossible": 9,
+    "unknown": 10,
+}
+
+# Map raw API statuses to user-friendly derived states.
+_STATUS_TO_DERIVED: dict[str, str] = {
+    "checked_in": "checked_in",
+    "confirmed": "awaiting_checkin",
+    "new": "awaiting_checkin",
+    "modified": "awaiting_checkin",
+    "pending": "pending_approval",
+    "unconfirmed": "pending_approval",
+    "awaitingPayment": "awaiting_guest",
+    "awaitingGuestVerification": "awaiting_guest",
+    "ownerStay": "owner_stay",
+    "checked_out": "checked_out",
+    "cancelled": "cancelled",
+    "declined": "cancelled",
+    "expired": "cancelled",
+    "inquiry": "inquiry",
+    "inquiryPreapproved": "inquiry",
+    "inquiryDenied": "inquiry",
+    "inquiryTimedout": "inquiry",
+    "inquiryNotPossible": "inquiry",
+    "unknown": "unknown",
 }
 
 
@@ -73,9 +114,10 @@ def _derive_state(
 ) -> str:
     """Derive the sensor state from a reservation.
 
-    Maps ``confirmed`` to ``awaiting_checkin`` and returns
-    ``no_reservation`` when no reservation is selected.
-    Unknown statuses pass through unchanged.
+    Maps raw API statuses to user-friendly derived states
+    using ``_STATUS_TO_DERIVED``. Returns ``no_reservation``
+    when no reservation is selected, and ``unknown`` for
+    unrecognised statuses (with a warning log).
 
     Args:
         reservation: The selected reservation, or None.
@@ -85,9 +127,14 @@ def _derive_state(
     """
     if reservation is None:
         return "no_reservation"
-    if reservation.status == "confirmed":
-        return "awaiting_checkin"
-    return reservation.status
+    derived = _STATUS_TO_DERIVED.get(reservation.status)
+    if derived is not None:
+        return derived
+    _LOGGER.warning(
+        "Unknown Hostaway reservation status '%s'; reporting as 'unknown'",
+        reservation.status,
+    )
+    return "unknown"
 
 
 def _build_reservation_attributes(
@@ -282,8 +329,13 @@ class HostawayReservationStatusSensor(
     _attr_options = [  # noqa: RUF012
         "checked_in",
         "awaiting_checkin",
+        "pending_approval",
+        "awaiting_guest",
+        "owner_stay",
         "checked_out",
         "cancelled",
+        "inquiry",
+        "unknown",
         "no_reservation",
     ]
 
