@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
 
+import voluptuous as vol
 from homeassistant.config_entries import SOURCE_USER
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
@@ -255,6 +256,89 @@ class TestStepListings:
 
         assert result["type"] is FlowResultType.FORM
         assert result["step_id"] == "listings"
+
+    @patch(
+        "custom_components.hostaway.config_flow._validate_credentials",
+        new_callable=AsyncMock,
+        return_value=None,
+    )
+    @patch(
+        "custom_components.hostaway.config_flow._fetch_listings",
+        new_callable=AsyncMock,
+    )
+    async def test_labels_use_internal_name(
+        self,
+        mock_fetch: AsyncMock,
+        mock_validate: AsyncMock,
+        hass: HomeAssistant,
+    ) -> None:
+        """Labels prefer internal_name over external name."""
+        from custom_components.hostaway.api.models import HostawayListing
+
+        mock_fetch.return_value = [
+            HostawayListing(
+                id=101,
+                name="Beach House",
+                internal_name="beach-1",
+                status="active",
+            ),
+        ]
+
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": SOURCE_USER},
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            user_input=VALID_INPUT,
+        )
+
+        assert result["data_schema"] is not None
+        schema = result["data_schema"].schema
+        selector = schema[vol.Required(CONF_SELECTED_LISTINGS)]
+        options = selector.config["options"]
+        assert options[0]["label"] == "beach-1 (ID: 101)"
+
+    @patch(
+        "custom_components.hostaway.config_flow._validate_credentials",
+        new_callable=AsyncMock,
+        return_value=None,
+    )
+    @patch(
+        "custom_components.hostaway.config_flow._fetch_listings",
+        new_callable=AsyncMock,
+    )
+    async def test_labels_fallback_to_name(
+        self,
+        mock_fetch: AsyncMock,
+        mock_validate: AsyncMock,
+        hass: HomeAssistant,
+    ) -> None:
+        """Labels fall back to name when internal_name is None."""
+        from custom_components.hostaway.api.models import HostawayListing
+
+        mock_fetch.return_value = [
+            HostawayListing(
+                id=201,
+                name="Mountain Cabin",
+                status="active",
+            ),
+        ]
+
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": SOURCE_USER},
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            user_input=VALID_INPUT,
+        )
+
+        assert result["data_schema"] is not None
+        schema = result["data_schema"].schema
+        selector = schema[vol.Required(CONF_SELECTED_LISTINGS)]
+        options = selector.config["options"]
+        assert options[0]["label"] == "Mountain Cabin (ID: 201)"
 
     @patch(
         "custom_components.hostaway.async_setup_entry",
