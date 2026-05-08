@@ -398,4 +398,4 @@ class TestFullLifecycle:
             entity_id = registry.async_get_entity_id("sensor", DOMAIN, uid)
             assert entity_id is not None, f"Missing entity for {uid}"
             assert "hostaway" in entity_id
-            assert "beach_villa" in entity_id
+            assert "ocean_suite_1" in entity_id

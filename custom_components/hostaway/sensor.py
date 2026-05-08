@@ -284,9 +284,8 @@ class HostawayListingSensor(HostawayEntity, SensorEntity):
         listing = coordinator.data.get(listing_id) if coordinator.data else None
         self._suggested_object_id: str | None = None
         if listing:
-            self._suggested_object_id = (
-                f"hostaway_{slugify(listing.name)}_{description.key}"
-            )
+            slug = slugify(listing.internal_name or listing.name)
+            self._suggested_object_id = f"hostaway_{slug}_{description.key}"
 
     @property
     def suggested_object_id(self) -> str | None:

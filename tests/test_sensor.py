@@ -60,12 +60,17 @@ def _make_entry(
     )
 
 
-def _make_listing(listing_id: int = 100, name: str = "Beach House") -> HostawayListing:
+def _make_listing(
+    listing_id: int = 100,
+    name: str = "Beach House",
+    internal_name: str | None = None,
+) -> HostawayListing:
     """Create a HostawayListing for testing.
 
     Args:
         listing_id: The listing ID.
         name: The listing name.
+        internal_name: The internal reference name.
 
     Returns:
         A HostawayListing instance.
@@ -73,6 +78,7 @@ def _make_listing(listing_id: int = 100, name: str = "Beach House") -> HostawayL
     return HostawayListing(
         id=listing_id,
         name=name,
+        internal_name=internal_name,
         status="active",
         property_type="apartment",
         bedrooms=2,
@@ -258,6 +264,27 @@ class TestListingSensor:
         assert device_info["manufacturer"] == "Hostaway"
         assert device_info["model"] == "apartment"
 
+    async def test_device_info_prefers_internal_name(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Device name uses internal_name when available."""
+        entry = _make_entry(selected=[100])
+        entry.add_to_hass(hass)
+        api_client = AsyncMock()
+        api_client.get_all_listings = AsyncMock(
+            return_value=[_make_listing(100, "Beach House", internal_name="Suite 1")]
+        )
+
+        coordinator = HostawayListingsCoordinator(hass, entry, api_client)
+        await coordinator.async_refresh()
+
+        status_desc = next(d for d in LISTING_SENSOR_DESCRIPTIONS if d.key == "status")
+        sensor = HostawayListingSensor(coordinator, 100, entry, status_desc)
+        device_info = sensor.device_info
+        assert device_info is not None
+        assert device_info["name"] == "Suite 1"
+
     async def test_suggested_object_id_follows_fr007(
         self,
         hass: HomeAssistant,
@@ -276,6 +303,25 @@ class TestListingSensor:
         status_desc = next(d for d in LISTING_SENSOR_DESCRIPTIONS if d.key == "status")
         sensor = HostawayListingSensor(coordinator, 100, entry, status_desc)
         assert sensor.suggested_object_id == "hostaway_beach_house_status"
+
+    async def test_suggested_object_id_prefers_internal_name(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """suggested_object_id uses internal_name when set."""
+        entry = _make_entry(selected=[100])
+        entry.add_to_hass(hass)
+        api_client = AsyncMock()
+        api_client.get_all_listings = AsyncMock(
+            return_value=[_make_listing(100, "Beach House", internal_name="Suite 1")]
+        )
+
+        coordinator = HostawayListingsCoordinator(hass, entry, api_client)
+        await coordinator.async_refresh()
+
+        status_desc = next(d for d in LISTING_SENSOR_DESCRIPTIONS if d.key == "status")
+        sensor = HostawayListingSensor(coordinator, 100, entry, status_desc)
+        assert sensor.suggested_object_id == "hostaway_suite_1_status"
 
     async def test_extra_state_attributes_listing_id(
         self,
