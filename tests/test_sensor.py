@@ -1019,3 +1019,89 @@ class TestReservationStatusSensor:
 
         sensor = HostawayReservationStatusSensor(res_coord, listings_coord, 100, entry)
         assert sensor.device_class == SensorDeviceClass.ENUM
+
+    async def test_filter_cancelled_excludes_cancelled(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Cancelled reservations excluded when filter enabled."""
+        entry = _make_entry(selected=[100])
+        entry.add_to_hass(hass)
+        api_client = AsyncMock()
+        r1 = _make_reservation(1, 100, status="confirmed")
+        r2 = _make_reservation(2, 100, status="cancelled")
+        r3 = _make_reservation(3, 100, status="declined")
+        r4 = _make_reservation(4, 100, status="expired")
+        api_client.get_all_reservations = AsyncMock(
+            return_value=[r1, r2, r3, r4],
+        )
+
+        listings_api = AsyncMock()
+        listings_api.get_all_listings = AsyncMock(
+            return_value=[_make_listing(100)],
+        )
+        listings_coord = HostawayListingsCoordinator(
+            hass,
+            entry,
+            listings_api,
+        )
+        await listings_coord.async_refresh()
+        res_coord = HostawayReservationsCoordinator(
+            hass,
+            entry,
+            api_client,
+        )
+        await res_coord.async_refresh()
+
+        sensor = HostawayReservationStatusSensor(
+            res_coord,
+            listings_coord,
+            100,
+            entry,
+            filter_cancelled=True,
+        )
+        assert sensor.native_value == "awaiting_checkin"
+        upcoming = sensor.extra_state_attributes["upcoming_reservations"]
+        assert len(upcoming) == 1
+        assert upcoming[0]["id"] == 1
+
+    async def test_filter_cancelled_disabled_shows_all(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """All reservations shown when filter disabled."""
+        entry = _make_entry(selected=[100])
+        entry.add_to_hass(hass)
+        api_client = AsyncMock()
+        r1 = _make_reservation(1, 100, status="confirmed")
+        r2 = _make_reservation(2, 100, status="cancelled")
+        api_client.get_all_reservations = AsyncMock(
+            return_value=[r1, r2],
+        )
+
+        listings_api = AsyncMock()
+        listings_api.get_all_listings = AsyncMock(
+            return_value=[_make_listing(100)],
+        )
+        listings_coord = HostawayListingsCoordinator(
+            hass,
+            entry,
+            listings_api,
+        )
+        await listings_coord.async_refresh()
+        res_coord = HostawayReservationsCoordinator(
+            hass,
+            entry,
+            api_client,
+        )
+        await res_coord.async_refresh()
+
+        sensor = HostawayReservationStatusSensor(
+            res_coord,
+            listings_coord,
+            100,
+            entry,
+            filter_cancelled=False,
+        )
+        upcoming = sensor.extra_state_attributes["upcoming_reservations"]
+        assert len(upcoming) == 2

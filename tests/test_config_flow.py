@@ -14,9 +14,11 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.hostaway.const import (
     CONF_CLIENT_ID,
     CONF_CLIENT_SECRET,
+    CONF_FILTER_CANCELLED,
     CONF_RESERVATION_SCAN_INTERVAL,
     CONF_SCAN_INTERVAL,
     CONF_SELECTED_LISTINGS,
+    DEFAULT_FILTER_CANCELLED,
     DEFAULT_RESERVATION_SCAN_INTERVAL,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
@@ -385,6 +387,31 @@ class TestOptionsFlow:
         assert result["type"] is FlowResultType.CREATE_ENTRY
         assert result["data"][CONF_SCAN_INTERVAL] == 10
         assert result["data"][CONF_RESERVATION_SCAN_INTERVAL] == 5
+        assert result["data"][CONF_FILTER_CANCELLED] is DEFAULT_FILTER_CANCELLED
+
+    async def test_filter_cancelled_toggle(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Filter cancelled toggle persists in options."""
+        entry = _make_entry()
+        entry.add_to_hass(hass)
+
+        result = await hass.config_entries.options.async_init(
+            entry.entry_id,
+        )
+
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_SCAN_INTERVAL: 5,
+                CONF_RESERVATION_SCAN_INTERVAL: 2,
+                CONF_FILTER_CANCELLED: False,
+            },
+        )
+
+        assert result["type"] is FlowResultType.CREATE_ENTRY
+        assert result["data"][CONF_FILTER_CANCELLED] is False
 
     async def test_below_minimum_shows_error(
         self,

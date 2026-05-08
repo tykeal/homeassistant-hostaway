@@ -34,9 +34,11 @@ from custom_components.hostaway.const import (
     CONF_CACHED_TOKEN,
     CONF_CLIENT_ID,
     CONF_CLIENT_SECRET,
+    CONF_FILTER_CANCELLED,
     CONF_RESERVATION_SCAN_INTERVAL,
     CONF_SCAN_INTERVAL,
     CONF_SELECTED_LISTINGS,
+    DEFAULT_FILTER_CANCELLED,
     DEFAULT_RESERVATION_SCAN_INTERVAL,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
@@ -365,6 +367,10 @@ class HostawayOptionsFlow(OptionsFlow):
                 CONF_RESERVATION_SCAN_INTERVAL,
                 DEFAULT_RESERVATION_SCAN_INTERVAL,
             )
+            filter_cancelled = user_input.get(
+                CONF_FILTER_CANCELLED,
+                DEFAULT_FILTER_CANCELLED,
+            )
 
             if scan < MIN_SCAN_INTERVAL or res_scan < MIN_SCAN_INTERVAL:
                 errors["base"] = "invalid_scan_interval"
@@ -374,6 +380,7 @@ class HostawayOptionsFlow(OptionsFlow):
                     data={
                         CONF_SCAN_INTERVAL: scan,
                         CONF_RESERVATION_SCAN_INTERVAL: res_scan,
+                        CONF_FILTER_CANCELLED: filter_cancelled,
                     },
                 )
 
@@ -384,6 +391,10 @@ class HostawayOptionsFlow(OptionsFlow):
         current_res_scan = self._config_entry.options.get(
             CONF_RESERVATION_SCAN_INTERVAL,
             DEFAULT_RESERVATION_SCAN_INTERVAL,
+        )
+        current_filter = self._config_entry.options.get(
+            CONF_FILTER_CANCELLED,
+            DEFAULT_FILTER_CANCELLED,
         )
 
         schema = vol.Schema(
@@ -396,6 +407,10 @@ class HostawayOptionsFlow(OptionsFlow):
                     CONF_RESERVATION_SCAN_INTERVAL,
                     default=current_res_scan,
                 ): vol.Coerce(int),
+                vol.Optional(
+                    CONF_FILTER_CANCELLED,
+                    default=current_filter,
+                ): bool,
             }
         )
 
