@@ -800,8 +800,9 @@ class TestGetReservations:
         api_client.get_all_reservations.assert_not_called()
         assert result["listing_id"] == 12345  # type: ignore[index]
         assert result["listing_name"] == "Beach House"  # type: ignore[index]
-        assert len(result["reservations"]) == 1  # type: ignore[arg-type, index]
-        assert result["reservations"][0]["guest_name"] == "Jane Doe"  # type: ignore[call-overload, index]
+        reservations = result["reservations"]  # type: ignore[index]
+        assert len(reservations) == 1  # type: ignore[arg-type]
+        assert reservations[0]["guest_name"] == "Jane Doe"  # type: ignore[call-overload, index]
 
     @patch(
         "custom_components.hostaway.services.HostawayApiClient.get_all_reservations",
@@ -838,7 +839,8 @@ class TestGetReservations:
         )
 
         mock_get.assert_called_once_with(12345)
-        assert result["reservations"][0]["guest_name"] == "Fresh Data"  # type: ignore[call-overload, index]
+        reservations = result["reservations"]  # type: ignore[index]
+        assert reservations[0]["guest_name"] == "Fresh Data"  # type: ignore[call-overload, index]
 
 
 class TestFindReservation:

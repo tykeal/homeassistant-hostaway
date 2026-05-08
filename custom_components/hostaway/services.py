@@ -244,13 +244,11 @@ async def async_handle_get_reservations(
     reservations = None
 
     # Use cached data unless force_refresh is requested
-    if not force_refresh:
-        if reservations_coordinator.data is not None:
-            cached = reservations_coordinator.data.get(listing_id)
-            reservations = cached if cached is not None else []
-        else:
-            # No coordinator data yet; fall through to API
-            pass
+    if not force_refresh and reservations_coordinator.data is not None:
+        cached = reservations_coordinator.data.get(listing_id)
+        if cached is not None:
+            reservations = cached
+        # listing_id not tracked locally; fall through to API
 
     if reservations is None:
         api_client: HostawayApiClient = entry_data["api_client"]
