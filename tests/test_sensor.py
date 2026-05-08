@@ -18,6 +18,7 @@ from custom_components.hostaway.api.models import (
 from custom_components.hostaway.const import (
     CONF_CLIENT_ID,
     CONF_CLIENT_SECRET,
+    CONF_FILTER_CANCELLED,
     CONF_SELECTED_LISTINGS,
     DOMAIN,
 )
@@ -1027,6 +1028,9 @@ class TestReservationStatusSensor:
         """Cancelled reservations excluded when filter enabled."""
         entry = _make_entry(selected=[100])
         entry.add_to_hass(hass)
+        hass.config_entries.async_update_entry(
+            entry, options={CONF_FILTER_CANCELLED: True}
+        )
         api_client = AsyncMock()
         r1 = _make_reservation(1, 100, status="confirmed")
         r2 = _make_reservation(2, 100, status="cancelled")
@@ -1058,7 +1062,6 @@ class TestReservationStatusSensor:
             listings_coord,
             100,
             entry,
-            filter_cancelled=True,
         )
         assert sensor.native_value == "awaiting_checkin"
         upcoming = sensor.extra_state_attributes["upcoming_reservations"]
@@ -1072,6 +1075,9 @@ class TestReservationStatusSensor:
         """All reservations shown when filter disabled."""
         entry = _make_entry(selected=[100])
         entry.add_to_hass(hass)
+        hass.config_entries.async_update_entry(
+            entry, options={CONF_FILTER_CANCELLED: False}
+        )
         api_client = AsyncMock()
         r1 = _make_reservation(1, 100, status="confirmed")
         r2 = _make_reservation(2, 100, status="cancelled")
@@ -1101,7 +1107,6 @@ class TestReservationStatusSensor:
             listings_coord,
             100,
             entry,
-            filter_cancelled=False,
         )
         upcoming = sensor.extra_state_attributes["upcoming_reservations"]
         assert len(upcoming) == 2

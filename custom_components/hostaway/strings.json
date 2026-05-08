@@ -47,7 +47,7 @@
                 "data": {
                     "scan_interval": "Listing scan interval (minutes)",
                     "reservation_scan_interval": "Reservation scan interval (minutes)",
-                    "filter_cancelled": "Hide cancelled reservations"
+                    "filter_cancelled": "Exclude inactive reservations"
                 },
                 "data_description": {
                     "scan_interval": "How often to poll for listing updates. Minimum 1 minute.",

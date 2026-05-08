@@ -361,8 +361,6 @@ class HostawayReservationStatusSensor(
         listings_coordinator: HostawayListingsCoordinator,
         listing_id: int,
         entry: ConfigEntry,
-        *,
-        filter_cancelled: bool = True,
     ) -> None:
         """Initialize the reservation status sensor.
 
@@ -371,16 +369,27 @@ class HostawayReservationStatusSensor(
             listings_coordinator: Listings coordinator for device info.
             listing_id: The listing ID to monitor.
             entry: The config entry.
-            filter_cancelled: Whether to exclude cancelled
-                reservations from state and attributes.
         """
         super().__init__(coordinator)
         self._listing_id = listing_id
         self._listings_coordinator = listings_coordinator
+        self._entry = entry
         self._entry_unique_id = entry.unique_id
-        self._filter_cancelled = filter_cancelled
         self._attr_unique_id = f"{entry.unique_id}_{listing_id}_reservation_status"
         self._attr_name = "Reservation status"
+
+    @property
+    def _filter_cancelled(self) -> bool:
+        """Read filter_cancelled from current entry options.
+
+        Returns:
+            True when cancelled reservations should be hidden.
+        """
+        result: bool = self._entry.options.get(
+            CONF_FILTER_CANCELLED,
+            DEFAULT_FILTER_CANCELLED,
+        )
+        return result
 
     @property
     def _reservations(self) -> list[HostawayReservation]:
@@ -473,10 +482,6 @@ async def async_setup_entry(
     reservations_coordinator: HostawayReservationsCoordinator = data[
         "reservations_coordinator"
     ]
-    filter_cancelled = entry.options.get(
-        CONF_FILTER_CANCELLED,
-        DEFAULT_FILTER_CANCELLED,
-    )
 
     entities: list[SensorEntity] = []
     known_listing_ids: set[int] = set()
@@ -500,7 +505,6 @@ async def async_setup_entry(
                     listings_coordinator,
                     listing_id,
                     entry,
-                    filter_cancelled=filter_cancelled,
                 )
             )
 
@@ -529,7 +533,6 @@ async def async_setup_entry(
                         listings_coordinator,
                         listing_id,
                         entry,
-                        filter_cancelled=filter_cancelled,
                     )
                 )
         if new_entities:
