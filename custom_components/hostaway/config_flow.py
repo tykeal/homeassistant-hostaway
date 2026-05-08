@@ -311,7 +311,8 @@ class HostawayConfigFlow(ConfigFlow, domain=DOMAIN):
 
         options: list[SelectOptionDict] = []
         for listing in active_listings:
-            label = f"{listing.name} (ID: {listing.id})"
+            display_name = listing.internal_name or listing.name
+            label = f"{display_name} (ID: {listing.id})"
             options.append(
                 SelectOptionDict(value=str(listing.id), label=label),
             )
