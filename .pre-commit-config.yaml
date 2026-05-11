@@ -82,7 +82,7 @@ repos:
         # args: ["-c body-max-line-length=120", "-c title-max-length=120"]
 
   - repo: https://github.com/openstack/bashate
-    rev: fbd7c2534c2701351c603ff700ddf08202430a31  # frozen: 2.1.1
+    rev: 5798d24d571676fc407e81df574c1ef57b520f23  # frozen: 2.1.1
     hooks:
       - id: bashate
         args: ["--ignore=E006,E011"]
@@ -100,7 +100,7 @@ repos:
         exclude: ".specify/(extensions/git/|)scripts/*/*"
 
   - repo: https://github.com/Mateusz-Grzelinski/actionlint-py
-    rev: 2f3dbd354aa118b539dee99d8eed05a83097a199  # frozen: v1.7.12.24
+    rev: c04ed26e40637cab1aa9879c693832a9c120fb20  # frozen: v1.7.12.24
     hooks:
       - id: actionlint
 
@@ -123,7 +123,7 @@ repos:
       - id: ruff-format
 
   - repo: https://github.com/fsfe/reuse-tool
-    rev: a1bb792acda6fd0724936b4ebbdbc8eceb9c0459  # frozen: v6.2.0
+    rev: 9fabf9eb815a57aac116b435e8346c200cdb8604  # frozen: v6.2.0
     hooks:
       - id: reuse
 
@@ -166,7 +166,7 @@ repos:
   #       args: ['--py37-plus']
 
   - repo: https://github.com/econchick/interrogate
-    rev: 4894019dc8876092bc9b6d56878798c550fad998  # frozen: 1.7.0
+    rev: a6268877efd41a21197445cc04cbf28f9c6facba  # frozen: 1.7.0
     hooks:
       - id: interrogate
         args: [-vv, --fail-under=100]
@@ -174,7 +174,7 @@ repos:
           - setuptools
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: 0f369d245750787ce34997d464ed9605391a5283  # frozen: v1.20.1
+    rev: a9d9ff50af0432cbb950856daf08082fa51cbfa2  # frozen: v2.0.0
     hooks:
       - id: mypy
         verbose: true
