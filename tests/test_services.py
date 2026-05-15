@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -453,7 +453,7 @@ class TestLockedReservationHandling:
     """Tests for HostawayReservationLockedError handling in set_door_code."""
 
     @pytest.fixture(autouse=True)
-    def _clear_locked_state(self) -> Any:
+    def _clear_locked_state(self) -> Iterator[None]:
         """Reset module-level rate-limit state between tests."""
         from custom_components.hostaway import services as services_mod
 
