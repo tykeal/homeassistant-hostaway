@@ -28,6 +28,29 @@ _LOCKED_LOG_COOLDOWN_SECONDS = 3600
 _LOCKED_RESERVATION_LOG_STATE: dict[int, float] = {}
 
 
+def _prune_locked_state(now: float) -> None:
+    """Drop log-state entries older than twice the cooldown.
+
+    Keeps the in-process state bounded for long-lived HA instances
+    that may see many distinct reservation IDs over time. Pruning
+    is opportunistic — invoked when a new WARNING is about to be
+    emitted — and uses a 2x cooldown threshold so entries are
+    retained at least long enough to suppress repeats but cannot
+    grow without bound.
+
+    Args:
+        now: Current ``time.monotonic()`` value.
+    """
+    stale_threshold = 2 * _LOCKED_LOG_COOLDOWN_SECONDS
+    stale = [
+        rid
+        for rid, ts in _LOCKED_RESERVATION_LOG_STATE.items()
+        if (now - ts) >= stale_threshold
+    ]
+    for rid in stale:
+        del _LOCKED_RESERVATION_LOG_STATE[rid]
+
+
 def _log_locked_reservation(
     reservation_id: int,
     exc: HostawayReservationLockedError,
@@ -44,7 +67,9 @@ def _log_locked_reservation(
 
     State is module-level and best-effort: a HA restart resets it,
     which is acceptable. Uses :func:`time.monotonic` so wall-clock
-    changes cannot break the cooldown.
+    changes cannot break the cooldown. The state dict is pruned
+    of entries older than twice the cooldown on each WARNING
+    emission so it stays bounded on long-lived instances.
 
     Args:
         reservation_id: Hostaway reservation ID that was rejected.
@@ -54,6 +79,7 @@ def _log_locked_reservation(
     now = time.monotonic()
     last = _LOCKED_RESERVATION_LOG_STATE.get(reservation_id)
     if last is None or (now - last) >= _LOCKED_LOG_COOLDOWN_SECONDS:
+        _prune_locked_state(now)
         _LOCKED_RESERVATION_LOG_STATE[reservation_id] = now
         _LOGGER.warning(
             "Skipping doorCode update for reservation %s: Hostaway "
