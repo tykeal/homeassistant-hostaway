@@ -4,14 +4,14 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, Mock, PropertyMock, patch
 
 import httpx
 import pytest
 import respx
 
 from custom_components.hostaway.api.auth import HostawayTokenManager
-from custom_components.hostaway.api.client import HostawayApiClient
+from custom_components.hostaway.api.client import HostawayApiClient, _safe_response_body
 from custom_components.hostaway.api.const import DEFAULT_PAGE_LIMIT
 from custom_components.hostaway.api.exceptions import (
     HostawayAuthError,
@@ -242,6 +242,30 @@ class TestHttpClientCore:
         msg = str(exc_info.value)
         assert "Forbidden after token refresh" in msg
         assert "<unavailable>" in msg
+
+    def test_safe_response_body_returns_unavailable_on_read_error(self) -> None:
+        """Test _safe_response_body returns "<unavailable>" if reading body raises."""
+        response = Mock(spec=httpx.Response)
+        # Accessing .text raises, simulating a decode/IO failure.
+        type(response).text = PropertyMock(side_effect=RuntimeError("decode boom"))
+
+        assert _safe_response_body(response) == "<unavailable>"
+
+    def test_safe_response_body_truncates_long_text(self) -> None:
+        """Test _safe_response_body truncates with "..." suffix beyond max_len."""
+        response = Mock(spec=httpx.Response)
+        type(response).text = PropertyMock(return_value="A" * 1000)
+
+        result = _safe_response_body(response, max_len=100)
+
+        assert result == "A" * 100 + "..."
+
+    def test_safe_response_body_returns_short_text_verbatim(self) -> None:
+        """Test _safe_response_body returns short bodies without truncation."""
+        response = Mock(spec=httpx.Response)
+        type(response).text = PropertyMock(return_value="short body")
+
+        assert _safe_response_body(response) == "short body"
 
     async def test_404_raises_response_error(
         self, mock_httpx_client: httpx.AsyncClient
