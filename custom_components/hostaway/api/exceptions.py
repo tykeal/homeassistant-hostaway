@@ -22,6 +22,16 @@ class HostawayAuthError(HostawayApiError):
     """Authentication error: invalid credentials or expired token."""
 
 
+class HostawayReservationLockedError(HostawayApiError):
+    """Hostaway refused a write because the reservation is in a
+    non-writable state (e.g., channel-managed by an OTA, cancelled,
+    or in conflict with another reservation).
+
+    Distinct from HostawayAuthError so callers can treat this as a
+    normal, expected outcome rather than a credential failure.
+    """
+
+
 class HostawayRateLimitError(HostawayApiError):
     """Rate limit exceeded: HTTP 429."""
 

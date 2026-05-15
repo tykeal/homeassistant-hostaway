@@ -18,6 +18,7 @@ from custom_components.hostaway.api.exceptions import (
     HostawayAuthError,
     HostawayConnectionError,
     HostawayRateLimitError,
+    HostawayReservationLockedError,
     HostawayResponseError,
 )
 from tests.helpers import (
@@ -143,10 +144,7 @@ class TestHttpClientCore:
         self, mock_httpx_client: httpx.AsyncClient
     ) -> None:
         """Test persistent 403 raises HostawayAuthError with diagnostic context."""
-        body = (
-            '{"status":"fail","result":"You don\'t have permission to '
-            'modify this reservation"}'
-        )
+        body = '{"status":"fail","result":"invalid_token: token has expired"}'
         respx.put(f"{FAKE_BASE_URL}/v1/reservations/12345").mock(
             return_value=httpx.Response(403, text=body)
         )
@@ -164,13 +162,16 @@ class TestHttpClientCore:
         assert "PUT" in msg
         assert "/v1/reservations/12345" in msg
         assert "403" in msg
-        assert "permission to modify" in msg
+        assert "expired" in msg
 
     async def test_persistent_403_truncates_long_body(
         self, mock_httpx_client: httpx.AsyncClient
     ) -> None:
         """Test persistent 403 truncates response body in error message."""
-        long_body = "X" * 2000
+        # Prefix with an auth phrase so the body is classified as auth
+        # and exercises the post-refresh persistent-403 path. The bulk
+        # padding then verifies truncation in the resulting message.
+        long_body = "invalid_token " + ("X" * 2000)
         respx.get(f"{FAKE_BASE_URL}/v1/listings").mock(
             return_value=httpx.Response(403, text=long_body)
         )
@@ -243,6 +244,94 @@ class TestHttpClientCore:
         msg = str(exc_info.value)
         assert "Forbidden after token refresh" in msg
         assert "<unavailable>" in msg
+
+    async def test_403_locked_body_raises_locked_error(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """First 403 with locked-style body raises immediately, no retry."""
+        body = '{"status":"fail","result":"Cannot modify reservation"}'
+        route = respx.put(f"{FAKE_BASE_URL}/v1/reservations/59426054").mock(
+            return_value=httpx.Response(403, text=body)
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with pytest.raises(HostawayReservationLockedError):
+            await client._request(
+                "PUT", "/v1/reservations/59426054", json={"doorCode": "9999"}
+            )
+
+        tm.invalidate.assert_not_called()
+        assert route.call_count == 1
+
+    async def test_403_auth_body_still_refreshes_and_retries(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """403 with auth-phrase body follows token-refresh + retry path."""
+        body = '{"status":"fail","result":"invalid_token: please reauthenticate"}'
+        route = respx.put(f"{FAKE_BASE_URL}/v1/reservations/77")
+        route.side_effect = [
+            httpx.Response(403, text=body),
+            httpx.Response(200, json={"status": "success", "result": {"id": 77}}),
+        ]
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        response = await client._request(
+            "PUT", "/v1/reservations/77", json={"doorCode": "1234"}
+        )
+
+        assert response.status_code == 200
+        tm.invalidate.assert_called_once()
+        assert route.call_count == 2
+
+    async def test_403_unreadable_body_defaults_to_auth_refresh(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """403 with unreadable body falls back to auth path (back-compat)."""
+        route = respx.get(f"{FAKE_BASE_URL}/v1/listings")
+        route.side_effect = [
+            httpx.Response(403),
+            httpx.Response(200, json={"status": "success", "result": []}),
+        ]
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with patch(
+            "custom_components.hostaway.api.client._safe_response_body",
+            return_value="<unavailable>",
+        ):
+            response = await client._request("GET", "/v1/listings")
+
+        assert response.status_code == 200
+        tm.invalidate.assert_called_once()
+
+    async def test_locked_error_message_includes_path_and_body(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Raised locked error contains method, path, status, body snippet."""
+        body = '{"status":"fail","result":"Reservation is channel-managed"}'
+        respx.put(f"{FAKE_BASE_URL}/v1/reservations/42").mock(
+            return_value=httpx.Response(403, text=body)
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with pytest.raises(HostawayReservationLockedError) as exc_info:
+            await client._request(
+                "PUT", "/v1/reservations/42", json={"doorCode": "0000"}
+            )
+
+        msg = str(exc_info.value)
+        assert "Reservation locked" in msg
+        assert "PUT" in msg
+        assert "/v1/reservations/42" in msg
+        assert "403" in msg
+        assert "channel-managed" in msg
 
     def test_safe_response_body_returns_unavailable_on_read_error(self) -> None:
         """Test _safe_response_body returns "<unavailable>" if reading body raises."""

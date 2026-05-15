@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 import math
+import time
 from typing import Any
 
 import voluptuous as vol
@@ -15,12 +16,83 @@ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from custom_components.hostaway.api.client import HostawayApiClient
 from custom_components.hostaway.api.exceptions import (
     HostawayApiError,
+    HostawayReservationLockedError,
     HostawayResponseError,
 )
 from custom_components.hostaway.api.models import HostawayReservation
 from custom_components.hostaway.const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
+
+_LOCKED_LOG_COOLDOWN_SECONDS = 3600
+_LOCKED_RESERVATION_LOG_STATE: dict[int, float] = {}
+
+
+def _prune_locked_state(now: float) -> None:
+    """Drop log-state entries older than twice the cooldown.
+
+    Keeps the in-process state bounded for long-lived HA instances
+    that may see many distinct reservation IDs over time. Pruning
+    is opportunistic — invoked when a new WARNING is about to be
+    emitted — and uses a 2x cooldown threshold so entries are
+    retained at least long enough to suppress repeats but cannot
+    grow without bound.
+
+    Args:
+        now: Current ``time.monotonic()`` value.
+    """
+    stale_threshold = 2 * _LOCKED_LOG_COOLDOWN_SECONDS
+    stale = [
+        rid
+        for rid, ts in _LOCKED_RESERVATION_LOG_STATE.items()
+        if (now - ts) >= stale_threshold
+    ]
+    for rid in stale:
+        del _LOCKED_RESERVATION_LOG_STATE[rid]
+
+
+def _log_locked_reservation(
+    reservation_id: int,
+    exc: HostawayReservationLockedError,
+) -> None:
+    """Log a locked-reservation event with a per-reservation cooldown.
+
+    The first failure for a given ``reservation_id`` emits a WARNING
+    that includes the exception message (which already carries the
+    HTTP method, path, status, and a redacted body snippet from the
+    client). Subsequent failures for the same reservation within
+    ``_LOCKED_LOG_COOLDOWN_SECONDS`` are demoted to DEBUG so the HA
+    log is not flooded by a repeating automation (e.g., the
+    ~2-minute door-code refresh loop).
+
+    State is module-level and best-effort: a HA restart resets it,
+    which is acceptable. Uses :func:`time.monotonic` so wall-clock
+    changes cannot break the cooldown. The state dict is pruned
+    of entries older than twice the cooldown on each WARNING
+    emission so it stays bounded on long-lived instances.
+
+    Args:
+        reservation_id: Hostaway reservation ID that was rejected.
+        exc: The raised locked-reservation exception. Its string
+            form is appended to the WARNING for diagnostic context.
+    """
+    now = time.monotonic()
+    last = _LOCKED_RESERVATION_LOG_STATE.get(reservation_id)
+    if last is None or (now - last) >= _LOCKED_LOG_COOLDOWN_SECONDS:
+        _prune_locked_state(now)
+        _LOCKED_RESERVATION_LOG_STATE[reservation_id] = now
+        _LOGGER.warning(
+            "Skipping doorCode update for reservation %s: Hostaway "
+            "refused the request as non-writable (likely "
+            "channel-managed or in conflict). %s",
+            reservation_id,
+            exc,
+        )
+        return
+    _LOGGER.debug(
+        "Locked-reservation update suppressed (rate-limited) for reservation %s",
+        reservation_id,
+    )
 
 
 def _positive_int(value: Any) -> int:
@@ -200,6 +272,9 @@ async def async_handle_set_door_code(
 
     try:
         await api_client.update_reservation(reservation_id, payload)
+    except HostawayReservationLockedError as exc:
+        _log_locked_reservation(reservation_id, exc)
+        return
     except HostawayResponseError as exc:
         if "not found" in str(exc).lower():
             raise ServiceValidationError(

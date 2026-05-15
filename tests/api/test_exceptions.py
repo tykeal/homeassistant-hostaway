@@ -11,6 +11,7 @@ from custom_components.hostaway.api.exceptions import (
     HostawayAuthError,
     HostawayConnectionError,
     HostawayRateLimitError,
+    HostawayReservationLockedError,
     HostawayResponseError,
 )
 
@@ -54,6 +55,28 @@ class TestHostawayAuthError:
         """HostawayAuthError can be caught as HostawayApiError."""
         with pytest.raises(HostawayApiError):
             raise HostawayAuthError("auth failed")
+
+
+class TestHostawayReservationLockedError:
+    """Tests for the HostawayReservationLockedError exception."""
+
+    def test_inherits_from_base(self) -> None:
+        """HostawayReservationLockedError is a subclass of HostawayApiError."""
+        assert issubclass(HostawayReservationLockedError, HostawayApiError)
+
+    def test_not_an_auth_error(self) -> None:
+        """HostawayReservationLockedError is NOT a HostawayAuthError."""
+        assert not issubclass(HostawayReservationLockedError, HostawayAuthError)
+
+    def test_message_attribute(self) -> None:
+        """HostawayReservationLockedError stores the message attribute."""
+        error = HostawayReservationLockedError("reservation locked")
+        assert error.message == "reservation locked"
+
+    def test_caught_as_base(self) -> None:
+        """HostawayReservationLockedError can be caught as HostawayApiError."""
+        with pytest.raises(HostawayApiError):
+            raise HostawayReservationLockedError("locked")
 
 
 class TestHostawayRateLimitError:

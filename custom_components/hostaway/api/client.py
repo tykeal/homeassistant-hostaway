@@ -26,6 +26,7 @@ from custom_components.hostaway.api.exceptions import (
     HostawayAuthError,
     HostawayConnectionError,
     HostawayRateLimitError,
+    HostawayReservationLockedError,
     HostawayResponseError,
 )
 from custom_components.hostaway.api.models import (
@@ -166,12 +167,53 @@ def _safe_response_body(
     return sanitized
 
 
+_AUTH_403_PHRASES: tuple[str, ...] = (
+    "invalid_token",
+    "invalid token",
+    "expired",
+    "token has expired",
+    "unauthorized",
+    "authentication failed",
+    "no scope",
+)
+
+
+def _is_auth_403_body(body: str) -> bool:
+    """Classify a 403 response body as auth-related vs locked.
+
+    Returns True when the body matches any phrase in
+    ``_AUTH_403_PHRASES`` (case-insensitive) or when the body is
+    not readable (``"<unavailable>"`` sentinel from
+    :func:`_safe_response_body`). The unreadable case falls back to
+    the auth path to preserve back-compat with the previous
+    refresh-and-retry behavior for any failure mode not yet
+    observed in the wild.
+
+    Args:
+        body: The sanitized response body (already redacted/
+            truncated) as returned by :func:`_safe_response_body`.
+
+    Returns:
+        True if the 403 should be treated as an auth failure
+        (token refresh + single retry path); False if it should be
+        treated as a locked / permission-denied reservation.
+    """
+    if not body or body == "<unavailable>":
+        return True
+    lowered = body.lower()
+    return any(phrase in lowered for phrase in _AUTH_403_PHRASES)
+
+
 class HostawayApiClient:
     """HTTP client for authenticated Hostaway API requests.
 
     Wraps httpx.AsyncClient (injected) with automatic token
     management, exponential backoff on 429/5xx responses, and
-    reactive token refresh on 403 responses.
+    classified handling of 403 responses: bodies matching known
+    auth-failure phrases trigger a single reactive token refresh
+    and retry, while other 403 bodies are surfaced as
+    :class:`HostawayReservationLockedError` without touching the
+    token (typical for OTA-locked or conflicting reservations).
 
     Attributes:
         _token_manager: Token provider for authentication.
@@ -364,6 +406,12 @@ class HostawayApiClient:
         Raises:
             HostawayResponseError: On unexpected response format.
             HostawayAuthError: On authentication failure.
+            HostawayReservationLockedError: When Hostaway refuses
+                the update because the reservation is in a
+                non-writable state (channel-managed, cancelled, or
+                in conflict with another reservation). Callers
+                should treat this as a normal, expected outcome
+                rather than an error.
             HostawayConnectionError: On network failure.
             HostawayRateLimitError: On rate limit exhaustion.
         """
@@ -398,7 +446,10 @@ class HostawayApiClient:
 
         Adds Authorization header, retries on 429 and transient
         failures with exponential backoff, and reactively refreshes
-        token on 403.
+        the token on 403 responses whose body is classified as
+        auth-related. Non-auth 403 bodies raise
+        :class:`HostawayReservationLockedError` immediately without
+        invalidating the token or retrying.
 
         Args:
             method: HTTP method (GET, PUT, etc.).
@@ -412,6 +463,9 @@ class HostawayApiClient:
 
         Raises:
             HostawayAuthError: On persistent auth failure.
+            HostawayReservationLockedError: When a 403 body is
+                classified as a per-resource permission failure
+                rather than an auth failure (no retry attempted).
             HostawayConnectionError: On network failures after retries.
             HostawayRateLimitError: On 429 after max retries.
             HostawayResponseError: On 404 or other client errors.
@@ -460,8 +514,22 @@ class HostawayApiClient:
                         f"{method} {path} returned 403; body: {body}",
                     )
                 body = _safe_response_body(response)
+                if not _is_auth_403_body(body):
+                    _LOGGER.debug(
+                        "Hostaway returned 403 for %s %s "
+                        "(classified as locked/non-writable); "
+                        "response body: %s",
+                        method,
+                        path,
+                        body,
+                    )
+                    raise HostawayReservationLockedError(
+                        f"Reservation locked: {method} {path} "
+                        f"returned 403; body: {body}",
+                    )
                 _LOGGER.warning(
-                    "Hostaway returned 403 for %s %s; refreshing token "
+                    "Hostaway returned 403 for %s %s "
+                    "(classified as auth failure); refreshing token "
                     "and retrying once. Response body: %s",
                     method,
                     path,
