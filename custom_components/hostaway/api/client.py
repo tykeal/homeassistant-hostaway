@@ -26,6 +26,7 @@ from custom_components.hostaway.api.exceptions import (
     HostawayAuthError,
     HostawayConnectionError,
     HostawayRateLimitError,
+    HostawayReservationLockedError,
     HostawayResponseError,
 )
 from custom_components.hostaway.api.models import (
@@ -164,6 +165,43 @@ def _safe_response_body(
     if len(sanitized) > max_len:
         return sanitized[:max_len] + "..."
     return sanitized
+
+
+_AUTH_403_PHRASES: tuple[str, ...] = (
+    "invalid_token",
+    "invalid token",
+    "expired",
+    "token has expired",
+    "unauthorized",
+    "authentication failed",
+    "no scope",
+)
+
+
+def _is_auth_403_body(body: str) -> bool:
+    """Classify a 403 response body as auth-related vs locked.
+
+    Returns True when the body matches any phrase in
+    ``_AUTH_403_PHRASES`` (case-insensitive) or when the body is
+    not readable (``"<unavailable>"`` sentinel from
+    :func:`_safe_response_body`). The unreadable case falls back to
+    the auth path to preserve back-compat with the previous
+    refresh-and-retry behavior for any failure mode not yet
+    observed in the wild.
+
+    Args:
+        body: The sanitized response body (already redacted/
+            truncated) as returned by :func:`_safe_response_body`.
+
+    Returns:
+        True if the 403 should be treated as an auth failure
+        (token refresh + single retry path); False if it should be
+        treated as a locked / permission-denied reservation.
+    """
+    if not body or body == "<unavailable>":
+        return True
+    lowered = body.lower()
+    return any(phrase in lowered for phrase in _AUTH_403_PHRASES)
 
 
 class HostawayApiClient:
@@ -461,11 +499,21 @@ class HostawayApiClient:
                     )
                 body = _safe_response_body(response)
                 _LOGGER.warning(
-                    "Hostaway returned 403 for %s %s; refreshing token "
-                    "and retrying once. Response body: %s",
+                    "Hostaway returned 403 for %s %s; response body: %s",
                     method,
                     path,
                     body,
+                )
+                if not _is_auth_403_body(body):
+                    raise HostawayReservationLockedError(
+                        f"Reservation locked: {method} {path} "
+                        f"returned 403; body: {body}",
+                    )
+                _LOGGER.warning(
+                    "Classifying 403 as auth failure; refreshing token "
+                    "and retrying once for %s %s",
+                    method,
+                    path,
                 )
                 self._token_manager.invalidate()
                 return await self._request(
