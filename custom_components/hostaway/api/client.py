@@ -5,8 +5,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import random
+import re
 from typing import Any
 
 import httpx
@@ -35,17 +37,60 @@ _LOGGER = logging.getLogger(__name__)
 
 _MAX_RESPONSE_BODY_LOG = 500
 
+_REDACTED = "<redacted>"
+
+_SENSITIVE_KEY_TOKENS = (
+    "doorcode",
+    "password",
+    "secret",
+    "token",
+    "apikey",
+    "authorization",
+)
+
+_CONTROL_CHAR_RE = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
+
+
+def _is_sensitive_key(key: str) -> bool:
+    """Return True if ``key`` names a field that may carry secrets."""
+    normalized = re.sub(r"[^a-z0-9]", "", key.lower())
+    return any(token in normalized for token in _SENSITIVE_KEY_TOKENS)
+
+
+def _redact_sensitive(value: Any) -> Any:
+    """Recursively redact values for sensitive keys in JSON-like data."""
+    if isinstance(value, dict):
+        return {
+            k: (_REDACTED if _is_sensitive_key(str(k)) else _redact_sensitive(v))
+            for k, v in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_sensitive(item) for item in value]
+    return value
+
+
+def _sanitize_for_log(text: str) -> str:
+    """Escape CR/LF and strip other control chars to prevent log injection."""
+    text = text.replace("\r", "\\r").replace("\n", "\\n")
+    return _CONTROL_CHAR_RE.sub("", text)
+
 
 def _safe_response_body(
     response: httpx.Response,
     max_len: int = _MAX_RESPONSE_BODY_LOG,
 ) -> str:
-    """Return response body text, truncated and safe to log.
+    """Return response body text, sanitized, redacted, and safe to log.
 
     Reads ``response.text`` defensively; if reading fails for any
     reason, returns ``"<unavailable>"`` so callers can safely embed
     the result in log messages or exception strings without risking
     a secondary failure in the request path.
+
+    When the body parses as JSON, sensitive fields (door codes,
+    passwords, tokens, secrets, API keys, authorization headers)
+    are replaced with ``"<redacted>"`` before serialization. CR/LF
+    and other ASCII control characters are escaped or stripped to
+    prevent log-forging via attacker-controlled response content.
 
     Args:
         response: The httpx response to read.
@@ -53,16 +98,22 @@ def _safe_response_body(
             truncated and suffixed with ``"..."``.
 
     Returns:
-        The (possibly truncated) response body, or
-        ``"<unavailable>"`` if the body could not be read.
+        The sanitized, redacted, and (possibly truncated) response
+        body, or ``"<unavailable>"`` if the body could not be read.
     """
     try:
         body = response.text
     except Exception:
         return "<unavailable>"
-    if len(body) > max_len:
-        return body[:max_len] + "..."
-    return body
+    try:
+        parsed = json.loads(body)
+    except ValueError, TypeError:
+        sanitized = _sanitize_for_log(body)
+    else:
+        sanitized = _sanitize_for_log(json.dumps(_redact_sensitive(parsed)))
+    if len(sanitized) > max_len:
+        return sanitized[:max_len] + "..."
+    return sanitized
 
 
 class HostawayApiClient:

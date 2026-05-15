@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import AsyncMock, Mock, PropertyMock, patch
 
 import httpx
@@ -266,6 +267,74 @@ class TestHttpClientCore:
         type(response).text = PropertyMock(return_value="short body")
 
         assert _safe_response_body(response) == "short body"
+
+    def test_safe_response_body_redacts_sensitive_json_fields(self) -> None:
+        """Test sensitive JSON fields are replaced with <redacted>."""
+        response = Mock(spec=httpx.Response)
+        payload = {
+            "doorCode": "1234",
+            "password": "hunter2",
+            "access_token": "abc",
+            "client_secret": "shh",
+            "apiKey": "xyz",
+            "Authorization": "Bearer foo",
+            "reservationId": 42,
+            "statusCode": 403,
+        }
+        type(response).text = PropertyMock(return_value=json.dumps(payload))
+
+        result = _safe_response_body(response)
+
+        parsed = json.loads(result)
+        assert parsed["doorCode"] == "<redacted>"
+        assert parsed["password"] == "<redacted>"
+        assert parsed["access_token"] == "<redacted>"
+        assert parsed["client_secret"] == "<redacted>"
+        assert parsed["apiKey"] == "<redacted>"
+        assert parsed["Authorization"] == "<redacted>"
+        # Non-sensitive fields must be preserved.
+        assert parsed["reservationId"] == 42
+        assert parsed["statusCode"] == 403
+
+    def test_safe_response_body_redacts_nested_sensitive_fields(self) -> None:
+        """Test nested dict/list sensitive fields are redacted."""
+        response = Mock(spec=httpx.Response)
+        payload = {
+            "data": {"doorCode": "9999", "name": "Front Door"},
+            "items": [{"token": "t1"}, {"id": 1}],
+        }
+        type(response).text = PropertyMock(return_value=json.dumps(payload))
+
+        result = _safe_response_body(response)
+
+        parsed = json.loads(result)
+        assert parsed["data"]["doorCode"] == "<redacted>"
+        assert parsed["data"]["name"] == "Front Door"
+        assert parsed["items"][0]["token"] == "<redacted>"
+        assert parsed["items"][1]["id"] == 1
+
+    def test_safe_response_body_escapes_newlines_in_plain_text(self) -> None:
+        """Test CR/LF in non-JSON bodies are escaped to prevent log injection."""
+        response = Mock(spec=httpx.Response)
+        type(response).text = PropertyMock(
+            return_value="oops\nFAKE WARNING: pwned\r\nmore"
+        )
+
+        result = _safe_response_body(response)
+
+        assert "\n" not in result
+        assert "\r" not in result
+        assert "\\n" in result
+        assert "\\r" in result
+
+    def test_safe_response_body_strips_other_control_chars(self) -> None:
+        """Test C0 control characters are stripped from bodies."""
+        response = Mock(spec=httpx.Response)
+        type(response).text = PropertyMock(return_value="ok\x00\x07\x1bhello")
+
+        result = _safe_response_body(response)
+
+        assert result == "okhello"
 
     async def test_404_raises_response_error(
         self, mock_httpx_client: httpx.AsyncClient
