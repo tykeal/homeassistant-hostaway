@@ -209,7 +209,11 @@ class HostawayApiClient:
 
     Wraps httpx.AsyncClient (injected) with automatic token
     management, exponential backoff on 429/5xx responses, and
-    reactive token refresh on 403 responses.
+    classified handling of 403 responses: bodies matching known
+    auth-failure phrases trigger a single reactive token refresh
+    and retry, while other 403 bodies are surfaced as
+    :class:`HostawayReservationLockedError` without touching the
+    token (typical for OTA-locked or conflicting reservations).
 
     Attributes:
         _token_manager: Token provider for authentication.
