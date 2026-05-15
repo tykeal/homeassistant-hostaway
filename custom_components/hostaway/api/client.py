@@ -107,7 +107,7 @@ def _safe_response_body(
         return "<unavailable>"
     try:
         parsed = json.loads(body)
-    except ValueError, TypeError:
+    except ValueError:
         sanitized = _sanitize_for_log(body)
     else:
         sanitized = _sanitize_for_log(json.dumps(_redact_sensitive(parsed)))
