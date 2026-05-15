@@ -4,14 +4,15 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, Mock, patch
+import json
+from unittest.mock import AsyncMock, Mock, PropertyMock, patch
 
 import httpx
 import pytest
 import respx
 
 from custom_components.hostaway.api.auth import HostawayTokenManager
-from custom_components.hostaway.api.client import HostawayApiClient
+from custom_components.hostaway.api.client import HostawayApiClient, _safe_response_body
 from custom_components.hostaway.api.const import DEFAULT_PAGE_LIMIT
 from custom_components.hostaway.api.exceptions import (
     HostawayAuthError,
@@ -137,6 +138,270 @@ class TestHttpClientCore:
 
         assert response.status_code == 200
         tm.invalidate.assert_called_once()
+
+    async def test_persistent_403_includes_response_body(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Test persistent 403 raises HostawayAuthError with diagnostic context."""
+        body = (
+            '{"status":"fail","result":"You don\'t have permission to '
+            'modify this reservation"}'
+        )
+        respx.put(f"{FAKE_BASE_URL}/v1/reservations/12345").mock(
+            return_value=httpx.Response(403, text=body)
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with pytest.raises(HostawayAuthError) as exc_info:
+            await client._request(
+                "PUT", "/v1/reservations/12345", json={"doorCode": "9999"}
+            )
+
+        msg = str(exc_info.value)
+        assert "Forbidden after token refresh" in msg
+        assert "PUT" in msg
+        assert "/v1/reservations/12345" in msg
+        assert "403" in msg
+        assert "permission to modify" in msg
+
+    async def test_persistent_403_truncates_long_body(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Test persistent 403 truncates response body in error message."""
+        long_body = "X" * 2000
+        respx.get(f"{FAKE_BASE_URL}/v1/listings").mock(
+            return_value=httpx.Response(403, text=long_body)
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with pytest.raises(HostawayAuthError) as exc_info:
+            await client._request("GET", "/v1/listings")
+
+        msg = str(exc_info.value)
+        # Full body must not appear; truncation suffix must be present.
+        assert long_body not in msg
+        assert "..." in msg
+        # Loose upper bound: prefix + 500 truncated body + suffix.
+        assert len(msg) < 1000
+
+    async def test_403_logs_first_response_body(
+        self,
+        mock_httpx_client: httpx.AsyncClient,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Test first 403 emits a WARNING log with method, path, and body snippet."""
+        body = '{"status":"fail","result":"token expired"}'
+        route = respx.put(f"{FAKE_BASE_URL}/v1/reservations/77")
+        route.side_effect = [
+            httpx.Response(403, text=body),
+            httpx.Response(200, json={"status": "success", "result": {"id": 77}}),
+        ]
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with caplog.at_level("WARNING", logger="custom_components.hostaway.api.client"):
+            response = await client._request(
+                "PUT", "/v1/reservations/77", json={"doorCode": "1234"}
+            )
+
+        assert response.status_code == 200
+        matching = [
+            r
+            for r in caplog.records
+            if r.levelname == "WARNING"
+            and "PUT" in r.getMessage()
+            and "/v1/reservations/77" in r.getMessage()
+            and "token expired" in r.getMessage()
+        ]
+        messages = [r.getMessage() for r in caplog.records]
+        assert matching, f"Expected WARNING log; got: {messages}"
+
+    async def test_403_body_unavailable_does_not_crash(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Test 403 with unreadable body still raises HostawayAuthError cleanly."""
+        respx.get(f"{FAKE_BASE_URL}/v1/listings").mock(return_value=httpx.Response(403))
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        # Force _safe_response_body to simulate unreadable body.
+        with (
+            patch(
+                "custom_components.hostaway.api.client._safe_response_body",
+                return_value="<unavailable>",
+            ),
+            pytest.raises(HostawayAuthError) as exc_info,
+        ):
+            await client._request("GET", "/v1/listings")
+
+        msg = str(exc_info.value)
+        assert "Forbidden after token refresh" in msg
+        assert "<unavailable>" in msg
+
+    def test_safe_response_body_returns_unavailable_on_read_error(self) -> None:
+        """Test _safe_response_body returns "<unavailable>" if reading body raises."""
+        response = Mock(spec=httpx.Response)
+        # Accessing .text raises, simulating a decode/IO failure.
+        type(response).text = PropertyMock(side_effect=RuntimeError("decode boom"))
+
+        assert _safe_response_body(response) == "<unavailable>"
+
+    def test_safe_response_body_truncates_long_text(self) -> None:
+        """Test _safe_response_body truncates with "..." suffix beyond max_len."""
+        response = Mock(spec=httpx.Response)
+        type(response).text = PropertyMock(return_value="A" * 1000)
+
+        result = _safe_response_body(response, max_len=100)
+
+        assert result == "A" * 100 + "..."
+
+    def test_safe_response_body_returns_short_text_verbatim(self) -> None:
+        """Test _safe_response_body returns short bodies without truncation."""
+        response = httpx.Response(200, text="short body")
+
+        assert _safe_response_body(response) == "short body"
+
+    def test_safe_response_body_redacts_sensitive_json_fields(self) -> None:
+        """Test sensitive JSON fields are replaced with <redacted>."""
+        payload = {
+            "doorCode": "1234",
+            "password": "hunter2",
+            "access_token": "abc",
+            "client_secret": "shh",
+            "apiKey": "xyz",
+            "Authorization": "Bearer foo",
+            "reservationId": 42,
+            "statusCode": 403,
+        }
+        response = httpx.Response(200, text=json.dumps(payload))
+
+        result = _safe_response_body(response)
+
+        parsed = json.loads(result)
+        assert parsed["doorCode"] == "<redacted>"
+        assert parsed["password"] == "<redacted>"
+        assert parsed["access_token"] == "<redacted>"
+        assert parsed["client_secret"] == "<redacted>"
+        assert parsed["apiKey"] == "<redacted>"
+        assert parsed["Authorization"] == "<redacted>"
+        # Non-sensitive fields must be preserved.
+        assert parsed["reservationId"] == 42
+        assert parsed["statusCode"] == 403
+
+    def test_safe_response_body_redacts_nested_sensitive_fields(self) -> None:
+        """Test nested dict/list sensitive fields are redacted."""
+        payload = {
+            "data": {"doorCode": "9999", "name": "Front Door"},
+            "items": [{"token": "t1"}, {"id": 1}],
+        }
+        response = httpx.Response(200, text=json.dumps(payload))
+
+        result = _safe_response_body(response)
+
+        parsed = json.loads(result)
+        assert parsed["data"]["doorCode"] == "<redacted>"
+        assert parsed["data"]["name"] == "Front Door"
+        assert parsed["items"][0]["token"] == "<redacted>"
+        assert parsed["items"][1]["id"] == 1
+
+    def test_safe_response_body_redacts_secrets_inside_json_strings(self) -> None:
+        """Test JSON string values are scrubbed for embedded secrets."""
+        payload = {
+            "result": "Authorization: Bearer top-secret-value rejected",
+            "detail": "doorCode=1234 was reused",
+        }
+        response = httpx.Response(200, text=json.dumps(payload))
+
+        result = _safe_response_body(response)
+
+        parsed = json.loads(result)
+        assert "top-secret-value" not in parsed["result"]
+        assert "1234" not in parsed["detail"]
+        assert "<redacted>" in parsed["result"]
+        assert "<redacted>" in parsed["detail"]
+
+    def test_safe_response_body_escapes_newlines_in_plain_text(self) -> None:
+        """Test CR/LF in non-JSON bodies are escaped to prevent log injection."""
+        response = httpx.Response(200, text="oops\nFAKE WARNING: pwned\r\nmore")
+
+        result = _safe_response_body(response)
+
+        assert "\n" not in result
+        assert "\r" not in result
+        assert "\\n" in result
+        assert "\\r" in result
+
+    def test_safe_response_body_strips_other_control_chars(self) -> None:
+        """Test C0 control characters are stripped from bodies."""
+        response = httpx.Response(200, text="ok\x00\x07\x1bhello")
+
+        result = _safe_response_body(response)
+
+        assert result == "okhello"
+
+    def test_safe_response_body_redacts_plain_text_sensitive_fields(self) -> None:
+        """Test pattern-based redaction for non-JSON bodies."""
+        response = httpx.Response(
+            200,
+            text=(
+                "doorCode=1234&reservationId=42 "
+                "password: hunter2, token=abc.def, "
+                'Authorization: "Bearer top-secret-value"'
+            ),
+        )
+
+        result = _safe_response_body(response)
+
+        assert "1234" not in result
+        assert "hunter2" not in result
+        assert "abc.def" not in result
+        assert "top-secret-value" not in result
+        assert "<redacted>" in result
+        # Non-sensitive values must survive.
+        assert "reservationId=42" in result
+
+    def test_safe_response_body_redacts_bare_bearer_tokens(self) -> None:
+        """Test bare 'Bearer <token>' fragments are redacted."""
+        response = httpx.Response(
+            200,
+            text="Unauthorized: Bearer eyJhbGciOiJIUzI1NiJ9.payload.sig",
+        )
+
+        result = _safe_response_body(response)
+
+        assert "eyJhbGciOiJIUzI1NiJ9" not in result
+        assert "Bearer <redacted>" in result
+
+    def test_safe_response_body_redacts_unquoted_authorization_header(self) -> None:
+        """Test unquoted 'Authorization: Bearer <token>' fully redacts the token."""
+        response = httpx.Response(
+            200,
+            text="Authorization: Bearer top-secret-value\nother: keep",
+        )
+
+        result = _safe_response_body(response)
+
+        assert "top-secret-value" not in result
+        assert "<redacted>" in result
+        assert "other: keep" in result
+
+    def test_safe_response_body_returns_unavailable_on_redaction_failure(
+        self,
+    ) -> None:
+        """Test secondary failures during redaction fall back to <unavailable>."""
+        response = httpx.Response(200, text='{"x": 1}')
+
+        with patch(
+            "custom_components.hostaway.api.client._redact_sensitive",
+            side_effect=RecursionError("too deep"),
+        ):
+            assert _safe_response_body(response) == "<unavailable>"
 
     async def test_404_raises_response_error(
         self, mock_httpx_client: httpx.AsyncClient
