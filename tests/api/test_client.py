@@ -336,6 +336,52 @@ class TestHttpClientCore:
 
         assert result == "okhello"
 
+    def test_safe_response_body_redacts_plain_text_sensitive_fields(self) -> None:
+        """Test pattern-based redaction for non-JSON bodies."""
+        response = Mock(spec=httpx.Response)
+        type(response).text = PropertyMock(
+            return_value=(
+                "doorCode=1234&reservationId=42 "
+                "password: hunter2, token=abc.def, "
+                'Authorization: "Bearer top-secret-value"'
+            )
+        )
+
+        result = _safe_response_body(response)
+
+        assert "1234" not in result
+        assert "hunter2" not in result
+        assert "abc.def" not in result
+        assert "top-secret-value" not in result
+        assert "<redacted>" in result
+        # Non-sensitive values must survive.
+        assert "reservationId=42" in result
+
+    def test_safe_response_body_redacts_bare_bearer_tokens(self) -> None:
+        """Test bare 'Bearer <token>' fragments are redacted."""
+        response = Mock(spec=httpx.Response)
+        type(response).text = PropertyMock(
+            return_value="Unauthorized: Bearer eyJhbGciOiJIUzI1NiJ9.payload.sig"
+        )
+
+        result = _safe_response_body(response)
+
+        assert "eyJhbGciOiJIUzI1NiJ9" not in result
+        assert "Bearer <redacted>" in result
+
+    def test_safe_response_body_returns_unavailable_on_redaction_failure(
+        self,
+    ) -> None:
+        """Test secondary failures during redaction fall back to <unavailable>."""
+        response = Mock(spec=httpx.Response)
+        type(response).text = PropertyMock(return_value='{"x": 1}')
+
+        with patch(
+            "custom_components.hostaway.api.client._redact_sensitive",
+            side_effect=RecursionError("too deep"),
+        ):
+            assert _safe_response_body(response) == "<unavailable>"
+
     async def test_404_raises_response_error(
         self, mock_httpx_client: httpx.AsyncClient
     ) -> None:

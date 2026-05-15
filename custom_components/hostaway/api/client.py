@@ -50,6 +50,25 @@ _SENSITIVE_KEY_TOKENS = (
 
 _CONTROL_CHAR_RE = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
 
+_SENSITIVE_KEY_PATTERN = "|".join(_SENSITIVE_KEY_TOKENS)
+
+# Match key/value pairs in plain text (JSON-ish or form-encoded) where the
+# key name contains a sensitive token. Captures the key + separator so we
+# can preserve them while replacing the value with <redacted>. Designed to
+# stop at the next delimiter (comma, ampersand, whitespace, brace, bracket,
+# or matching quote) so a single sensitive value doesn't swallow the rest
+# of the body.
+_TEXT_REDACT_RE = re.compile(
+    r"(?ix)"
+    rf"(\"?[A-Za-z0-9_\-]*(?:{_SENSITIVE_KEY_PATTERN})[A-Za-z0-9_\-]*\"?"
+    r"\s*[:=]\s*)"
+    r"(\"[^\"]*\"|'[^']*'|[^,&\s}\]]+)"
+)
+
+# Match bearer-style auth tokens that may appear in error bodies even
+# without a surrounding key/value structure.
+_BEARER_RE = re.compile(r"(?i)\b(bearer)\s+\S+")
+
 
 def _is_sensitive_key(key: str) -> bool:
     """Return True if ``key`` names a field that may carry secrets."""
@@ -67,6 +86,12 @@ def _redact_sensitive(value: Any) -> Any:
     if isinstance(value, list):
         return [_redact_sensitive(item) for item in value]
     return value
+
+
+def _redact_plain_text(text: str) -> str:
+    """Apply pattern-based redaction to non-JSON bodies."""
+    text = _TEXT_REDACT_RE.sub(lambda m: f"{m.group(1)}{_REDACTED}", text)
+    return _BEARER_RE.sub(lambda m: f"{m.group(1)} {_REDACTED}", text)
 
 
 def _sanitize_for_log(text: str) -> str:
@@ -88,7 +113,13 @@ def _safe_response_body(
 
     When the body parses as JSON, sensitive fields (door codes,
     passwords, tokens, secrets, API keys, authorization headers)
-    are replaced with ``"<redacted>"`` before serialization. CR/LF
+    are replaced with ``"<redacted>"`` before serialization. When
+    the body is not JSON, regex-based redaction is applied so the
+    same keys are redacted in plain-text or form-encoded payloads,
+    along with any ``Bearer <token>`` fragments. The entire parse/
+    redact/serialize stage is wrapped in a defensive ``try`` so a
+    secondary failure (e.g. ``RecursionError`` on pathological
+    input) cannot escape into the 403 logging or error path. CR/LF
     and other ASCII control characters are escaped or stripped to
     prevent log-forging via attacker-controlled response content.
 
@@ -106,11 +137,15 @@ def _safe_response_body(
     except Exception:
         return "<unavailable>"
     try:
-        parsed = json.loads(body)
-    except ValueError:
-        sanitized = _sanitize_for_log(body)
-    else:
-        sanitized = _sanitize_for_log(json.dumps(_redact_sensitive(parsed)))
+        try:
+            parsed = json.loads(body)
+        except ValueError:
+            redacted = _redact_plain_text(body)
+        else:
+            redacted = json.dumps(_redact_sensitive(parsed))
+        sanitized = _sanitize_for_log(redacted)
+    except Exception:
+        return "<unavailable>"
     if len(sanitized) > max_len:
         return sanitized[:max_len] + "..."
     return sanitized
