@@ -1157,7 +1157,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "homeassistant", marker = "extra == 'test'", specifier = ">=2026.4.0" },
+    { name = "homeassistant", marker = "extra == 'test'", specifier = ">=2026.5.1" },
     { name = "httpx", specifier = "==0.28.1" },
     { name = "httpx", marker = "extra == 'test'", specifier = "==0.28.1" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=8.0" },
@@ -1170,7 +1170,7 @@ provides-extras = ["test"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "homeassistant", specifier = ">=2026.4.0" },
+    { name = "homeassistant", specifier = ">=2026.5.1" },
     { name = "httpx", specifier = "==0.28.1" },
     { name = "interrogate", specifier = ">=1.7" },
     { name = "mypy", specifier = ">=2.1.0" },
