@@ -16,6 +16,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.hostaway.api.exceptions import (
     HostawayRateLimitError,
+    HostawayReservationLockedError,
     HostawayResponseError,
 )
 from custom_components.hostaway.api.models import (
@@ -446,6 +447,204 @@ class TestSetDoorCode:
                 },
                 blocking=True,
             )
+
+
+class TestLockedReservationHandling:
+    """Tests for HostawayReservationLockedError handling in set_door_code."""
+
+    @pytest.fixture(autouse=True)
+    def _clear_locked_state(self) -> Any:
+        """Reset module-level rate-limit state between tests."""
+        from custom_components.hostaway import services as services_mod
+
+        services_mod._LOCKED_RESERVATION_LOG_STATE.clear()
+        yield
+        services_mod._LOCKED_RESERVATION_LOG_STATE.clear()
+
+    @patch(
+        "custom_components.hostaway.services.HostawayApiClient.update_reservation",
+        new_callable=AsyncMock,
+        side_effect=HostawayReservationLockedError(
+            "Reservation locked: PUT /v1/reservations/59426054 "
+            'returned 403; body: {"status":"fail","result":"Cannot modify"}'
+        ),
+    )
+    async def test_door_code_locked_reservation_logs_and_returns(
+        self,
+        mock_update: AsyncMock,
+        hass: HomeAssistant,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Locked reservation does not raise; emits WARNING with id."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        with caplog.at_level("DEBUG", logger="custom_components.hostaway.services"):
+            await hass.services.async_call(
+                DOMAIN,
+                "set_door_code",
+                {"reservation_id": 59426054, "door_code": "1234"},
+                blocking=True,
+            )
+
+        mock_update.assert_called_once()
+        warnings = [
+            r
+            for r in caplog.records
+            if r.levelname == "WARNING" and "59426054" in r.getMessage()
+        ]
+        assert warnings, (
+            "Expected WARNING mentioning reservation id; got: "
+            f"{[r.getMessage() for r in caplog.records]}"
+        )
+
+    @patch(
+        "custom_components.hostaway.services.HostawayApiClient.update_reservation",
+        new_callable=AsyncMock,
+        side_effect=HostawayReservationLockedError(
+            "Reservation locked: PUT /v1/reservations/59426054 returned 403"
+        ),
+    )
+    async def test_door_code_locked_rate_limit_emits_debug_on_repeat(
+        self,
+        mock_update: AsyncMock,
+        hass: HomeAssistant,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Second locked event within cooldown logs at DEBUG, not WARNING."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        with caplog.at_level("DEBUG", logger="custom_components.hostaway.services"):
+            await hass.services.async_call(
+                DOMAIN,
+                "set_door_code",
+                {"reservation_id": 59426054, "door_code": "1234"},
+                blocking=True,
+            )
+            warn_after_first = [
+                r
+                for r in caplog.records
+                if r.levelname == "WARNING" and "59426054" in r.getMessage()
+            ]
+            assert len(warn_after_first) == 1
+
+            caplog.clear()
+
+            await hass.services.async_call(
+                DOMAIN,
+                "set_door_code",
+                {"reservation_id": 59426054, "door_code": "1234"},
+                blocking=True,
+            )
+
+        warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+        debugs = [
+            r
+            for r in caplog.records
+            if r.levelname == "DEBUG"
+            and "rate-limited" in r.getMessage()
+            and "59426054" in r.getMessage()
+        ]
+        assert not warnings, (
+            "Expected no WARNING on repeat call; got: "
+            f"{[r.getMessage() for r in warnings]}"
+        )
+        assert debugs, "Expected DEBUG rate-limited message on repeat"
+
+    @patch(
+        "custom_components.hostaway.services.HostawayApiClient.update_reservation",
+        new_callable=AsyncMock,
+        side_effect=HostawayReservationLockedError(
+            "Reservation locked: PUT /v1/reservations/X returned 403"
+        ),
+    )
+    async def test_door_code_locked_rate_limit_separate_reservations(
+        self,
+        mock_update: AsyncMock,
+        hass: HomeAssistant,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Different reservation_ids each produce their own WARNING."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        with caplog.at_level("WARNING", logger="custom_components.hostaway.services"):
+            await hass.services.async_call(
+                DOMAIN,
+                "set_door_code",
+                {"reservation_id": 111, "door_code": "1234"},
+                blocking=True,
+            )
+            await hass.services.async_call(
+                DOMAIN,
+                "set_door_code",
+                {"reservation_id": 222, "door_code": "1234"},
+                blocking=True,
+            )
+
+        warnings = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+        assert any("111" in m for m in warnings)
+        assert any("222" in m for m in warnings)
+
+    @patch(
+        "custom_components.hostaway.services.HostawayApiClient.update_reservation",
+        new_callable=AsyncMock,
+        side_effect=HostawayReservationLockedError(
+            "Reservation locked: PUT /v1/reservations/333 returned 403"
+        ),
+    )
+    async def test_door_code_locked_rate_limit_resets_after_cooldown(
+        self,
+        mock_update: AsyncMock,
+        hass: HomeAssistant,
+        caplog: pytest.LogCaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """After cooldown expires a new WARNING is emitted for same id."""
+        from custom_components.hostaway import services as services_mod
+
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        fake_now = [1000.0]
+
+        def fake_monotonic() -> float:
+            """Return the controllable monotonic clock value."""
+            return fake_now[0]
+
+        monkeypatch.setattr(services_mod.time, "monotonic", fake_monotonic)
+
+        with caplog.at_level("WARNING", logger="custom_components.hostaway.services"):
+            await hass.services.async_call(
+                DOMAIN,
+                "set_door_code",
+                {"reservation_id": 333, "door_code": "1234"},
+                blocking=True,
+            )
+            first_warnings = [
+                r
+                for r in caplog.records
+                if r.levelname == "WARNING" and "333" in r.getMessage()
+            ]
+            assert len(first_warnings) == 1
+
+            caplog.clear()
+            fake_now[0] += services_mod._LOCKED_LOG_COOLDOWN_SECONDS + 1
+
+            await hass.services.async_call(
+                DOMAIN,
+                "set_door_code",
+                {"reservation_id": 333, "door_code": "1234"},
+                blocking=True,
+            )
+
+        warnings = [
+            r
+            for r in caplog.records
+            if r.levelname == "WARNING" and "333" in r.getMessage()
+        ]
+        assert warnings, "Expected WARNING after cooldown elapsed"
 
 
 class TestGetReservations:
