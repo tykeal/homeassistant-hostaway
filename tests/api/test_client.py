@@ -263,14 +263,12 @@ class TestHttpClientCore:
 
     def test_safe_response_body_returns_short_text_verbatim(self) -> None:
         """Test _safe_response_body returns short bodies without truncation."""
-        response = Mock(spec=httpx.Response)
-        type(response).text = PropertyMock(return_value="short body")
+        response = httpx.Response(200, text="short body")
 
         assert _safe_response_body(response) == "short body"
 
     def test_safe_response_body_redacts_sensitive_json_fields(self) -> None:
         """Test sensitive JSON fields are replaced with <redacted>."""
-        response = Mock(spec=httpx.Response)
         payload = {
             "doorCode": "1234",
             "password": "hunter2",
@@ -281,7 +279,7 @@ class TestHttpClientCore:
             "reservationId": 42,
             "statusCode": 403,
         }
-        type(response).text = PropertyMock(return_value=json.dumps(payload))
+        response = httpx.Response(200, text=json.dumps(payload))
 
         result = _safe_response_body(response)
 
@@ -298,12 +296,11 @@ class TestHttpClientCore:
 
     def test_safe_response_body_redacts_nested_sensitive_fields(self) -> None:
         """Test nested dict/list sensitive fields are redacted."""
-        response = Mock(spec=httpx.Response)
         payload = {
             "data": {"doorCode": "9999", "name": "Front Door"},
             "items": [{"token": "t1"}, {"id": 1}],
         }
-        type(response).text = PropertyMock(return_value=json.dumps(payload))
+        response = httpx.Response(200, text=json.dumps(payload))
 
         result = _safe_response_body(response)
 
@@ -313,12 +310,25 @@ class TestHttpClientCore:
         assert parsed["items"][0]["token"] == "<redacted>"
         assert parsed["items"][1]["id"] == 1
 
+    def test_safe_response_body_redacts_secrets_inside_json_strings(self) -> None:
+        """Test JSON string values are scrubbed for embedded secrets."""
+        payload = {
+            "result": "Authorization: Bearer top-secret-value rejected",
+            "detail": "doorCode=1234 was reused",
+        }
+        response = httpx.Response(200, text=json.dumps(payload))
+
+        result = _safe_response_body(response)
+
+        parsed = json.loads(result)
+        assert "top-secret-value" not in parsed["result"]
+        assert "1234" not in parsed["detail"]
+        assert "<redacted>" in parsed["result"]
+        assert "<redacted>" in parsed["detail"]
+
     def test_safe_response_body_escapes_newlines_in_plain_text(self) -> None:
         """Test CR/LF in non-JSON bodies are escaped to prevent log injection."""
-        response = Mock(spec=httpx.Response)
-        type(response).text = PropertyMock(
-            return_value="oops\nFAKE WARNING: pwned\r\nmore"
-        )
+        response = httpx.Response(200, text="oops\nFAKE WARNING: pwned\r\nmore")
 
         result = _safe_response_body(response)
 
@@ -329,8 +339,7 @@ class TestHttpClientCore:
 
     def test_safe_response_body_strips_other_control_chars(self) -> None:
         """Test C0 control characters are stripped from bodies."""
-        response = Mock(spec=httpx.Response)
-        type(response).text = PropertyMock(return_value="ok\x00\x07\x1bhello")
+        response = httpx.Response(200, text="ok\x00\x07\x1bhello")
 
         result = _safe_response_body(response)
 
@@ -338,13 +347,13 @@ class TestHttpClientCore:
 
     def test_safe_response_body_redacts_plain_text_sensitive_fields(self) -> None:
         """Test pattern-based redaction for non-JSON bodies."""
-        response = Mock(spec=httpx.Response)
-        type(response).text = PropertyMock(
-            return_value=(
+        response = httpx.Response(
+            200,
+            text=(
                 "doorCode=1234&reservationId=42 "
                 "password: hunter2, token=abc.def, "
                 'Authorization: "Bearer top-secret-value"'
-            )
+            ),
         )
 
         result = _safe_response_body(response)
@@ -359,9 +368,9 @@ class TestHttpClientCore:
 
     def test_safe_response_body_redacts_bare_bearer_tokens(self) -> None:
         """Test bare 'Bearer <token>' fragments are redacted."""
-        response = Mock(spec=httpx.Response)
-        type(response).text = PropertyMock(
-            return_value="Unauthorized: Bearer eyJhbGciOiJIUzI1NiJ9.payload.sig"
+        response = httpx.Response(
+            200,
+            text="Unauthorized: Bearer eyJhbGciOiJIUzI1NiJ9.payload.sig",
         )
 
         result = _safe_response_body(response)
@@ -369,12 +378,24 @@ class TestHttpClientCore:
         assert "eyJhbGciOiJIUzI1NiJ9" not in result
         assert "Bearer <redacted>" in result
 
+    def test_safe_response_body_redacts_unquoted_authorization_header(self) -> None:
+        """Test unquoted 'Authorization: Bearer <token>' fully redacts the token."""
+        response = httpx.Response(
+            200,
+            text="Authorization: Bearer top-secret-value\nother: keep",
+        )
+
+        result = _safe_response_body(response)
+
+        assert "top-secret-value" not in result
+        assert "<redacted>" in result
+        assert "other: keep" in result
+
     def test_safe_response_body_returns_unavailable_on_redaction_failure(
         self,
     ) -> None:
         """Test secondary failures during redaction fall back to <unavailable>."""
-        response = Mock(spec=httpx.Response)
-        type(response).text = PropertyMock(return_value='{"x": 1}')
+        response = httpx.Response(200, text='{"x": 1}')
 
         with patch(
             "custom_components.hostaway.api.client._redact_sensitive",

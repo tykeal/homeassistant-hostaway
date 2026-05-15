@@ -77,7 +77,14 @@ def _is_sensitive_key(key: str) -> bool:
 
 
 def _redact_sensitive(value: Any) -> Any:
-    """Recursively redact values for sensitive keys in JSON-like data."""
+    """Recursively redact values for sensitive keys in JSON-like data.
+
+    Dict keys matching the sensitive-token list have their value
+    replaced with ``"<redacted>"``. String values are additionally
+    scrubbed with :func:`_redact_plain_text` so embedded
+    ``key=value`` fragments or ``Bearer <token>`` substrings inside
+    otherwise-innocuous fields are still redacted.
+    """
     if isinstance(value, dict):
         return {
             k: (_REDACTED if _is_sensitive_key(str(k)) else _redact_sensitive(v))
@@ -85,13 +92,21 @@ def _redact_sensitive(value: Any) -> Any:
         }
     if isinstance(value, list):
         return [_redact_sensitive(item) for item in value]
+    if isinstance(value, str):
+        return _redact_plain_text(value)
     return value
 
 
 def _redact_plain_text(text: str) -> str:
-    """Apply pattern-based redaction to non-JSON bodies."""
-    text = _TEXT_REDACT_RE.sub(lambda m: f"{m.group(1)}{_REDACTED}", text)
-    return _BEARER_RE.sub(lambda m: f"{m.group(1)} {_REDACTED}", text)
+    """Apply pattern-based redaction to non-JSON bodies.
+
+    Bearer-token fragments are redacted first so an unquoted
+    ``Authorization: Bearer <token>`` value is fully scrubbed before
+    the key/value pass — otherwise the key/value regex would only
+    consume the literal word ``Bearer`` and leave the secret behind.
+    """
+    text = _BEARER_RE.sub(lambda m: f"{m.group(1)} {_REDACTED}", text)
+    return _TEXT_REDACT_RE.sub(lambda m: f"{m.group(1)}{_REDACTED}", text)
 
 
 def _sanitize_for_log(text: str) -> str:
