@@ -1,4 +1,21 @@
 # SPDX-FileCopyrightText: 2026 Andrew Grimberg <tykeal@bardicgrove.org>
 # SPDX-License-Identifier: Apache-2.0
 ---
-ignore: []
+ignore:
+  # urllib3 is a transitive dependency pulled in via homeassistant and
+  # test deps (pytest-homeassistant-custom-component, etc.). This
+  # integration's runtime code depends directly on httpx, not urllib3,
+  # so we cannot bump the urllib3 pin from this project. The advisory
+  # is fixed in urllib3 >= 2.7.0; remove this entry once the upstream
+  # dependency chain ships a compatible release.
+  - vulnerability: GHSA-mf9v-mfxr-j63j
+    package:
+      name: urllib3
+      type: python
+  # Same rationale as above: transitive via homeassistant / test deps,
+  # integration runtime uses httpx, fix lands in urllib3 >= 2.7.0.
+  # Remove once the upstream chain updates.
+  - vulnerability: GHSA-qccp-gfcp-xxvc
+    package:
+      name: urllib3
+      type: python
