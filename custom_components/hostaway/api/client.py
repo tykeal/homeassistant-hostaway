@@ -33,6 +33,37 @@ from custom_components.hostaway.api.models import (
 
 _LOGGER = logging.getLogger(__name__)
 
+_MAX_RESPONSE_BODY_LOG = 500
+
+
+def _safe_response_body(
+    response: httpx.Response,
+    max_len: int = _MAX_RESPONSE_BODY_LOG,
+) -> str:
+    """Return response body text, truncated and safe to log.
+
+    Reads ``response.text`` defensively; if reading fails for any
+    reason, returns ``"<unavailable>"`` so callers can safely embed
+    the result in log messages or exception strings without risking
+    a secondary failure in the request path.
+
+    Args:
+        response: The httpx response to read.
+        max_len: Maximum body length to return. Longer bodies are
+            truncated and suffixed with ``"..."``.
+
+    Returns:
+        The (possibly truncated) response body, or
+        ``"<unavailable>"`` if the body could not be read.
+    """
+    try:
+        body = response.text
+    except Exception:
+        return "<unavailable>"
+    if len(body) > max_len:
+        return body[:max_len] + "..."
+    return body
+
 
 class HostawayApiClient:
     """HTTP client for authenticated Hostaway API requests.
@@ -322,9 +353,19 @@ class HostawayApiClient:
 
             if response.status_code == 403:
                 if _retried_auth:
+                    body = _safe_response_body(response)
                     raise HostawayAuthError(
-                        "Forbidden after token refresh",
+                        f"Forbidden after token refresh: "
+                        f"{method} {path} returned 403; body: {body}",
                     )
+                body = _safe_response_body(response)
+                _LOGGER.warning(
+                    "Hostaway returned 403 for %s %s; refreshing token "
+                    "and retrying once. Response body: %s",
+                    method,
+                    path,
+                    body,
+                )
                 self._token_manager.invalidate()
                 return await self._request(
                     method,

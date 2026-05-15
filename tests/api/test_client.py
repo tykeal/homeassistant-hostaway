@@ -138,6 +138,111 @@ class TestHttpClientCore:
         assert response.status_code == 200
         tm.invalidate.assert_called_once()
 
+    async def test_persistent_403_includes_response_body(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Test persistent 403 raises HostawayAuthError with diagnostic context."""
+        body = (
+            '{"status":"fail","result":"You don\'t have permission to '
+            'modify this reservation"}'
+        )
+        respx.put(f"{FAKE_BASE_URL}/v1/reservations/12345").mock(
+            return_value=httpx.Response(403, text=body)
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with pytest.raises(HostawayAuthError) as exc_info:
+            await client._request(
+                "PUT", "/v1/reservations/12345", json={"doorCode": "9999"}
+            )
+
+        msg = str(exc_info.value)
+        assert "Forbidden after token refresh" in msg
+        assert "PUT" in msg
+        assert "/v1/reservations/12345" in msg
+        assert "403" in msg
+        assert "permission to modify" in msg
+
+    async def test_persistent_403_truncates_long_body(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Test persistent 403 truncates response body in error message."""
+        long_body = "X" * 2000
+        respx.get(f"{FAKE_BASE_URL}/v1/listings").mock(
+            return_value=httpx.Response(403, text=long_body)
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with pytest.raises(HostawayAuthError) as exc_info:
+            await client._request("GET", "/v1/listings")
+
+        msg = str(exc_info.value)
+        # Full body must not appear; truncation suffix must be present.
+        assert long_body not in msg
+        assert "..." in msg
+        # Loose upper bound: prefix + 500 truncated body + suffix.
+        assert len(msg) < 1000
+
+    async def test_403_logs_first_response_body(
+        self,
+        mock_httpx_client: httpx.AsyncClient,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Test first 403 emits a WARNING log with method, path, and body snippet."""
+        body = '{"status":"fail","result":"token expired"}'
+        route = respx.put(f"{FAKE_BASE_URL}/v1/reservations/77")
+        route.side_effect = [
+            httpx.Response(403, text=body),
+            httpx.Response(200, json={"status": "success", "result": {"id": 77}}),
+        ]
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with caplog.at_level("WARNING", logger="custom_components.hostaway.api.client"):
+            response = await client._request(
+                "PUT", "/v1/reservations/77", json={"doorCode": "1234"}
+            )
+
+        assert response.status_code == 200
+        matching = [
+            r
+            for r in caplog.records
+            if r.levelname == "WARNING"
+            and "PUT" in r.getMessage()
+            and "/v1/reservations/77" in r.getMessage()
+            and "token expired" in r.getMessage()
+        ]
+        messages = [r.getMessage() for r in caplog.records]
+        assert matching, f"Expected WARNING log; got: {messages}"
+
+    async def test_403_body_unavailable_does_not_crash(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Test 403 with unreadable body still raises HostawayAuthError cleanly."""
+        respx.get(f"{FAKE_BASE_URL}/v1/listings").mock(return_value=httpx.Response(403))
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        # Force _safe_response_body to simulate unreadable body.
+        with (
+            patch(
+                "custom_components.hostaway.api.client._safe_response_body",
+                return_value="<unavailable>",
+            ),
+            pytest.raises(HostawayAuthError) as exc_info,
+        ):
+            await client._request("GET", "/v1/listings")
+
+        msg = str(exc_info.value)
+        assert "Forbidden after token refresh" in msg
+        assert "<unavailable>" in msg
+
     async def test_404_raises_response_error(
         self, mock_httpx_client: httpx.AsyncClient
     ) -> None:
