@@ -16,7 +16,7 @@ name resolution via the existing coordinator cache.
 
 ## Technical Context
 
-**Language/Version**: Python 3.14 **Primary Dependencies**: httpx (HTTP client),
+**Language/Version**: Python 3.14.2 **Primary Dependencies**: httpx (HTTP client),
 voluptuous (schema validation), homeassistant (core HA framework) **Storage**:
 N/A (stateless services; listings cache from coordinator) **Testing**: pytest +
 respx (HTTP mocking for API client), pytest + unittest.mock (for service layer)
@@ -64,7 +64,7 @@ specs/003-task-management-services/
 │   ├── delete-task.md
 │   └── get-tasks.md
 └── tasks.md             # Phase 2 output (/speckit.tasks command)
-```text
+```
 
 ### Source Code (repository root)
 
@@ -80,7 +80,7 @@ tests/
 ├── api/
 │   └── test_client.py   # Add: tests for new task API methods
 └── test_services.py     # Add: tests for new task service handlers
-```text
+```
 
 **Structure Decision**: Existing single-project layout. New code extends
 existing files (`client.py`, `services.py`, `services.yaml`) plus new test cases

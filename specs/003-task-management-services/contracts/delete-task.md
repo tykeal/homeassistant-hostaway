@@ -33,7 +33,7 @@ None. Service returns no data (FR-006).
 ```http
 DELETE /v1/tasks/{taskId}
 Authorization: Bearer {token}
-```text
+```
 
 Expected response:
 
@@ -42,4 +42,4 @@ Expected response:
   "status": "success",
   "result": []
 }
-```text
+```

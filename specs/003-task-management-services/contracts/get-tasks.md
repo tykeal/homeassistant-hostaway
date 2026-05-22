@@ -38,7 +38,7 @@ Returns a dict containing the tasks list:
     ...
   ]
 }
-```text
+```
 
 ## Error Cases
 
@@ -56,7 +56,7 @@ Returns a dict containing the tasks list:
 ```http
 GET /v1/tasks?listingMapId=67890&status=pending&canStartFromStart=2025-07-01&canStartFromEnd=2025-07-31
 Authorization: Bearer {token}
-```text
+```
 
 Expected response:
 
@@ -68,7 +68,7 @@ Expected response:
   "offset": 0,
   "count": 5
 }
-```text
+```
 
 ## Notes
 

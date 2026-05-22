@@ -91,7 +91,7 @@ For listing_name resolution:
   3. Return listing.id as listingMapId
   4. If not found → ServiceValidationError
   5. If coordinator.data is None → ServiceValidationError
-```text
+```
 
 ### Config Entry (existing — service dispatch)
 
@@ -111,7 +111,7 @@ Resolution via existing `_resolve_entry_data()` helper.
 Config Entry 1──* Task (via API client)
 Listing 1──* Task (via listingMapId)
 Reservation 1──* Task (via reservationId)
-```text
+```
 
 ## State Transitions
 
@@ -121,7 +121,7 @@ Task Status Flow:
                     └──→ cancelled
   pending → cancelled (direct cancellation)
   Any status can be set to any other (API does not enforce transitions)
-```text
+```
 
 Note: The Hostaway API does not enforce status transitions. Any status can be
 set at any time. The integration passes the requested status through without

@@ -2,14 +2,14 @@
 
 ## Prerequisites
 
-- Python 3.14+
+- Python 3.14.2+
 - `uv` package manager installed
 - Repository cloned and dependencies installed:
 
   ```bash
   uv sync
 
-```text
+  ```
 
 ## Development Setup
 
@@ -26,7 +26,7 @@ uv run ruff format --check .
 
 # Run type checking
 uv run mypy custom_components/hostaway/
-```text
+```
 
 ## Implementation Order (TDD)
 
@@ -70,7 +70,7 @@ async def create_task(self, data: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(result, dict):
         raise HostawayResponseError("Create response missing 'result' object")
     return result
-```text
+```
 
 ### Service Handler (reference: `async_handle_set_door_code`)
 
@@ -98,7 +98,7 @@ async def async_handle_create_task(
         raise HomeAssistantError(f"Failed to create task: {exc}") from exc
     except HostawayApiError as exc:
         raise HomeAssistantError(f"Failed to create task: {exc}") from exc
-```text
+```
 
 ### Listing Name Resolution
 
@@ -112,7 +112,7 @@ def _resolve_listing_id(
     if "listing_name" not in call_data:
         return None
     # Look up in coordinator cache...
-```text
+```
 
 ## Testing Patterns
 
@@ -125,7 +125,7 @@ async def test_create_task_success(api_client, respx_mock):
     )
     result = await api_client.create_task({"title": "Test"})
     assert result == {"id": 1, "title": "Test"}
-```text
+```
 
 ### Service Tests (mocks API client)
 
@@ -134,7 +134,7 @@ async def test_create_task_service(hass, mock_api_client):
     mock_api_client.create_task.return_value = {"id": 1, "title": "Test"}
     result = await async_handle_create_task(hass, mock_call)
     assert result["id"] == 1
-```text
+```
 
 ## Commit Convention
 
@@ -145,4 +145,4 @@ Implement POST /v1/tasks endpoint call with response validation.
 
 Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
 Signed-off-by: Andrew Grimberg <tykeal@bardicgrove.org>
-```text
+```

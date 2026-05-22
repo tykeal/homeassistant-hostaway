@@ -37,7 +37,7 @@ from API, passed through as-is).
   "status": "pending",
   ...
 }
-```text
+```
 
 ## Error Cases
 
@@ -64,4 +64,4 @@ Content-Type: application/json
   "canStartFrom": "2025-07-15",
   "shouldEndBy": "2025-07-20"
 }
-```text
+```

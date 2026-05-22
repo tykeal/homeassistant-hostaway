@@ -38,7 +38,7 @@ Returns the updated task object as returned by the Hostaway API.
   "resolutionNote": "All batteries replaced on 2025-07-16",
   ...
 }
-```text
+```
 
 ## Error Cases
 
@@ -63,4 +63,4 @@ Content-Type: application/json
   "status": "completed",
   "resolutionNote": "All batteries replaced"
 }
-```text
+```
