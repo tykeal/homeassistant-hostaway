@@ -21,8 +21,9 @@
 
 ## Output
 
-Returns a dict containing the tasks list. Each task item preserves the raw
-Hostaway API camelCase field names in the service response:
+Returns a dict containing the aggregated tasks list. The service paginates
+through all matching Hostaway task-list responses before returning data, and
+each task item preserves the raw Hostaway API camelCase field names:
 
 ```json
 {
@@ -73,8 +74,11 @@ Expected response:
 
 ## Notes
 
-- All filter parameters are optional; calling with no filters returns all tasks.
+- All filter parameters are optional; calling with no filters returns all
+  matching tasks across every Hostaway response page.
 - Date range filters use `canStartFromStart` and `canStartFromEnd` as query
   parameter names (matching Hostaway API naming convention for range filters).
+- The service handles `limit` / `offset` pagination internally; callers do not
+  pass paging parameters.
 - Results are returned in a wrapper dict (`{"tasks": [...]}`) for consistency
   with other service responses.

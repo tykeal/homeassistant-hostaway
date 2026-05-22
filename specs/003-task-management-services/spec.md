@@ -79,13 +79,13 @@ if there are pending tasks for a listing before guest checkout).
 reporting, building on the create/update capabilities.
 
 **Independent Test**: Can be fully tested by calling get_tasks with various
-filter combinations and verifying the returned task list matches expected
-results.
+filter combinations and verifying the returned task list aggregates all matching
+results across all Hostaway pages.
 
 **Acceptance Scenarios**:
 
 1. **Given** tasks exist in Hostaway, **When** get_tasks is called with no
-   filters, **Then** all tasks are returned.
+   filters, **Then** all matching tasks across all Hostaway pages are returned.
 2. **Given** tasks exist for multiple listings, **When** get_tasks is called
    with a listing_name filter, **Then** only tasks for the resolved listing are
    returned.
@@ -167,7 +167,10 @@ task_id and verifying the task is removed (subsequent get returns not found).
   category IDs.
 - **FR-015**: Task status values MUST be limited to: pending, confirmed,
   inProgress, completed, cancelled.
-- **FR-016**: This feature MUST NOT introduce sensors, polling, or coordinator
+- **FR-016**: The `get_tasks` service MUST paginate through all matching
+  Hostaway task-list responses and aggregate them before returning results to
+  the caller.
+- **FR-017**: This feature MUST NOT introduce sensors, polling, or coordinator
   changes for tasks — services only.
 
 ### Key Entities

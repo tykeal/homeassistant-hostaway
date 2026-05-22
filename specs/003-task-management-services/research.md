@@ -147,18 +147,21 @@ precedent.
 - `async def update_task(self, task_id: int, data: dict[str, Any]) -> dict[str,
   Any]`
 - `async def delete_task(self, task_id: int) -> None`
+- `async def get_tasks_page(self, params: dict[str, Any] | None = None, offset:
+  int = 0, limit: int = DEFAULT_PAGE_LIMIT) -> list[dict[str, Any]]`
 - `async def get_tasks(self, params: dict[str, Any] | None = None) ->
   list[dict[str, Any]]`
 
-**Rationale**: Mirrors `update_reservation()` pattern for create/update. Delete
-returns None (just validates success). Get returns a list (similar to
-`get_all_reservations` but without pagination since tasks are typically few per
-account).
+**Rationale**: Mirrors the existing page-plus-aggregate patterns already used
+for listings and reservations. Delete returns None (just validates success).
+`get_tasks_page()` handles the raw `limit` / `offset` API call, while
+`get_tasks()` iterates through all pages and returns a fully aggregated task
+list to satisfy the constitution's pagination requirement for list endpoints.
 
 **Alternatives considered**:
 
-- Paginated get_tasks: Could be added later if needed, but the initial
-  implementation returns only the first page from `GET /v1/tasks`. Automatic
-  pagination can be added in a future iteration if task volumes require it.
+- Single-page `get_tasks`: Rejected — the Hostaway task endpoint returns
+  pagination metadata (`limit`, `offset`, `count`), and Constitution Principle
+  II requires pagination support for list endpoints.
 - Returning raw response: Rejected — must validate response format per
   constitution.
