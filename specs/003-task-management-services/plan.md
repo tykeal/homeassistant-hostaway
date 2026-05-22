@@ -16,16 +16,21 @@ name resolution via the existing coordinator cache.
 
 ## Technical Context
 
-**Language/Version**: Python 3.14.2 **Primary Dependencies**: httpx (HTTP client),
-voluptuous (schema validation), homeassistant (core HA framework) **Storage**:
-N/A (stateless services; listings cache from coordinator) **Testing**: pytest +
-respx (HTTP mocking for API client), pytest + unittest.mock (for service layer)
-**Target Platform**: Home Assistant custom component (any HA-supported platform)
-**Project Type**: Home Assistant custom integration (services-only extension)
-**Performance Goals**: Service calls complete in <5 seconds end-to-end (SC-001)
-**Constraints**: Must not block HA event loop; must respect Hostaway rate limits
-(15 req/10s per IP, 20 req/10s per account) **Scale/Scope**: 4 new
-services, 4 new API client methods, ~200-300 lines of service logic
+- **Language/Version**: Python 3.14.2
+- **Primary Dependencies**: httpx (HTTP client), voluptuous (schema
+  validation), homeassistant (core HA framework)
+- **Storage**: N/A (stateless services; listings cache from coordinator)
+- **Testing**: pytest + respx (HTTP mocking for API client), pytest +
+  unittest.mock (for service layer)
+- **Target Platform**: Home Assistant custom component (any HA-supported
+  platform)
+- **Project Type**: Home Assistant custom integration (services-only extension)
+- **Performance Goals**: Service calls complete in <5 seconds end-to-end
+  (SC-001)
+- **Constraints**: Must not block HA event loop; must respect Hostaway rate
+  limits (15 req/10s per IP, 20 req/10s per account)
+- **Scale/Scope**: 4 new services, 4 new API client methods, ~200-300 lines of
+  service logic
 
 ## Constitution Check
 
