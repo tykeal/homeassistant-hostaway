@@ -391,6 +391,122 @@ class HostawayApiClient:
 
         return all_reservations
 
+    async def create_task(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Create a task via POST /v1/tasks.
+
+        Args:
+            data: JSON body with task fields in camelCase.
+
+        Returns:
+            Created task data from the API response.
+
+        Raises:
+            HostawayResponseError: On unexpected response format.
+            HostawayAuthError: On authentication failure.
+            HostawayConnectionError: On network failure.
+            HostawayRateLimitError: On rate limit exhaustion.
+        """
+        response = await self._request("POST", "/v1/tasks", json=data)
+        parsed = self._parse_response(response)
+        status = parsed.get("status")
+        if status is not None and status != "success":
+            raise HostawayResponseError(
+                f"Create failed: {parsed.get('result', status)}",
+            )
+        result = parsed.get("result")
+        if not isinstance(result, dict):
+            raise HostawayResponseError(
+                "Create response missing 'result' object",
+            )
+        return result
+
+    async def update_task(self, task_id: int, data: dict[str, Any]) -> dict[str, Any]:
+        """Update a task via PUT /v1/tasks/{taskId}.
+
+        Args:
+            task_id: The task ID to update.
+            data: JSON body with fields to update in camelCase.
+
+        Returns:
+            Updated task data from the API response.
+
+        Raises:
+            HostawayResponseError: On unexpected response format or
+                when the task is not found (404).
+            HostawayAuthError: On authentication failure.
+            HostawayConnectionError: On network failure.
+            HostawayRateLimitError: On rate limit exhaustion.
+        """
+        response = await self._request(
+            "PUT",
+            f"/v1/tasks/{task_id}",
+            json=data,
+        )
+        parsed = self._parse_response(response)
+        status = parsed.get("status")
+        if status is not None and status != "success":
+            raise HostawayResponseError(
+                f"Update failed: {parsed.get('result', status)}",
+            )
+        result = parsed.get("result")
+        if not isinstance(result, dict):
+            raise HostawayResponseError(
+                "Update response missing 'result' object",
+            )
+        return result
+
+    async def delete_task(self, task_id: int) -> None:
+        """Delete a task via DELETE /v1/tasks/{taskId}.
+
+        Args:
+            task_id: The task ID to delete.
+
+        Raises:
+            HostawayResponseError: On unexpected response format or
+                when the task is not found (404).
+            HostawayAuthError: On authentication failure.
+            HostawayConnectionError: On network failure.
+            HostawayRateLimitError: On rate limit exhaustion.
+        """
+        response = await self._request("DELETE", f"/v1/tasks/{task_id}")
+        parsed = self._parse_response(response)
+        status = parsed.get("status")
+        if status is not None and status != "success":
+            raise HostawayResponseError(
+                f"Delete failed: {parsed.get('result', status)}",
+            )
+
+    async def get_tasks(
+        self, params: dict[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
+        """Retrieve tasks via GET /v1/tasks.
+
+        Args:
+            params: Optional query parameters for filtering.
+
+        Returns:
+            List of task dictionaries from the API response.
+
+        Raises:
+            HostawayResponseError: On unexpected response format.
+            HostawayAuthError: On authentication failure.
+            HostawayConnectionError: On network failure.
+            HostawayRateLimitError: On rate limit exhaustion.
+        """
+        response = await self._request("GET", "/v1/tasks", params=params)
+        parsed = self._parse_response(response)
+        status = parsed.get("status")
+        if status is not None and status != "success":
+            raise HostawayResponseError(
+                f"Get tasks failed: {parsed.get('result', status)}",
+            )
+        result = parsed.get("result")
+        if not isinstance(result, list):
+            raise HostawayResponseError(
+                "Get tasks response missing 'result' list",
+            )
+        return result
+
     async def update_reservation(
         self, reservation_id: int, data: dict[str, Any]
     ) -> dict[str, Any]:

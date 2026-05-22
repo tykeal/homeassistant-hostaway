@@ -27,6 +27,14 @@ _LOGGER = logging.getLogger(__name__)
 _LOCKED_LOG_COOLDOWN_SECONDS = 3600
 _LOCKED_RESERVATION_LOG_STATE: dict[int, float] = {}
 
+_TASK_STATUS_VALUES = (
+    "pending",
+    "confirmed",
+    "inProgress",
+    "completed",
+    "cancelled",
+)
+
 
 def _prune_locked_state(now: float) -> None:
     """Drop log-state entries older than twice the cooldown.
@@ -196,6 +204,61 @@ SERVICE_FIND_RESERVATION_SCHEMA = vol.Schema(
     }
 )
 
+SERVICE_CREATE_TASK_SCHEMA = vol.Schema(
+    {
+        vol.Required("title"): _non_empty_string,
+        vol.Optional("description"): _strict_string,
+        vol.Optional("listing_id"): _positive_int,
+        vol.Optional("listing_name"): _non_empty_string,
+        vol.Optional("reservation_id"): _positive_int,
+        vol.Optional("status"): vol.In(_TASK_STATUS_VALUES),
+        vol.Optional("priority"): _positive_int,
+        vol.Optional("assignee_user_id"): _positive_int,
+        vol.Optional("categories_map"): vol.All(list, [_positive_int]),
+        vol.Optional("can_start_from"): _non_empty_string,
+        vol.Optional("should_end_by"): _non_empty_string,
+        vol.Optional("config_entry_id"): _strict_string,
+    }
+)
+
+SERVICE_UPDATE_TASK_SCHEMA = vol.Schema(
+    {
+        vol.Required("task_id"): _positive_int,
+        vol.Optional("title"): _non_empty_string,
+        vol.Optional("description"): _strict_string,
+        vol.Optional("listing_id"): _positive_int,
+        vol.Optional("listing_name"): _non_empty_string,
+        vol.Optional("reservation_id"): _positive_int,
+        vol.Optional("status"): vol.In(_TASK_STATUS_VALUES),
+        vol.Optional("priority"): _positive_int,
+        vol.Optional("assignee_user_id"): _positive_int,
+        vol.Optional("categories_map"): vol.All(list, [_positive_int]),
+        vol.Optional("can_start_from"): _non_empty_string,
+        vol.Optional("should_end_by"): _non_empty_string,
+        vol.Optional("resolution_note"): _strict_string,
+        vol.Optional("config_entry_id"): _strict_string,
+    }
+)
+
+SERVICE_DELETE_TASK_SCHEMA = vol.Schema(
+    {
+        vol.Required("task_id"): _positive_int,
+        vol.Optional("config_entry_id"): _strict_string,
+    }
+)
+
+SERVICE_GET_TASKS_SCHEMA = vol.Schema(
+    {
+        vol.Optional("listing_id"): _positive_int,
+        vol.Optional("listing_name"): _non_empty_string,
+        vol.Optional("reservation_id"): _positive_int,
+        vol.Optional("status"): vol.In(_TASK_STATUS_VALUES),
+        vol.Optional("can_start_from_start"): _non_empty_string,
+        vol.Optional("can_start_from_end"): _non_empty_string,
+        vol.Optional("config_entry_id"): _strict_string,
+    }
+)
+
 
 def _resolve_entry_data(
     hass: HomeAssistant,
@@ -239,6 +302,275 @@ def _resolve_entry_data(
     raise ServiceValidationError(
         "config_entry_id required when multiple entries exist",
     )
+
+
+def _resolve_listing_id(
+    hass: HomeAssistant,
+    call_data: dict[str, Any],
+) -> int | None:
+    """Resolve a listing ID from call data.
+
+    If ``listing_id`` is provided directly, it takes precedence.
+    If ``listing_name`` is provided, searches the listings
+    coordinator cache for a matching ``internal_name``.
+
+    Args:
+        hass: Home Assistant instance.
+        call_data: Service call data dictionary.
+
+    Returns:
+        The resolved listing ID, or None if neither field present.
+
+    Raises:
+        ServiceValidationError: If listing_name is not found in
+            the coordinator cache or listings data is unavailable.
+    """
+    if "listing_id" in call_data:
+        result: int = call_data["listing_id"]
+        return result
+
+    if "listing_name" not in call_data:
+        return None
+
+    listing_name: str = call_data["listing_name"]
+
+    # Get listings coordinator from entry data
+    entry_data = _resolve_entry_data(hass, call_data)
+    listings_coordinator = entry_data["listings_coordinator"]
+
+    if listings_coordinator.data is None:
+        raise ServiceValidationError(
+            "Listings data not available for name resolution",
+        )
+
+    for listing in listings_coordinator.data.values():
+        if listing.internal_name == listing_name:
+            resolved: int = listing.id
+            return resolved
+
+    raise ServiceValidationError(
+        f"Listing '{listing_name}' not found",
+    )
+
+
+async def async_handle_create_task(
+    hass: HomeAssistant,
+    call: ServiceCall,
+) -> dict[str, Any]:
+    """Handle hostaway.create_task service call.
+
+    Builds a camelCase payload from the service call data,
+    resolves listing if specified by name, and sends a POST
+    request to create the task.
+
+    Args:
+        hass: Home Assistant instance.
+        call: The incoming service call.
+
+    Returns:
+        The created task data from the API.
+
+    Raises:
+        ServiceValidationError: On invalid input or missing listing.
+        HomeAssistantError: On API failure.
+    """
+    payload: dict[str, Any] = {"title": call.data["title"]}
+
+    if call.data.get("description") is not None:
+        payload["description"] = call.data["description"]
+    if call.data.get("reservation_id") is not None:
+        payload["reservationId"] = call.data["reservation_id"]
+    if call.data.get("status") is not None:
+        payload["status"] = call.data["status"]
+    if call.data.get("priority") is not None:
+        payload["priority"] = call.data["priority"]
+    if call.data.get("assignee_user_id") is not None:
+        payload["assigneeUserId"] = call.data["assignee_user_id"]
+    if call.data.get("categories_map") is not None:
+        payload["categoriesMap"] = call.data["categories_map"]
+    if call.data.get("can_start_from") is not None:
+        payload["canStartFrom"] = call.data["can_start_from"]
+    if call.data.get("should_end_by") is not None:
+        payload["shouldEndBy"] = call.data["should_end_by"]
+
+    listing_id = _resolve_listing_id(hass, call.data)
+    if listing_id is not None:
+        payload["listingMapId"] = listing_id
+
+    entry_data = _resolve_entry_data(hass, call.data)
+    api_client: HostawayApiClient = entry_data["api_client"]
+
+    try:
+        return await api_client.create_task(payload)
+    except HostawayResponseError as exc:
+        if "not found" in str(exc).lower():
+            raise ServiceValidationError(
+                f"Task creation failed: {exc}",
+            ) from exc
+        raise HomeAssistantError(
+            f"Failed to create task: {exc}",
+        ) from exc
+    except HostawayApiError as exc:
+        raise HomeAssistantError(
+            f"Failed to create task: {exc}",
+        ) from exc
+
+
+async def async_handle_update_task(
+    hass: HomeAssistant,
+    call: ServiceCall,
+) -> dict[str, Any]:
+    """Handle hostaway.update_task service call.
+
+    Builds a camelCase payload from optional fields, resolves
+    listing if specified by name, and sends a PUT request to
+    update the task.
+
+    Args:
+        hass: Home Assistant instance.
+        call: The incoming service call.
+
+    Returns:
+        The updated task data from the API.
+
+    Raises:
+        ServiceValidationError: On invalid input or missing resource.
+        HomeAssistantError: On API failure.
+    """
+    task_id: int = call.data["task_id"]
+    payload: dict[str, Any] = {}
+
+    if call.data.get("title") is not None:
+        payload["title"] = call.data["title"]
+    if call.data.get("description") is not None:
+        payload["description"] = call.data["description"]
+    if call.data.get("reservation_id") is not None:
+        payload["reservationId"] = call.data["reservation_id"]
+    if call.data.get("status") is not None:
+        payload["status"] = call.data["status"]
+    if call.data.get("priority") is not None:
+        payload["priority"] = call.data["priority"]
+    if call.data.get("assignee_user_id") is not None:
+        payload["assigneeUserId"] = call.data["assignee_user_id"]
+    if call.data.get("categories_map") is not None:
+        payload["categoriesMap"] = call.data["categories_map"]
+    if call.data.get("can_start_from") is not None:
+        payload["canStartFrom"] = call.data["can_start_from"]
+    if call.data.get("should_end_by") is not None:
+        payload["shouldEndBy"] = call.data["should_end_by"]
+    if call.data.get("resolution_note") is not None:
+        payload["resolutionNote"] = call.data["resolution_note"]
+
+    listing_id = _resolve_listing_id(hass, call.data)
+    if listing_id is not None:
+        payload["listingMapId"] = listing_id
+
+    entry_data = _resolve_entry_data(hass, call.data)
+    api_client: HostawayApiClient = entry_data["api_client"]
+
+    try:
+        return await api_client.update_task(task_id, payload)
+    except HostawayResponseError as exc:
+        if "not found" in str(exc).lower():
+            raise ServiceValidationError(
+                f"Task {task_id} not found",
+            ) from exc
+        raise HomeAssistantError(
+            f"Failed to update task: {exc}",
+        ) from exc
+    except HostawayApiError as exc:
+        raise HomeAssistantError(
+            f"Failed to update task: {exc}",
+        ) from exc
+
+
+async def async_handle_delete_task(
+    hass: HomeAssistant,
+    call: ServiceCall,
+) -> None:
+    """Handle hostaway.delete_task service call.
+
+    Sends a DELETE request to remove the specified task.
+
+    Args:
+        hass: Home Assistant instance.
+        call: The incoming service call.
+
+    Raises:
+        ServiceValidationError: On invalid input or missing resource.
+        HomeAssistantError: On API failure.
+    """
+    task_id: int = call.data["task_id"]
+
+    entry_data = _resolve_entry_data(hass, call.data)
+    api_client: HostawayApiClient = entry_data["api_client"]
+
+    try:
+        await api_client.delete_task(task_id)
+    except HostawayResponseError as exc:
+        if "not found" in str(exc).lower():
+            raise ServiceValidationError(
+                f"Task {task_id} not found",
+            ) from exc
+        raise HomeAssistantError(
+            f"Failed to delete task: {exc}",
+        ) from exc
+    except HostawayApiError as exc:
+        raise HomeAssistantError(
+            f"Failed to delete task: {exc}",
+        ) from exc
+
+
+async def async_handle_get_tasks(
+    hass: HomeAssistant,
+    call: ServiceCall,
+) -> dict[str, Any]:
+    """Handle hostaway.get_tasks service call.
+
+    Builds camelCase query params from optional filters,
+    resolves listing if specified by name, and sends a GET
+    request to retrieve tasks.
+
+    Args:
+        hass: Home Assistant instance.
+        call: The incoming service call.
+
+    Returns:
+        Dict containing the tasks list: {"tasks": [...]}.
+
+    Raises:
+        ServiceValidationError: On invalid input or missing listing.
+        HomeAssistantError: On API failure.
+    """
+    params: dict[str, Any] = {}
+
+    listing_id = _resolve_listing_id(hass, call.data)
+    if listing_id is not None:
+        params["listingMapId"] = listing_id
+    if call.data.get("reservation_id") is not None:
+        params["reservationId"] = call.data["reservation_id"]
+    if call.data.get("status") is not None:
+        params["status"] = call.data["status"]
+    if call.data.get("can_start_from_start") is not None:
+        params["canStartFromStart"] = call.data["can_start_from_start"]
+    if call.data.get("can_start_from_end") is not None:
+        params["canStartFromEnd"] = call.data["can_start_from_end"]
+
+    entry_data = _resolve_entry_data(hass, call.data)
+    api_client: HostawayApiClient = entry_data["api_client"]
+
+    try:
+        tasks = await api_client.get_tasks(params or None)
+    except HostawayResponseError as exc:
+        raise HomeAssistantError(
+            f"Failed to retrieve tasks: {exc}",
+        ) from exc
+    except HostawayApiError as exc:
+        raise HomeAssistantError(
+            f"Failed to retrieve tasks: {exc}",
+        ) from exc
+
+    return {"tasks": tasks}
 
 
 async def async_handle_set_door_code(
@@ -526,5 +858,62 @@ def async_setup_services(hass: HomeAssistant) -> None:
             "find_reservation",
             _handle_find_reservation,
             schema=SERVICE_FIND_RESERVATION_SCHEMA,
+            supports_response=SupportsResponse.ONLY,
+        )
+
+    async def _handle_create_task(
+        call: ServiceCall,
+    ) -> dict[str, Any]:
+        """Delegate to create_task handler."""
+        return await async_handle_create_task(hass, call)
+
+    if not hass.services.has_service(DOMAIN, "create_task"):
+        hass.services.async_register(
+            DOMAIN,
+            "create_task",
+            _handle_create_task,
+            schema=SERVICE_CREATE_TASK_SCHEMA,
+            supports_response=SupportsResponse.ONLY,
+        )
+
+    async def _handle_update_task(
+        call: ServiceCall,
+    ) -> dict[str, Any]:
+        """Delegate to update_task handler."""
+        return await async_handle_update_task(hass, call)
+
+    if not hass.services.has_service(DOMAIN, "update_task"):
+        hass.services.async_register(
+            DOMAIN,
+            "update_task",
+            _handle_update_task,
+            schema=SERVICE_UPDATE_TASK_SCHEMA,
+            supports_response=SupportsResponse.ONLY,
+        )
+
+    async def _handle_delete_task(call: ServiceCall) -> None:
+        """Delegate to delete_task handler."""
+        await async_handle_delete_task(hass, call)
+
+    if not hass.services.has_service(DOMAIN, "delete_task"):
+        hass.services.async_register(
+            DOMAIN,
+            "delete_task",
+            _handle_delete_task,
+            schema=SERVICE_DELETE_TASK_SCHEMA,
+        )
+
+    async def _handle_get_tasks(
+        call: ServiceCall,
+    ) -> dict[str, Any]:
+        """Delegate to get_tasks handler."""
+        return await async_handle_get_tasks(hass, call)
+
+    if not hass.services.has_service(DOMAIN, "get_tasks"):
+        hass.services.async_register(
+            DOMAIN,
+            "get_tasks",
+            _handle_get_tasks,
+            schema=SERVICE_GET_TASKS_SCHEMA,
             supports_response=SupportsResponse.ONLY,
         )

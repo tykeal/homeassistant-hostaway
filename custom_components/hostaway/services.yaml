@@ -86,6 +86,346 @@ get_reservations:
         config_entry:
           integration: hostaway
 
+create_task:
+  name: Create task
+  description: >-
+    Create a new task in Hostaway. Returns the created task data.
+  fields:
+    title:
+      name: Title
+      description: Task title (required).
+      required: true
+      example: "Change batteries in smoke detectors"
+      selector:
+        text:
+    description:
+      name: Description
+      description: Detailed task description.
+      required: false
+      example: "Replace all AA batteries"
+      selector:
+        text:
+          multiline: true
+    listing_id:
+      name: Listing ID
+      description: >-
+        Associated listing ID. Takes precedence over
+        listing_name if both provided.
+      required: false
+      example: 67890
+      selector:
+        number:
+          min: 1
+          mode: box
+    listing_name:
+      name: Listing name
+      description: >-
+        Associated listing by internal name. Resolved from
+        coordinator cache.
+      required: false
+      example: "ocean-suite-1"
+      selector:
+        text:
+    reservation_id:
+      name: Reservation ID
+      description: Associated reservation ID.
+      required: false
+      example: 99001
+      selector:
+        number:
+          min: 1
+          mode: box
+    status:
+      name: Status
+      description: >-
+        Task status. One of: pending, confirmed, inProgress,
+        completed, cancelled.
+      required: false
+      example: "pending"
+      selector:
+        select:
+          options:
+            - "pending"
+            - "confirmed"
+            - "inProgress"
+            - "completed"
+            - "cancelled"
+    priority:
+      name: Priority
+      description: Task priority level.
+      required: false
+      example: 1
+      selector:
+        number:
+          min: 1
+          mode: box
+    assignee_user_id:
+      name: Assignee user ID
+      description: Assigned user ID.
+      required: false
+      example: 42
+      selector:
+        number:
+          min: 1
+          mode: box
+    categories_map:
+      name: Categories
+      description: List of category IDs.
+      required: false
+      example: "[1, 2, 3]"
+      selector:
+        object:
+    can_start_from:
+      name: Can start from
+      description: Earliest start date (ISO format).
+      required: false
+      example: "2025-07-15"
+      selector:
+        text:
+    should_end_by:
+      name: Should end by
+      description: Deadline date (ISO format).
+      required: false
+      example: "2025-07-20"
+      selector:
+        text:
+    config_entry_id:
+      name: Config entry ID
+      description: >-
+        Target a specific Hostaway config entry. Required
+        only when multiple accounts are configured.
+      required: false
+      selector:
+        config_entry:
+          integration: hostaway
+
+update_task:
+  name: Update task
+  description: >-
+    Update an existing task in Hostaway. Returns the updated
+    task data.
+  fields:
+    task_id:
+      name: Task ID
+      description: The task ID to update (required).
+      required: true
+      example: 12345
+      selector:
+        number:
+          min: 1
+          mode: box
+    title:
+      name: Title
+      description: New task title.
+      required: false
+      example: "Updated task title"
+      selector:
+        text:
+    description:
+      name: Description
+      description: New task description.
+      required: false
+      example: "Updated description"
+      selector:
+        text:
+          multiline: true
+    listing_id:
+      name: Listing ID
+      description: >-
+        New associated listing ID. Takes precedence over
+        listing_name if both provided.
+      required: false
+      example: 67890
+      selector:
+        number:
+          min: 1
+          mode: box
+    listing_name:
+      name: Listing name
+      description: >-
+        New associated listing by internal name. Resolved from
+        coordinator cache.
+      required: false
+      example: "ocean-suite-1"
+      selector:
+        text:
+    reservation_id:
+      name: Reservation ID
+      description: New associated reservation ID.
+      required: false
+      example: 99001
+      selector:
+        number:
+          min: 1
+          mode: box
+    status:
+      name: Status
+      description: >-
+        New task status. One of: pending, confirmed, inProgress,
+        completed, cancelled.
+      required: false
+      example: "completed"
+      selector:
+        select:
+          options:
+            - "pending"
+            - "confirmed"
+            - "inProgress"
+            - "completed"
+            - "cancelled"
+    priority:
+      name: Priority
+      description: New task priority level.
+      required: false
+      example: 2
+      selector:
+        number:
+          min: 1
+          mode: box
+    assignee_user_id:
+      name: Assignee user ID
+      description: New assigned user ID.
+      required: false
+      example: 42
+      selector:
+        number:
+          min: 1
+          mode: box
+    categories_map:
+      name: Categories
+      description: New list of category IDs.
+      required: false
+      example: "[1, 2, 3]"
+      selector:
+        object:
+    can_start_from:
+      name: Can start from
+      description: New earliest start date (ISO format).
+      required: false
+      example: "2025-07-15"
+      selector:
+        text:
+    should_end_by:
+      name: Should end by
+      description: New deadline date (ISO format).
+      required: false
+      example: "2025-07-20"
+      selector:
+        text:
+    resolution_note:
+      name: Resolution note
+      description: Note added when resolving/completing task.
+      required: false
+      example: "All batteries replaced"
+      selector:
+        text:
+          multiline: true
+    config_entry_id:
+      name: Config entry ID
+      description: >-
+        Target a specific Hostaway config entry. Required
+        only when multiple accounts are configured.
+      required: false
+      selector:
+        config_entry:
+          integration: hostaway
+
+delete_task:
+  name: Delete task
+  description: >-
+    Delete a task from Hostaway. Returns no data.
+  fields:
+    task_id:
+      name: Task ID
+      description: The task ID to delete (required).
+      required: true
+      example: 12345
+      selector:
+        number:
+          min: 1
+          mode: box
+    config_entry_id:
+      name: Config entry ID
+      description: >-
+        Target a specific Hostaway config entry. Required
+        only when multiple accounts are configured.
+      required: false
+      selector:
+        config_entry:
+          integration: hostaway
+
+get_tasks:
+  name: Get tasks
+  description: >-
+    Retrieve and filter tasks from Hostaway. Returns a list
+    of tasks matching the filter criteria.
+  fields:
+    listing_id:
+      name: Listing ID
+      description: Filter by listing ID.
+      required: false
+      example: 67890
+      selector:
+        number:
+          min: 1
+          mode: box
+    listing_name:
+      name: Listing name
+      description: >-
+        Filter by listing internal name. Resolved from
+        coordinator cache.
+      required: false
+      example: "ocean-suite-1"
+      selector:
+        text:
+    reservation_id:
+      name: Reservation ID
+      description: Filter by reservation ID.
+      required: false
+      example: 99001
+      selector:
+        number:
+          min: 1
+          mode: box
+    status:
+      name: Status
+      description: >-
+        Filter by status. One of: pending, confirmed,
+        inProgress, completed, cancelled.
+      required: false
+      example: "pending"
+      selector:
+        select:
+          options:
+            - "pending"
+            - "confirmed"
+            - "inProgress"
+            - "completed"
+            - "cancelled"
+    can_start_from_start:
+      name: Can start from (start)
+      description: Date range start for canStartFrom filter.
+      required: false
+      example: "2025-07-01"
+      selector:
+        text:
+    can_start_from_end:
+      name: Can start from (end)
+      description: Date range end for canStartFrom filter.
+      required: false
+      example: "2025-07-31"
+      selector:
+        text:
+    config_entry_id:
+      name: Config entry ID
+      description: >-
+        Target a specific Hostaway config entry. Required
+        only when multiple accounts are configured.
+      required: false
+      selector:
+        config_entry:
+          integration: hostaway
+
 find_reservation:
   name: Find reservation
   description: >-
