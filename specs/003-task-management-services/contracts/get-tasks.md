@@ -21,7 +21,8 @@
 
 ## Output
 
-Returns a dict containing the tasks list:
+Returns a dict containing the tasks list. Each task item preserves the raw
+Hostaway API camelCase field names in the service response:
 
 ```json
 {

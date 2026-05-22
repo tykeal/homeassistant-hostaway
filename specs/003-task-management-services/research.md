@@ -157,8 +157,8 @@ account).
 
 **Alternatives considered**:
 
-- Paginated get_tasks: Could be added later if needed, but initial
-  implementation returns single-page results. The API will return paginated
-  data; we'll consume the first page or all pages depending on result set size.
+- Paginated get_tasks: Could be added later if needed, but the initial
+  implementation returns only the first page from `GET /v1/tasks`. Automatic
+  pagination can be added in a future iteration if task volumes require it.
 - Returning raw response: Rejected — must validate response format per
   constitution.

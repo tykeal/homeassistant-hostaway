@@ -26,8 +26,9 @@ SupportsResponse.ONLY (always returns task data)
 
 ## Output
 
-Returns the created task object as returned by the Hostaway API (camelCase keys
-from API, passed through as-is).
+Returns the created task object in the raw Hostaway API response shape.
+Service inputs use snake_case, but returned task fields remain camelCase
+(e.g., `listingMapId`) and are passed through as-is.
 
 ```json
 {

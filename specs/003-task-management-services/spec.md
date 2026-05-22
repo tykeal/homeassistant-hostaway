@@ -205,8 +205,9 @@ task_id and verifying the task is removed (subsequent get returns not found).
   listing data including internal names and numeric IDs.
 - The Hostaway Tasks API endpoints (GET/POST /v1/tasks, GET/PUT/DELETE
   /v1/tasks/{taskId}) are stable and available.
-- Task data is represented as raw dictionaries with snake_cased keys — no
-  dedicated model class is introduced.
+- Task data is represented as raw dictionaries returned by the Hostaway API.
+  Service inputs use snake_case, while service responses preserve the API's
+  camelCase task field names. No dedicated model class is introduced.
 - The SupportsResponse mechanism for returning service call data is already
   available in the integration's Home Assistant version.
 - Listing name resolution uses exact string matching against the internal

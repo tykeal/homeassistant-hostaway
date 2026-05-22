@@ -4,8 +4,9 @@
 
 ### Task (raw dictionary — no model class)
 
-Per the spec assumptions, tasks are represented as raw dictionaries with
-snake_cased keys at the service layer. The API communicates in camelCase.
+Per the spec assumptions, task service inputs use snake_case, but task service
+responses preserve the raw Hostaway API task dictionaries in camelCase. No
+separate model class is introduced.
 
 #### Fields
 
@@ -15,25 +16,25 @@ snake_cased keys at the service layer. The API communicates in camelCase.
 | id | int | — (returned) | — (path param) | Unique task identifier (from API) |
 | title | str | ✅ | ❌ | Task title/summary |
 | description | str | ❌ | ❌ | Detailed task description |
-| listing_map_id | int | ❌ | ❌ | Associated listing (resolved from listing_name or listing_id) |
-| reservation_id | int | ❌ | ❌ | Associated reservation |
+| listingMapId | int | ❌ | ❌ | Associated listing in returned task data |
+| reservationId | int | ❌ | ❌ | Associated reservation |
 | status | str | ❌ | ❌ | One of: pending, confirmed, inProgress, completed, cancelled |
 | priority | int | ❌ | ❌ | Task priority level |
-| assignee_user_id | int | ❌ | ❌ | Assigned user ID |
-| categories_map | list[int] | ❌ | ❌ | List of category IDs |
-| can_start_from | str | ❌ | ❌ | Earliest start (ISO datetime string) |
-| should_end_by | str | ❌ | ❌ | Deadline (ISO datetime string) |
-| resolution_note | str | ❌ | ❌ | Note added when resolving/completing task |
+| assigneeUserId | int | ❌ | ❌ | Assigned user ID |
+| categoriesMap | list[int] | ❌ | ❌ | List of category IDs |
+| canStartFrom | str | ❌ | ❌ | Earliest start (ISO datetime string) |
+| shouldEndBy | str | ❌ | ❌ | Deadline (ISO datetime string) |
+| resolutionNote | str | ❌ | ❌ | Note added when resolving/completing task |
 <!-- markdownlint-enable MD013 MD060 -->
 
-#### camelCase API Mapping
+#### Service Input → Response Field Mapping
 
 <!-- markdownlint-disable MD013 MD060 -->
-| Service Layer (snake_case) | Hostaway API (camelCase) |
-|---------------------------|--------------------------|
+| Service Input (snake_case) | Task Output / Hostaway API (camelCase) |
+|---------------------------|----------------------------------------|
 | title | title |
 | description | description |
-| listing_map_id | listingMapId |
+| listing_id / listing_name | listingMapId |
 | reservation_id | reservationId |
 | status | status |
 | priority | priority |
@@ -60,8 +61,8 @@ snake_cased keys at the service layer. The API communicates in camelCase.
 
 - `title`: Non-empty string (required for create, optional for update)
 - `task_id`: Positive integer (required for update/delete)
-- `listing_id` / `listing_name`: At most one resolution path; `listing_id` takes
-  precedence
+- `listing_id` / `listing_name`: Service input resolution path; `listing_id`
+  takes precedence and is emitted as `listingMapId` in returned task data
 - `status`: Must be one of the 5 defined values
 - `priority`: Positive integer
 - `assignee_user_id`: Positive integer

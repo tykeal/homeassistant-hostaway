@@ -28,7 +28,9 @@ SupportsResponse.ONLY (always returns updated task data)
 
 ## Output
 
-Returns the updated task object as returned by the Hostaway API.
+Returns the updated task object in the raw Hostaway API response shape.
+Service inputs use snake_case, but returned task fields remain camelCase
+(e.g., `resolutionNote`) and are passed through as-is.
 
 ```json
 {
