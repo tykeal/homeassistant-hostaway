@@ -18,7 +18,7 @@ existing `update_reservation()` parsing logic).
 **Alternatives considered**:
 
 - Using webhooks for task state: Rejected — spec explicitly requires
-  services-only (FR-016), no polling/sensors.
+  services-only behavior (FR-017), with no polling/sensors.
 
 ## R2: Task Object Field Mapping (snake_case → camelCase)
 

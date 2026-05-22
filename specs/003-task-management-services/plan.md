@@ -46,7 +46,7 @@ name resolution via the existing coordinator cache.
 | V. Pre-Commit Integrity | ✅ PASS | All hooks must pass before push |
 | VI. Agent Co-Authorship & DCO | ✅ PASS | Co-authored-by + sign-off on all commits |
 | VII. User Experience Consistency | ✅ PASS | Services follow existing patterns (config_entry_id, listing resolution) |
-| VIII. Performance Requirements | ✅ PASS | All async; no polling introduced (FR-016) |
+| VIII. Performance Requirements | ✅ PASS | All async; no polling introduced (FR-017) |
 | IX. Phased Development | ✅ PASS | API layer → Service layer → Registration |
 | X. Security & Credential Management | ✅ PASS | No credentials in code; tokens via existing auth flow |
 <!-- markdownlint-enable MD013 MD060 -->
