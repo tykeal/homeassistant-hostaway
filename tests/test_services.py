@@ -1658,6 +1658,23 @@ class TestUpdateTask:
                 return_response=True,
             )
 
+    async def test_update_task_empty_payload(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Empty payload (only task_id) raises ServiceValidationError."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        with pytest.raises(ServiceValidationError, match="At least one field"):
+            await hass.services.async_call(
+                DOMAIN,
+                "update_task",
+                {"task_id": 42},
+                blocking=True,
+                return_response=True,
+            )
+
 
 class TestDeleteTask:
     """Tests for the hostaway.delete_task service."""

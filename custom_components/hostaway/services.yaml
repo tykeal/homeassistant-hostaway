@@ -172,7 +172,10 @@ create_task:
       name: Categories
       description: List of category IDs.
       required: false
-      example: "[1, 2, 3]"
+      example:
+        - 1
+        - 2
+        - 3
       selector:
         object:
     can_start_from:
@@ -295,7 +298,10 @@ update_task:
       name: Categories
       description: New list of category IDs.
       required: false
-      example: "[1, 2, 3]"
+      example:
+        - 1
+        - 2
+        - 3
       selector:
         object:
     can_start_from:

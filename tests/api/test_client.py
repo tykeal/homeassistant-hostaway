@@ -905,9 +905,7 @@ class TestDeleteTask:
         tm = _make_mock_token_manager()
         client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
 
-        result = await client.delete_task(42)  # type: ignore[func-returns-value]
-
-        assert result is None
+        await client.delete_task(42)
 
     async def test_delete_task_sends_correct_request(
         self, mock_httpx_client: httpx.AsyncClient

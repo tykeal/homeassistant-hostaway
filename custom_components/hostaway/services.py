@@ -402,14 +402,6 @@ async def async_handle_create_task(
 
     try:
         return await api_client.create_task(payload)
-    except HostawayResponseError as exc:
-        if "not found" in str(exc).lower():
-            raise ServiceValidationError(
-                f"Task creation failed: {exc}",
-            ) from exc
-        raise HomeAssistantError(
-            f"Failed to create task: {exc}",
-        ) from exc
     except HostawayApiError as exc:
         raise HomeAssistantError(
             f"Failed to create task: {exc}",
@@ -464,6 +456,11 @@ async def async_handle_update_task(
     listing_id = _resolve_listing_id(hass, call.data)
     if listing_id is not None:
         payload["listingMapId"] = listing_id
+
+    if not payload:
+        raise ServiceValidationError(
+            "At least one field to update must be provided",
+        )
 
     entry_data = _resolve_entry_data(hass, call.data)
     api_client: HostawayApiClient = entry_data["api_client"]
