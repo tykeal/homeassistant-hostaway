@@ -19,3 +19,11 @@ ignore:
     package:
       name: urllib3
       type: python
+  # idna is a transitive dependency (pulled in via httpx and other
+  # test/dev deps). The integration's runtime does not depend on idna
+  # directly. Advisory GHSA-65pc-fj4g-8rjx is fixed in idna >= 3.15;
+  # remove this entry once the upstream dependency chain ships idna >= 3.15.
+  - vulnerability: GHSA-65pc-fj4g-8rjx
+    package:
+      name: idna
+      type: python
