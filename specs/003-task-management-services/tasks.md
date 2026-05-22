@@ -30,9 +30,9 @@ implementation and testing of each story.
 **Purpose**: Service YAML definitions and listing resolution helper shared by
 all stories
 
-- [X] T001 Add `_resolve_listing_id()` helper function to
+- [x] T001 Add `_resolve_listing_id()` helper function to
   custom_components/hostaway/services.py
-- [X] T002 Add task service definitions (create_task, update_task, delete_task,
+- [x] T002 Add task service definitions (create_task, update_task, delete_task,
   get_tasks) to custom_components/hostaway/services.yaml
 
 ---
@@ -49,24 +49,24 @@ complete before any user story.
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation (TDD
   Red phase)**
 
-- [X] T003 [P] Write failing test for `create_task()` success and error cases in
+- [x] T003 [P] Write failing test for `create_task()` success and error cases in
   tests/api/test_client.py
-- [X] T004 [P] Write failing test for `update_task()` success and error cases in
+- [x] T004 [P] Write failing test for `update_task()` success and error cases in
   tests/api/test_client.py
-- [X] T005 [P] Write failing test for `delete_task()` success and error cases in
+- [x] T005 [P] Write failing test for `delete_task()` success and error cases in
   tests/api/test_client.py
-- [X] T006 [P] Write failing test for `get_tasks()` success and error cases in
+- [x] T006 [P] Write failing test for `get_tasks()` success and error cases in
   tests/api/test_client.py
 
 ### Implementation for Foundational Phase
 
-- [X] T007 [P] Implement `create_task(self, data: dict[str, Any]) -> dict[str,
+- [x] T007 [P] Implement `create_task(self, data: dict[str, Any]) -> dict[str,
   Any]` in custom_components/hostaway/api/client.py
-- [X] T008 [P] Implement `update_task(self, task_id: int, data: dict[str, Any])
+- [x] T008 [P] Implement `update_task(self, task_id: int, data: dict[str, Any])
   -> dict[str, Any]` in custom_components/hostaway/api/client.py
-- [X] T009 [P] Implement `delete_task(self, task_id: int) -> None` in
+- [x] T009 [P] Implement `delete_task(self, task_id: int) -> None` in
   custom_components/hostaway/api/client.py
-- [X] T010 [P] Implement `get_tasks(self, params: dict[str, Any] | None = None)
+- [x] T010 [P] Implement `get_tasks(self, params: dict[str, Any] | None = None)
   -> list[dict[str, Any]]` in custom_components/hostaway/api/client.py
 
 **Checkpoint**: All API client methods implemented and passing tests. Service
@@ -87,19 +87,19 @@ created in Hostaway and data returned.
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation (TDD
   Red phase)**
 
-- [X] T011 [US1] Write failing tests for `async_handle_create_task()` in
+- [x] T011 [US1] Write failing tests for `async_handle_create_task()` in
   tests/test_services.py covering: success with title only, success with all
   fields, listing_name resolution, listing_name not found error, API error
   handling, config_entry_id auto-detection
 
 ### Implementation for User Story 1
 
-- [X] T012 [US1] Implement `SERVICE_CREATE_TASK_SCHEMA` voluptuous schema in
+- [x] T012 [US1] Implement `SERVICE_CREATE_TASK_SCHEMA` voluptuous schema in
   custom_components/hostaway/services.py
-- [X] T013 [US1] Implement `async_handle_create_task()` handler in
+- [x] T013 [US1] Implement `async_handle_create_task()` handler in
   custom_components/hostaway/services.py (builds camelCase payload, resolves
   listing, calls api_client.create_task, handles errors per contract)
-- [X] T014 [US1] Register create_task service in `async_setup_services()` with
+- [x] T014 [US1] Register create_task service in `async_setup_services()` with
   SupportsResponse.ONLY in custom_components/hostaway/services.py
 
 **Checkpoint**: User Story 1 fully functional — create_task service works
@@ -117,20 +117,20 @@ verify updated fields in returned data.
 
 ### Tests for User Story 2
 
-- [X] T015 [US2] Write failing tests for `async_handle_update_task()` in
+- [x] T015 [US2] Write failing tests for `async_handle_update_task()` in
   tests/test_services.py covering: success with status update, success with
   multiple fields, task_id not found error, listing_name resolution, API error
   handling
 
 ### Implementation for User Story 2
 
-- [X] T016 [US2] Implement `SERVICE_UPDATE_TASK_SCHEMA` voluptuous schema in
+- [x] T016 [US2] Implement `SERVICE_UPDATE_TASK_SCHEMA` voluptuous schema in
   custom_components/hostaway/services.py
-- [X] T017 [US2] Implement `async_handle_update_task()` handler in
+- [x] T017 [US2] Implement `async_handle_update_task()` handler in
   custom_components/hostaway/services.py (builds camelCase payload from optional
   fields, resolves listing, calls api_client.update_task, handles not-found and
   API errors per contract)
-- [X] T018 [US2] Register update_task service in `async_setup_services()` with
+- [x] T018 [US2] Register update_task service in `async_setup_services()` with
   SupportsResponse.ONLY in custom_components/hostaway/services.py
 
 **Checkpoint**: User Story 2 fully functional — update_task service works
@@ -148,20 +148,20 @@ returned list matches expectations.
 
 ### Tests for User Story 3
 
-- [X] T019 [US3] Write failing tests for `async_handle_get_tasks()` in
+- [x] T019 [US3] Write failing tests for `async_handle_get_tasks()` in
   tests/test_services.py covering: success with no filters, listing_name filter
   resolution, status filter, date range filters, listing_name not found error,
   API error handling
 
 ### Implementation for User Story 3
 
-- [X] T020 [US3] Implement `SERVICE_GET_TASKS_SCHEMA` voluptuous schema in
+- [x] T020 [US3] Implement `SERVICE_GET_TASKS_SCHEMA` voluptuous schema in
   custom_components/hostaway/services.py
-- [X] T021 [US3] Implement `async_handle_get_tasks()` handler in
+- [x] T021 [US3] Implement `async_handle_get_tasks()` handler in
   custom_components/hostaway/services.py (builds camelCase query params,
   resolves listing filter, calls api_client.get_tasks, wraps result in {"tasks":
   [...]}, handles errors per contract)
-- [X] T022 [US3] Register get_tasks service in `async_setup_services()` with
+- [x] T022 [US3] Register get_tasks service in `async_setup_services()` with
   SupportsResponse.ONLY in custom_components/hostaway/services.py
 
 **Checkpoint**: User Story 3 fully functional — get_tasks service works
@@ -179,18 +179,18 @@ removed (no data returned).
 
 ### Tests for User Story 4
 
-- [X] T023 [US4] Write failing tests for `async_handle_delete_task()` in
+- [x] T023 [US4] Write failing tests for `async_handle_delete_task()` in
   tests/test_services.py covering: success (returns None), task_id not found
   error, API error handling
 
 ### Implementation for User Story 4
 
-- [X] T024 [US4] Implement `SERVICE_DELETE_TASK_SCHEMA` voluptuous schema in
+- [x] T024 [US4] Implement `SERVICE_DELETE_TASK_SCHEMA` voluptuous schema in
   custom_components/hostaway/services.py
-- [X] T025 [US4] Implement `async_handle_delete_task()` handler in
+- [x] T025 [US4] Implement `async_handle_delete_task()` handler in
   custom_components/hostaway/services.py (calls api_client.delete_task, handles
   not-found and API errors per contract, returns None)
-- [X] T026 [US4] Register delete_task service in `async_setup_services()` with
+- [x] T026 [US4] Register delete_task service in `async_setup_services()` with
   SupportsResponse.NONE in custom_components/hostaway/services.py
 
 **Checkpoint**: User Story 4 fully functional — delete_task service works
@@ -202,16 +202,16 @@ end-to-end.
 
 **Purpose**: Validation, documentation, and final integration checks
 
-- [X] T027 [P] Verify all new methods and handlers have 100% docstring coverage
+- [x] T027 [P] Verify all new methods and handlers have 100% docstring coverage
   per Constitution Principle I in custom_components/hostaway/api/client.py and
   custom_components/hostaway/services.py
-- [X] T028 [P] Verify SPDX license headers present on any new/modified files per
+- [x] T028 [P] Verify SPDX license headers present on any new/modified files per
   Constitution Principle IV
-- [X] T029 Run full test suite (`uv run pytest tests/ -v`) and confirm all tests
+- [x] T029 Run full test suite (`uv run pytest tests/ -v`) and confirm all tests
   pass
-- [X] T030 Run pre-commit hooks (`uv run pre-commit run --all-files`) and fix
+- [x] T030 Run pre-commit hooks (`uv run pre-commit run --all-files`) and fix
   any issues
-- [X] T031 Run quickstart.md validation steps (ruff check, ruff format, mypy)
+- [x] T031 Run quickstart.md validation steps (ruff check, ruff format, mypy)
 
 ---
 
