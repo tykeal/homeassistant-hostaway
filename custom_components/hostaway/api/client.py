@@ -479,7 +479,11 @@ class HostawayApiClient:
     async def get_tasks(
         self, params: dict[str, Any] | None = None
     ) -> list[dict[str, Any]]:
-        """Retrieve tasks via GET /v1/tasks.
+        """Retrieve all tasks via GET /v1/tasks.
+
+        Applies any caller-provided filters to every request while
+        iterating through all ``limit``/``offset`` pages until a page
+        returns fewer than ``DEFAULT_PAGE_LIMIT`` items.
 
         Args:
             params: Optional query parameters for filtering.
@@ -493,19 +497,36 @@ class HostawayApiClient:
             HostawayConnectionError: On network failure.
             HostawayRateLimitError: On rate limit exhaustion.
         """
-        response = await self._request("GET", "/v1/tasks", params=params)
-        parsed = self._parse_response(response)
-        status = parsed.get("status")
-        if status is not None and status != "success":
-            raise HostawayResponseError(
-                f"Get tasks failed: {parsed.get('result', status)}",
+        all_tasks: list[dict[str, Any]] = []
+        offset = 0
+        base_params = dict(params or {})
+
+        while True:
+            request_params = {
+                **base_params,
+                "offset": offset,
+                "limit": DEFAULT_PAGE_LIMIT,
+            }
+            response = await self._request(
+                "GET",
+                "/v1/tasks",
+                params=request_params,
             )
-        result = parsed.get("result")
-        if not isinstance(result, list):
-            raise HostawayResponseError(
-                "Get tasks response missing 'result' list",
-            )
-        return result
+            parsed = self._parse_response(response)
+            status = parsed.get("status")
+            if status is not None and status != "success":
+                raise HostawayResponseError(
+                    f"Get tasks failed: {parsed.get('result', status)}",
+                )
+            page = self._extract_results(parsed)
+            all_tasks.extend(page)
+
+            if len(page) < DEFAULT_PAGE_LIMIT:
+                break
+
+            offset += DEFAULT_PAGE_LIMIT
+
+        return all_tasks
 
     async def update_reservation(
         self, reservation_id: int, data: dict[str, Any]

@@ -986,25 +986,35 @@ class TestGetTasks:
         assert result[0]["id"] == 1
         assert result[1]["title"] == "Task 2"
 
-    async def test_get_tasks_with_params(
+    async def test_get_tasks_paginates_with_offset(
         self, mock_httpx_client: httpx.AsyncClient
     ) -> None:
-        """Test query params are passed correctly."""
-        route = respx.get(f"{FAKE_BASE_URL}/v1/tasks").mock(
-            return_value=httpx.Response(
-                200,
-                json={"status": "success", "result": []},
-            )
-        )
+        """Test get_tasks() aggregates all offset pages."""
+        page1 = [
+            {"id": i, "title": f"Task {i}"} for i in range(1, DEFAULT_PAGE_LIMIT + 1)
+        ]
+        page2 = [{"id": DEFAULT_PAGE_LIMIT + 1, "title": "Task final"}]
+
+        route = respx.get(f"{FAKE_BASE_URL}/v1/tasks")
+        route.side_effect = [
+            httpx.Response(200, json={"status": "success", "result": page1}),
+            httpx.Response(200, json={"status": "success", "result": page2}),
+        ]
 
         tm = _make_mock_token_manager()
         client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
 
-        await client.get_tasks({"listingMapId": 123, "status": "pending"})
+        result = await client.get_tasks({"listingMapId": 123, "status": "pending"})
 
-        request = route.calls[0].request
-        assert "listingMapId=123" in str(request.url)
-        assert "status=pending" in str(request.url)
+        assert len(result) == DEFAULT_PAGE_LIMIT + 1
+        assert route.call_count == 2
+        first_request = route.calls[0].request
+        second_request = route.calls[1].request
+        assert "listingMapId=123" in str(first_request.url)
+        assert "status=pending" in str(first_request.url)
+        assert f"limit={DEFAULT_PAGE_LIMIT}" in str(first_request.url)
+        assert "offset=0" in str(first_request.url)
+        assert f"offset={DEFAULT_PAGE_LIMIT}" in str(second_request.url)
 
     async def test_get_tasks_empty_list(
         self, mock_httpx_client: httpx.AsyncClient
@@ -1055,5 +1065,22 @@ class TestGetTasks:
         tm = _make_mock_token_manager()
         client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
 
-        with pytest.raises(HostawayResponseError, match="missing 'result' list"):
+        with pytest.raises(HostawayResponseError, match="'result' must be a list"):
+            await client.get_tasks()
+
+    async def test_get_tasks_rejects_non_object_items(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Test malformed task items raise HostawayResponseError."""
+        respx.get(f"{FAKE_BASE_URL}/v1/tasks").mock(
+            return_value=httpx.Response(
+                200,
+                json={"status": "success", "result": [{"id": 1}, "bad-item"]},
+            )
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with pytest.raises(HostawayResponseError, match="items must be JSON objects"):
             await client.get_tasks()
