@@ -1303,3 +1303,691 @@ class TestFindReservation:
         )
 
         assert result["found"] is True  # type: ignore[index]
+
+
+# --- Task Management Service Tests (T011, T015, T019, T023) ---
+
+
+class TestCreateTask:
+    """Tests for the hostaway.create_task service."""
+
+    @patch(
+        "custom_components.hostaway.services.HostawayApiClient.create_task",
+        new_callable=AsyncMock,
+        return_value={"id": 100, "title": "Test Task", "status": "pending"},
+    )
+    async def test_create_task_title_only(
+        self,
+        mock_create: AsyncMock,
+        hass: HomeAssistant,
+    ) -> None:
+        """Successful create with title only."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        result = await hass.services.async_call(
+            DOMAIN,
+            "create_task",
+            {"title": "Test Task"},
+            blocking=True,
+            return_response=True,
+        )
+
+        mock_create.assert_called_once_with({"title": "Test Task"})
+        assert result["id"] == 100  # type: ignore[index]
+
+    @patch(
+        "custom_components.hostaway.services.HostawayApiClient.create_task",
+        new_callable=AsyncMock,
+        return_value={
+            "id": 101,
+            "title": "Full Task",
+            "listingMapId": 12345,
+            "status": "confirmed",
+        },
+    )
+    async def test_create_task_all_fields(
+        self,
+        mock_create: AsyncMock,
+        hass: HomeAssistant,
+    ) -> None:
+        """Successful create with all optional fields."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        result = await hass.services.async_call(
+            DOMAIN,
+            "create_task",
+            {
+                "title": "Full Task",
+                "description": "A detailed description",
+                "listing_id": 12345,
+                "reservation_id": 99001,
+                "status": "confirmed",
+                "priority": 2,
+                "assignee_user_id": 42,
+                "categories_map": [1, 2],
+                "can_start_from": "2025-07-15",
+                "should_end_by": "2025-07-20",
+            },
+            blocking=True,
+            return_response=True,
+        )
+
+        mock_create.assert_called_once_with(
+            {
+                "title": "Full Task",
+                "description": "A detailed description",
+                "listingMapId": 12345,
+                "reservationId": 99001,
+                "status": "confirmed",
+                "priority": 2,
+                "assigneeUserId": 42,
+                "categoriesMap": [1, 2],
+                "canStartFrom": "2025-07-15",
+                "shouldEndBy": "2025-07-20",
+            }
+        )
+        assert result["id"] == 101  # type: ignore[index]
+
+    @patch(
+        "custom_components.hostaway.services.HostawayApiClient.create_task",
+        new_callable=AsyncMock,
+        return_value={"id": 102, "title": "Task", "listingMapId": 12345},
+    )
+    async def test_create_task_listing_name_resolution(
+        self,
+        mock_create: AsyncMock,
+        hass: HomeAssistant,
+    ) -> None:
+        """Listing name resolves to listing ID via coordinator."""
+        from custom_components.hostaway import services as services_mod
+
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        # Inject listings data into coordinator
+        listing = HostawayListing(
+            id=12345,
+            name="Oceanview Suite",
+            internal_name="ocean-suite-1",
+        )
+        hass.data[DOMAIN][entry.entry_id]["listings_coordinator"].data = {
+            12345: listing
+        }
+
+        with patch(
+            "custom_components.hostaway.services._resolve_entry_data",
+            wraps=services_mod._resolve_entry_data,
+        ) as mock_resolve:
+            result = await hass.services.async_call(
+                DOMAIN,
+                "create_task",
+                {"title": "Task", "listing_name": "ocean-suite-1"},
+                blocking=True,
+                return_response=True,
+            )
+
+        mock_resolve.assert_called_once()
+        mock_create.assert_called_once_with({"title": "Task", "listingMapId": 12345})
+        assert result["listingMapId"] == 12345  # type: ignore[index]
+
+    async def test_create_task_listing_name_not_found(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Listing name not in cache raises ServiceValidationError."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        # Set up coordinator with empty data
+        hass.data[DOMAIN][entry.entry_id]["listings_coordinator"].data = {}
+
+        with pytest.raises(ServiceValidationError, match="not found"):
+            await hass.services.async_call(
+                DOMAIN,
+                "create_task",
+                {"title": "Task", "listing_name": "nonexistent"},
+                blocking=True,
+                return_response=True,
+            )
+
+    async def test_create_task_listings_data_unavailable(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Listings data None raises ServiceValidationError."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        hass.data[DOMAIN][entry.entry_id]["listings_coordinator"].data = None
+
+        with pytest.raises(ServiceValidationError, match="not available"):
+            await hass.services.async_call(
+                DOMAIN,
+                "create_task",
+                {"title": "Task", "listing_name": "ocean-suite-1"},
+                blocking=True,
+                return_response=True,
+            )
+
+    @patch(
+        "custom_components.hostaway.services.HostawayApiClient.create_task",
+        new_callable=AsyncMock,
+        side_effect=HostawayResponseError("validation error: title is required"),
+    )
+    async def test_create_task_validation_error(
+        self,
+        mock_create: AsyncMock,
+        hass: HomeAssistant,
+    ) -> None:
+        """Validation-style API errors raise ServiceValidationError."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        with pytest.raises(ServiceValidationError, match="Invalid task data"):
+            await hass.services.async_call(
+                DOMAIN,
+                "create_task",
+                {"title": "Task"},
+                blocking=True,
+                return_response=True,
+            )
+
+    @patch(
+        "custom_components.hostaway.services.HostawayApiClient.create_task",
+        new_callable=AsyncMock,
+        side_effect=HostawayResponseError("Resource not found: /v1/tasks"),
+    )
+    async def test_create_task_not_found_error(
+        self,
+        mock_create: AsyncMock,
+        hass: HomeAssistant,
+    ) -> None:
+        """Generic API failures remain HomeAssistantError."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        with pytest.raises(HomeAssistantError, match="Failed to create"):
+            await hass.services.async_call(
+                DOMAIN,
+                "create_task",
+                {"title": "Task"},
+                blocking=True,
+                return_response=True,
+            )
+
+    @pytest.mark.parametrize("bad_value", [{"1": 2}, "123"])
+    async def test_create_task_categories_map_requires_list(
+        self,
+        hass: HomeAssistant,
+        bad_value: object,
+    ) -> None:
+        """Non-list categories_map values are rejected at schema level."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        with pytest.raises(vol.MultipleInvalid, match="expected a list"):
+            await hass.services.async_call(
+                DOMAIN,
+                "create_task",
+                {"title": "Task", "categories_map": bad_value},
+                blocking=True,
+                return_response=True,
+            )
+
+    @patch(
+        "custom_components.hostaway.services.HostawayApiClient.create_task",
+        new_callable=AsyncMock,
+        return_value={"id": 103, "title": "Auto Task"},
+    )
+    async def test_create_task_auto_detect_config_entry(
+        self,
+        mock_create: AsyncMock,
+        hass: HomeAssistant,
+    ) -> None:
+        """Single config entry auto-detected without config_entry_id."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        result = await hass.services.async_call(
+            DOMAIN,
+            "create_task",
+            {"title": "Auto Task"},
+            blocking=True,
+            return_response=True,
+        )
+
+        assert result["id"] == 103  # type: ignore[index]
+
+
+class TestUpdateTask:
+    """Tests for the hostaway.update_task service."""
+
+    @patch(
+        "custom_components.hostaway.services.HostawayApiClient.update_task",
+        new_callable=AsyncMock,
+        return_value={"id": 42, "status": "completed"},
+    )
+    async def test_update_task_status(
+        self,
+        mock_update: AsyncMock,
+        hass: HomeAssistant,
+    ) -> None:
+        """Successful status update."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        result = await hass.services.async_call(
+            DOMAIN,
+            "update_task",
+            {"task_id": 42, "status": "completed"},
+            blocking=True,
+            return_response=True,
+        )
+
+        mock_update.assert_called_once_with(42, {"status": "completed"})
+        assert result["status"] == "completed"  # type: ignore[index]
+
+    @patch(
+        "custom_components.hostaway.services.HostawayApiClient.update_task",
+        new_callable=AsyncMock,
+        return_value={
+            "id": 42,
+            "title": "New Title",
+            "priority": 3,
+            "resolutionNote": "Done",
+        },
+    )
+    async def test_update_task_multiple_fields(
+        self,
+        mock_update: AsyncMock,
+        hass: HomeAssistant,
+    ) -> None:
+        """Successful update with multiple fields."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        result = await hass.services.async_call(
+            DOMAIN,
+            "update_task",
+            {
+                "task_id": 42,
+                "title": "New Title",
+                "priority": 3,
+                "resolution_note": "Done",
+            },
+            blocking=True,
+            return_response=True,
+        )
+
+        mock_update.assert_called_once_with(
+            42,
+            {"title": "New Title", "priority": 3, "resolutionNote": "Done"},
+        )
+        assert result["title"] == "New Title"  # type: ignore[index]
+
+    @patch(
+        "custom_components.hostaway.services.HostawayApiClient.update_task",
+        new_callable=AsyncMock,
+        side_effect=HostawayResponseError("not found"),
+    )
+    async def test_update_task_not_found(
+        self,
+        mock_update: AsyncMock,
+        hass: HomeAssistant,
+    ) -> None:
+        """Task not found raises ServiceValidationError."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        with pytest.raises(ServiceValidationError, match="not found"):
+            await hass.services.async_call(
+                DOMAIN,
+                "update_task",
+                {"task_id": 999, "status": "completed"},
+                blocking=True,
+                return_response=True,
+            )
+
+    @patch(
+        "custom_components.hostaway.services.HostawayApiClient.update_task",
+        new_callable=AsyncMock,
+        return_value={"id": 42, "listingMapId": 12345},
+    )
+    async def test_update_task_listing_name_resolution(
+        self,
+        mock_update: AsyncMock,
+        hass: HomeAssistant,
+    ) -> None:
+        """Listing name resolves to ID in update."""
+        from custom_components.hostaway import services as services_mod
+
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        listing = HostawayListing(
+            id=12345,
+            name="Oceanview Suite",
+            internal_name="ocean-suite-1",
+        )
+        hass.data[DOMAIN][entry.entry_id]["listings_coordinator"].data = {
+            12345: listing
+        }
+
+        with patch(
+            "custom_components.hostaway.services._resolve_entry_data",
+            wraps=services_mod._resolve_entry_data,
+        ) as mock_resolve:
+            result = await hass.services.async_call(
+                DOMAIN,
+                "update_task",
+                {"task_id": 42, "listing_name": "ocean-suite-1"},
+                blocking=True,
+                return_response=True,
+            )
+
+        mock_resolve.assert_called_once()
+        mock_update.assert_called_once_with(42, {"listingMapId": 12345})
+        assert result["listingMapId"] == 12345  # type: ignore[index]
+
+    @patch(
+        "custom_components.hostaway.services.HostawayApiClient.update_task",
+        new_callable=AsyncMock,
+        side_effect=HostawayResponseError("server error"),
+    )
+    async def test_update_task_api_error(
+        self,
+        mock_update: AsyncMock,
+        hass: HomeAssistant,
+    ) -> None:
+        """API error raises HomeAssistantError."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        with pytest.raises(HomeAssistantError, match="Failed to update"):
+            await hass.services.async_call(
+                DOMAIN,
+                "update_task",
+                {"task_id": 42, "title": "New"},
+                blocking=True,
+                return_response=True,
+            )
+
+    async def test_update_task_empty_payload(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Empty payload (only task_id) raises ServiceValidationError."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        with pytest.raises(ServiceValidationError, match="At least one field"):
+            await hass.services.async_call(
+                DOMAIN,
+                "update_task",
+                {"task_id": 42},
+                blocking=True,
+                return_response=True,
+            )
+
+    @pytest.mark.parametrize("bad_value", [{"1": 2}, "123"])
+    async def test_update_task_categories_map_requires_list(
+        self,
+        hass: HomeAssistant,
+        bad_value: object,
+    ) -> None:
+        """Non-list categories_map values are rejected at schema level."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        with pytest.raises(vol.MultipleInvalid, match="expected a list"):
+            await hass.services.async_call(
+                DOMAIN,
+                "update_task",
+                {"task_id": 42, "categories_map": bad_value},
+                blocking=True,
+                return_response=True,
+            )
+
+
+class TestDeleteTask:
+    """Tests for the hostaway.delete_task service."""
+
+    @patch(
+        "custom_components.hostaway.services.HostawayApiClient.delete_task",
+        new_callable=AsyncMock,
+        return_value=None,
+    )
+    async def test_delete_task_success(
+        self,
+        mock_delete: AsyncMock,
+        hass: HomeAssistant,
+    ) -> None:
+        """Successful deletion returns None."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        await hass.services.async_call(
+            DOMAIN,
+            "delete_task",
+            {"task_id": 42},
+            blocking=True,
+        )
+
+        mock_delete.assert_called_once_with(42)
+
+    @patch(
+        "custom_components.hostaway.services.HostawayApiClient.delete_task",
+        new_callable=AsyncMock,
+        side_effect=HostawayResponseError("not found"),
+    )
+    async def test_delete_task_not_found(
+        self,
+        mock_delete: AsyncMock,
+        hass: HomeAssistant,
+    ) -> None:
+        """Task not found raises ServiceValidationError."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        with pytest.raises(ServiceValidationError, match="not found"):
+            await hass.services.async_call(
+                DOMAIN,
+                "delete_task",
+                {"task_id": 999},
+                blocking=True,
+            )
+
+    @patch(
+        "custom_components.hostaway.services.HostawayApiClient.delete_task",
+        new_callable=AsyncMock,
+        side_effect=HostawayResponseError("server error"),
+    )
+    async def test_delete_task_api_error(
+        self,
+        mock_delete: AsyncMock,
+        hass: HomeAssistant,
+    ) -> None:
+        """API error raises HomeAssistantError."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        with pytest.raises(HomeAssistantError, match="Failed to delete"):
+            await hass.services.async_call(
+                DOMAIN,
+                "delete_task",
+                {"task_id": 42},
+                blocking=True,
+            )
+
+
+class TestGetTasks:
+    """Tests for the hostaway.get_tasks service."""
+
+    @patch(
+        "custom_components.hostaway.services.HostawayApiClient.get_tasks",
+        new_callable=AsyncMock,
+        return_value=[
+            {"id": 1, "title": "Task 1"},
+            {"id": 2, "title": "Task 2"},
+        ],
+    )
+    async def test_get_tasks_no_filters(
+        self,
+        mock_get: AsyncMock,
+        hass: HomeAssistant,
+    ) -> None:
+        """Get all tasks with no filters."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        result = await hass.services.async_call(
+            DOMAIN,
+            "get_tasks",
+            {},
+            blocking=True,
+            return_response=True,
+        )
+
+        mock_get.assert_called_once_with(None)
+        assert len(result["tasks"]) == 2  # type: ignore[arg-type, index]
+
+    @patch(
+        "custom_components.hostaway.services.HostawayApiClient.get_tasks",
+        new_callable=AsyncMock,
+        return_value=[{"id": 1, "title": "Task 1", "listingMapId": 12345}],
+    )
+    async def test_get_tasks_listing_name_filter(
+        self,
+        mock_get: AsyncMock,
+        hass: HomeAssistant,
+    ) -> None:
+        """Listing name filter resolves to listingMapId param."""
+        from custom_components.hostaway import services as services_mod
+
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        listing = HostawayListing(
+            id=12345,
+            name="Oceanview Suite",
+            internal_name="ocean-suite-1",
+        )
+        hass.data[DOMAIN][entry.entry_id]["listings_coordinator"].data = {
+            12345: listing
+        }
+
+        with patch(
+            "custom_components.hostaway.services._resolve_entry_data",
+            wraps=services_mod._resolve_entry_data,
+        ) as mock_resolve:
+            result = await hass.services.async_call(
+                DOMAIN,
+                "get_tasks",
+                {"listing_name": "ocean-suite-1"},
+                blocking=True,
+                return_response=True,
+            )
+
+        mock_resolve.assert_called_once()
+        mock_get.assert_called_once_with({"listingMapId": 12345})
+        assert result["tasks"][0]["listingMapId"] == 12345  # type: ignore[call-overload, index]
+
+    @patch(
+        "custom_components.hostaway.services.HostawayApiClient.get_tasks",
+        new_callable=AsyncMock,
+        return_value=[],
+    )
+    async def test_get_tasks_status_filter(
+        self,
+        mock_get: AsyncMock,
+        hass: HomeAssistant,
+    ) -> None:
+        """Status filter passed as query param."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        await hass.services.async_call(
+            DOMAIN,
+            "get_tasks",
+            {"status": "pending"},
+            blocking=True,
+            return_response=True,
+        )
+
+        mock_get.assert_called_once_with({"status": "pending"})
+
+    @patch(
+        "custom_components.hostaway.services.HostawayApiClient.get_tasks",
+        new_callable=AsyncMock,
+        return_value=[],
+    )
+    async def test_get_tasks_date_range_filters(
+        self,
+        mock_get: AsyncMock,
+        hass: HomeAssistant,
+    ) -> None:
+        """Date range filters passed as query params."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        await hass.services.async_call(
+            DOMAIN,
+            "get_tasks",
+            {
+                "can_start_from_start": "2025-07-01",
+                "can_start_from_end": "2025-07-31",
+            },
+            blocking=True,
+            return_response=True,
+        )
+
+        mock_get.assert_called_once_with(
+            {
+                "canStartFromStart": "2025-07-01",
+                "canStartFromEnd": "2025-07-31",
+            }
+        )
+
+    async def test_get_tasks_listing_name_not_found(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Listing name not found raises ServiceValidationError."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        hass.data[DOMAIN][entry.entry_id]["listings_coordinator"].data = {}
+
+        with pytest.raises(ServiceValidationError, match="not found"):
+            await hass.services.async_call(
+                DOMAIN,
+                "get_tasks",
+                {"listing_name": "nonexistent"},
+                blocking=True,
+                return_response=True,
+            )
+
+    @patch(
+        "custom_components.hostaway.services.HostawayApiClient.get_tasks",
+        new_callable=AsyncMock,
+        side_effect=HostawayResponseError("API error"),
+    )
+    async def test_get_tasks_api_error(
+        self,
+        mock_get: AsyncMock,
+        hass: HomeAssistant,
+    ) -> None:
+        """API error raises HomeAssistantError."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        with pytest.raises(HomeAssistantError, match="Failed to retrieve"):
+            await hass.services.async_call(
+                DOMAIN,
+                "get_tasks",
+                {},
+                blocking=True,
+                return_response=True,
+            )

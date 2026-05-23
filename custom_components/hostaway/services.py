@@ -19,13 +19,21 @@ from custom_components.hostaway.api.exceptions import (
     HostawayReservationLockedError,
     HostawayResponseError,
 )
-from custom_components.hostaway.api.models import HostawayReservation
+from custom_components.hostaway.api.models import HostawayListing, HostawayReservation
 from custom_components.hostaway.const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
 _LOCKED_LOG_COOLDOWN_SECONDS = 3600
 _LOCKED_RESERVATION_LOG_STATE: dict[int, float] = {}
+
+_TASK_STATUS_VALUES = (
+    "pending",
+    "confirmed",
+    "inProgress",
+    "completed",
+    "cancelled",
+)
 
 
 def _prune_locked_state(now: float) -> None:
@@ -166,6 +174,48 @@ def _strict_string(value: Any) -> str:
     return value
 
 
+def _positive_int_list(value: Any) -> list[int]:
+    """Validate a list of positive integers without container coercion.
+
+    Args:
+        value: The value to validate.
+
+    Returns:
+        The validated list of positive integers.
+
+    Raises:
+        vol.Invalid: If the value is not a list of positive integers.
+    """
+    if not isinstance(value, list):
+        raise vol.Invalid("expected a list")
+    return [_positive_int(item) for item in value]
+
+
+def _is_user_correctable_task_error(exc: HostawayResponseError) -> bool:
+    """Return whether a task API error likely reflects invalid user input.
+
+    Args:
+        exc: The response error raised by the API client.
+
+    Returns:
+        True when the message looks like a validation or field error that
+        the caller can correct.
+    """
+    message = str(exc).lower()
+    if "not found" in message:
+        return False
+    return any(
+        marker in message
+        for marker in (
+            "validation",
+            "invalid",
+            "required",
+            "missing field",
+            "field error",
+        )
+    )
+
+
 SERVICE_SET_DOOR_CODE_SCHEMA = vol.Schema(
     {
         vol.Required("reservation_id"): _positive_int,
@@ -192,6 +242,61 @@ SERVICE_FIND_RESERVATION_SCHEMA = vol.Schema(
         vol.Required("check_in"): _non_empty_string,
         vol.Required("check_out"): _non_empty_string,
         vol.Optional("listing_id"): _positive_int,
+        vol.Optional("config_entry_id"): _strict_string,
+    }
+)
+
+SERVICE_CREATE_TASK_SCHEMA = vol.Schema(
+    {
+        vol.Required("title"): _non_empty_string,
+        vol.Optional("description"): _strict_string,
+        vol.Optional("listing_id"): _positive_int,
+        vol.Optional("listing_name"): _non_empty_string,
+        vol.Optional("reservation_id"): _positive_int,
+        vol.Optional("status"): vol.In(_TASK_STATUS_VALUES),
+        vol.Optional("priority"): _positive_int,
+        vol.Optional("assignee_user_id"): _positive_int,
+        vol.Optional("categories_map"): _positive_int_list,
+        vol.Optional("can_start_from"): _non_empty_string,
+        vol.Optional("should_end_by"): _non_empty_string,
+        vol.Optional("config_entry_id"): _strict_string,
+    }
+)
+
+SERVICE_UPDATE_TASK_SCHEMA = vol.Schema(
+    {
+        vol.Required("task_id"): _positive_int,
+        vol.Optional("title"): _non_empty_string,
+        vol.Optional("description"): _strict_string,
+        vol.Optional("listing_id"): _positive_int,
+        vol.Optional("listing_name"): _non_empty_string,
+        vol.Optional("reservation_id"): _positive_int,
+        vol.Optional("status"): vol.In(_TASK_STATUS_VALUES),
+        vol.Optional("priority"): _positive_int,
+        vol.Optional("assignee_user_id"): _positive_int,
+        vol.Optional("categories_map"): _positive_int_list,
+        vol.Optional("can_start_from"): _non_empty_string,
+        vol.Optional("should_end_by"): _non_empty_string,
+        vol.Optional("resolution_note"): _strict_string,
+        vol.Optional("config_entry_id"): _strict_string,
+    }
+)
+
+SERVICE_DELETE_TASK_SCHEMA = vol.Schema(
+    {
+        vol.Required("task_id"): _positive_int,
+        vol.Optional("config_entry_id"): _strict_string,
+    }
+)
+
+SERVICE_GET_TASKS_SCHEMA = vol.Schema(
+    {
+        vol.Optional("listing_id"): _positive_int,
+        vol.Optional("listing_name"): _non_empty_string,
+        vol.Optional("reservation_id"): _positive_int,
+        vol.Optional("status"): vol.In(_TASK_STATUS_VALUES),
+        vol.Optional("can_start_from_start"): _non_empty_string,
+        vol.Optional("can_start_from_end"): _non_empty_string,
         vol.Optional("config_entry_id"): _strict_string,
     }
 )
@@ -239,6 +344,315 @@ def _resolve_entry_data(
     raise ServiceValidationError(
         "config_entry_id required when multiple entries exist",
     )
+
+
+def _get_listing_name_index(listings_coordinator: Any) -> dict[str, int]:
+    """Return a cached internal-name index for listing lookups.
+
+    Args:
+        listings_coordinator: The listings coordinator for the entry.
+
+    Returns:
+        Mapping of ``internal_name`` to Hostaway listing ID.
+
+    Raises:
+        ServiceValidationError: If listings data is unavailable.
+    """
+    listings: dict[int, HostawayListing] | None = listings_coordinator.data
+    if listings is None:
+        raise ServiceValidationError(
+            "Listings data not available for name resolution",
+        )
+
+    cache_key = id(listings)
+    cached_key = getattr(
+        listings_coordinator,
+        "_hostaway_listing_name_index_key",
+        None,
+    )
+    cached_index = getattr(
+        listings_coordinator,
+        "_hostaway_listing_name_index",
+        None,
+    )
+    if cache_key != cached_key or not isinstance(cached_index, dict):
+        cached_index = {
+            listing.internal_name: listing.id
+            for listing in listings.values()
+            if listing.internal_name is not None
+        }
+        listings_coordinator._hostaway_listing_name_index_key = cache_key
+        listings_coordinator._hostaway_listing_name_index = cached_index
+
+    result: dict[str, int] = cached_index
+    return result
+
+
+def _resolve_listing_id(
+    call_data: dict[str, Any],
+    entry_data: dict[str, Any],
+) -> int | None:
+    """Resolve a listing ID from call data.
+
+    If ``listing_id`` is provided directly, it takes precedence.
+    If ``listing_name`` is provided, resolves it via a cached
+    ``internal_name`` index built from the listings coordinator.
+
+    Args:
+        call_data: Service call data dictionary.
+        entry_data: Runtime data for the resolved config entry.
+
+    Returns:
+        The resolved listing ID, or None if neither field present.
+
+    Raises:
+        ServiceValidationError: If listing_name is not found in
+            the coordinator cache or listings data is unavailable.
+    """
+    if "listing_id" in call_data:
+        result: int = call_data["listing_id"]
+        return result
+
+    if "listing_name" not in call_data:
+        return None
+
+    listing_name: str = call_data["listing_name"]
+    listings_coordinator = entry_data["listings_coordinator"]
+    listing_name_index = _get_listing_name_index(listings_coordinator)
+
+    if listing_name in listing_name_index:
+        return listing_name_index[listing_name]
+
+    raise ServiceValidationError(
+        f"Listing '{listing_name}' not found",
+    )
+
+
+async def async_handle_create_task(
+    hass: HomeAssistant,
+    call: ServiceCall,
+) -> dict[str, Any]:
+    """Handle hostaway.create_task service call.
+
+    Builds a camelCase payload from the service call data,
+    resolves listing if specified by name, and sends a POST
+    request to create the task.
+
+    Args:
+        hass: Home Assistant instance.
+        call: The incoming service call.
+
+    Returns:
+        The created task data from the API.
+
+    Raises:
+        ServiceValidationError: On invalid input or missing listing.
+        HomeAssistantError: On API failure.
+    """
+    payload: dict[str, Any] = {"title": call.data["title"]}
+
+    if call.data.get("description") is not None:
+        payload["description"] = call.data["description"]
+    if call.data.get("reservation_id") is not None:
+        payload["reservationId"] = call.data["reservation_id"]
+    if call.data.get("status") is not None:
+        payload["status"] = call.data["status"]
+    if call.data.get("priority") is not None:
+        payload["priority"] = call.data["priority"]
+    if call.data.get("assignee_user_id") is not None:
+        payload["assigneeUserId"] = call.data["assignee_user_id"]
+    if call.data.get("categories_map") is not None:
+        payload["categoriesMap"] = call.data["categories_map"]
+    if call.data.get("can_start_from") is not None:
+        payload["canStartFrom"] = call.data["can_start_from"]
+    if call.data.get("should_end_by") is not None:
+        payload["shouldEndBy"] = call.data["should_end_by"]
+
+    entry_data = _resolve_entry_data(hass, call.data)
+
+    listing_id = _resolve_listing_id(call.data, entry_data)
+    if listing_id is not None:
+        payload["listingMapId"] = listing_id
+
+    api_client: HostawayApiClient = entry_data["api_client"]
+
+    try:
+        return await api_client.create_task(payload)
+    except HostawayResponseError as exc:
+        if _is_user_correctable_task_error(exc):
+            raise ServiceValidationError(
+                f"Invalid task data: {exc}",
+            ) from exc
+        raise HomeAssistantError(
+            f"Failed to create task: {exc}",
+        ) from exc
+    except HostawayApiError as exc:
+        raise HomeAssistantError(
+            f"Failed to create task: {exc}",
+        ) from exc
+
+
+async def async_handle_update_task(
+    hass: HomeAssistant,
+    call: ServiceCall,
+) -> dict[str, Any]:
+    """Handle hostaway.update_task service call.
+
+    Builds a camelCase payload from optional fields, resolves
+    listing if specified by name, and sends a PUT request to
+    update the task.
+
+    Args:
+        hass: Home Assistant instance.
+        call: The incoming service call.
+
+    Returns:
+        The updated task data from the API.
+
+    Raises:
+        ServiceValidationError: On invalid input or missing resource.
+        HomeAssistantError: On API failure.
+    """
+    task_id: int = call.data["task_id"]
+    payload: dict[str, Any] = {}
+
+    if call.data.get("title") is not None:
+        payload["title"] = call.data["title"]
+    if call.data.get("description") is not None:
+        payload["description"] = call.data["description"]
+    if call.data.get("reservation_id") is not None:
+        payload["reservationId"] = call.data["reservation_id"]
+    if call.data.get("status") is not None:
+        payload["status"] = call.data["status"]
+    if call.data.get("priority") is not None:
+        payload["priority"] = call.data["priority"]
+    if call.data.get("assignee_user_id") is not None:
+        payload["assigneeUserId"] = call.data["assignee_user_id"]
+    if call.data.get("categories_map") is not None:
+        payload["categoriesMap"] = call.data["categories_map"]
+    if call.data.get("can_start_from") is not None:
+        payload["canStartFrom"] = call.data["can_start_from"]
+    if call.data.get("should_end_by") is not None:
+        payload["shouldEndBy"] = call.data["should_end_by"]
+    if call.data.get("resolution_note") is not None:
+        payload["resolutionNote"] = call.data["resolution_note"]
+
+    entry_data = _resolve_entry_data(hass, call.data)
+
+    listing_id = _resolve_listing_id(call.data, entry_data)
+    if listing_id is not None:
+        payload["listingMapId"] = listing_id
+
+    if not payload:
+        raise ServiceValidationError(
+            "At least one field to update must be provided",
+        )
+
+    api_client: HostawayApiClient = entry_data["api_client"]
+
+    try:
+        return await api_client.update_task(task_id, payload)
+    except HostawayResponseError as exc:
+        if "not found" in str(exc).lower():
+            raise ServiceValidationError(
+                f"Task {task_id} not found",
+            ) from exc
+        raise HomeAssistantError(
+            f"Failed to update task: {exc}",
+        ) from exc
+    except HostawayApiError as exc:
+        raise HomeAssistantError(
+            f"Failed to update task: {exc}",
+        ) from exc
+
+
+async def async_handle_delete_task(
+    hass: HomeAssistant,
+    call: ServiceCall,
+) -> None:
+    """Handle hostaway.delete_task service call.
+
+    Sends a DELETE request to remove the specified task.
+
+    Args:
+        hass: Home Assistant instance.
+        call: The incoming service call.
+
+    Raises:
+        ServiceValidationError: On invalid input or missing resource.
+        HomeAssistantError: On API failure.
+    """
+    task_id: int = call.data["task_id"]
+
+    entry_data = _resolve_entry_data(hass, call.data)
+    api_client: HostawayApiClient = entry_data["api_client"]
+
+    try:
+        await api_client.delete_task(task_id)
+    except HostawayResponseError as exc:
+        if "not found" in str(exc).lower():
+            raise ServiceValidationError(
+                f"Task {task_id} not found",
+            ) from exc
+        raise HomeAssistantError(
+            f"Failed to delete task: {exc}",
+        ) from exc
+    except HostawayApiError as exc:
+        raise HomeAssistantError(
+            f"Failed to delete task: {exc}",
+        ) from exc
+
+
+async def async_handle_get_tasks(
+    hass: HomeAssistant,
+    call: ServiceCall,
+) -> dict[str, Any]:
+    """Handle hostaway.get_tasks service call.
+
+    Builds camelCase query params from optional filters,
+    resolves listing if specified by name, and sends a GET
+    request to retrieve tasks.
+
+    Args:
+        hass: Home Assistant instance.
+        call: The incoming service call.
+
+    Returns:
+        Dict containing the tasks list: {"tasks": [...]}.
+
+    Raises:
+        ServiceValidationError: On invalid input or missing listing.
+        HomeAssistantError: On API failure.
+    """
+    params: dict[str, Any] = {}
+    entry_data = _resolve_entry_data(hass, call.data)
+
+    listing_id = _resolve_listing_id(call.data, entry_data)
+    if listing_id is not None:
+        params["listingMapId"] = listing_id
+    if call.data.get("reservation_id") is not None:
+        params["reservationId"] = call.data["reservation_id"]
+    if call.data.get("status") is not None:
+        params["status"] = call.data["status"]
+    if call.data.get("can_start_from_start") is not None:
+        params["canStartFromStart"] = call.data["can_start_from_start"]
+    if call.data.get("can_start_from_end") is not None:
+        params["canStartFromEnd"] = call.data["can_start_from_end"]
+
+    api_client: HostawayApiClient = entry_data["api_client"]
+
+    try:
+        tasks = await api_client.get_tasks(params or None)
+    except HostawayResponseError as exc:
+        raise HomeAssistantError(
+            f"Failed to retrieve tasks: {exc}",
+        ) from exc
+    except HostawayApiError as exc:
+        raise HomeAssistantError(
+            f"Failed to retrieve tasks: {exc}",
+        ) from exc
+
+    return {"tasks": tasks}
 
 
 async def async_handle_set_door_code(
@@ -526,5 +940,62 @@ def async_setup_services(hass: HomeAssistant) -> None:
             "find_reservation",
             _handle_find_reservation,
             schema=SERVICE_FIND_RESERVATION_SCHEMA,
+            supports_response=SupportsResponse.ONLY,
+        )
+
+    async def _handle_create_task(
+        call: ServiceCall,
+    ) -> dict[str, Any]:
+        """Delegate to create_task handler."""
+        return await async_handle_create_task(hass, call)
+
+    if not hass.services.has_service(DOMAIN, "create_task"):
+        hass.services.async_register(
+            DOMAIN,
+            "create_task",
+            _handle_create_task,
+            schema=SERVICE_CREATE_TASK_SCHEMA,
+            supports_response=SupportsResponse.ONLY,
+        )
+
+    async def _handle_update_task(
+        call: ServiceCall,
+    ) -> dict[str, Any]:
+        """Delegate to update_task handler."""
+        return await async_handle_update_task(hass, call)
+
+    if not hass.services.has_service(DOMAIN, "update_task"):
+        hass.services.async_register(
+            DOMAIN,
+            "update_task",
+            _handle_update_task,
+            schema=SERVICE_UPDATE_TASK_SCHEMA,
+            supports_response=SupportsResponse.ONLY,
+        )
+
+    async def _handle_delete_task(call: ServiceCall) -> None:
+        """Delegate to delete_task handler."""
+        await async_handle_delete_task(hass, call)
+
+    if not hass.services.has_service(DOMAIN, "delete_task"):
+        hass.services.async_register(
+            DOMAIN,
+            "delete_task",
+            _handle_delete_task,
+            schema=SERVICE_DELETE_TASK_SCHEMA,
+        )
+
+    async def _handle_get_tasks(
+        call: ServiceCall,
+    ) -> dict[str, Any]:
+        """Delegate to get_tasks handler."""
+        return await async_handle_get_tasks(hass, call)
+
+    if not hass.services.has_service(DOMAIN, "get_tasks"):
+        hass.services.async_register(
+            DOMAIN,
+            "get_tasks",
+            _handle_get_tasks,
+            schema=SERVICE_GET_TASKS_SCHEMA,
             supports_response=SupportsResponse.ONLY,
         )

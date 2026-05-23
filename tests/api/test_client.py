@@ -685,3 +685,402 @@ class TestConnection:
 
         with pytest.raises(HostawayConnectionError):
             await client.test_connection()
+
+
+# --- Task API client method tests (T003-T006) ---
+
+
+class TestCreateTask:
+    """Tests for HostawayApiClient.create_task()."""
+
+    async def test_create_task_success(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Test successful task creation returns result dict."""
+        respx.post(f"{FAKE_BASE_URL}/v1/tasks").mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "status": "success",
+                    "result": {"id": 1, "title": "Test Task"},
+                },
+            )
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        result = await client.create_task({"title": "Test Task"})
+
+        assert result == {"id": 1, "title": "Test Task"}
+
+    async def test_create_task_sends_payload(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Test that the JSON payload is sent correctly."""
+        route = respx.post(f"{FAKE_BASE_URL}/v1/tasks").mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "status": "success",
+                    "result": {"id": 1, "title": "Test"},
+                },
+            )
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        await client.create_task({"title": "Test", "listingMapId": 123})
+
+        request = route.calls[0].request
+        body = json.loads(request.content)
+        assert body["title"] == "Test"
+        assert body["listingMapId"] == 123
+
+    async def test_create_task_api_error(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Test non-success status raises HostawayResponseError."""
+        respx.post(f"{FAKE_BASE_URL}/v1/tasks").mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "status": "fail",
+                    "result": "validation error",
+                },
+            )
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with pytest.raises(HostawayResponseError, match="Create failed"):
+            await client.create_task({"title": "Test"})
+
+    async def test_create_task_missing_result(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Test missing result object raises HostawayResponseError."""
+        respx.post(f"{FAKE_BASE_URL}/v1/tasks").mock(
+            return_value=httpx.Response(
+                200,
+                json={"status": "success", "result": []},
+            )
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with pytest.raises(HostawayResponseError, match="missing 'result' object"):
+            await client.create_task({"title": "Test"})
+
+    async def test_create_task_404(self, mock_httpx_client: httpx.AsyncClient) -> None:
+        """Test 404 response raises HostawayResponseError."""
+        respx.post(f"{FAKE_BASE_URL}/v1/tasks").mock(
+            return_value=httpx.Response(404, text="Not Found")
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with pytest.raises(HostawayResponseError):
+            await client.create_task({"title": "Test"})
+
+
+class TestUpdateTask:
+    """Tests for HostawayApiClient.update_task()."""
+
+    async def test_update_task_success(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Test successful task update returns result dict."""
+        respx.put(f"{FAKE_BASE_URL}/v1/tasks/42").mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "status": "success",
+                    "result": {
+                        "id": 42,
+                        "title": "Updated",
+                        "status": "completed",
+                    },
+                },
+            )
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        result = await client.update_task(42, {"status": "completed"})
+
+        assert result["id"] == 42
+        assert result["status"] == "completed"
+
+    async def test_update_task_sends_payload(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Test that task_id is in URL and payload is sent."""
+        route = respx.put(f"{FAKE_BASE_URL}/v1/tasks/99").mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "status": "success",
+                    "result": {"id": 99, "status": "inProgress"},
+                },
+            )
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        await client.update_task(99, {"status": "inProgress"})
+
+        request = route.calls[0].request
+        assert "/v1/tasks/99" in str(request.url)
+        body = json.loads(request.content)
+        assert body["status"] == "inProgress"
+
+    async def test_update_task_api_error(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Test non-success status raises HostawayResponseError."""
+        respx.put(f"{FAKE_BASE_URL}/v1/tasks/42").mock(
+            return_value=httpx.Response(
+                200,
+                json={"status": "fail", "result": "not found"},
+            )
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with pytest.raises(HostawayResponseError, match="Update failed"):
+            await client.update_task(42, {"status": "completed"})
+
+    async def test_update_task_missing_result(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Test missing result raises HostawayResponseError."""
+        respx.put(f"{FAKE_BASE_URL}/v1/tasks/42").mock(
+            return_value=httpx.Response(
+                200,
+                json={"status": "success", "result": "string"},
+            )
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with pytest.raises(HostawayResponseError, match="missing 'result' object"):
+            await client.update_task(42, {"title": "New"})
+
+    async def test_update_task_404(self, mock_httpx_client: httpx.AsyncClient) -> None:
+        """Test 404 raises HostawayResponseError."""
+        respx.put(f"{FAKE_BASE_URL}/v1/tasks/999").mock(
+            return_value=httpx.Response(404, text="Not Found")
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with pytest.raises(HostawayResponseError):
+            await client.update_task(999, {"title": "New"})
+
+
+class TestDeleteTask:
+    """Tests for HostawayApiClient.delete_task()."""
+
+    async def test_delete_task_success(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Test successful task deletion returns None."""
+        respx.delete(f"{FAKE_BASE_URL}/v1/tasks/42").mock(
+            return_value=httpx.Response(
+                200,
+                json={"status": "success", "result": []},
+            )
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        await client.delete_task(42)
+
+    async def test_delete_task_sends_correct_request(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Test DELETE is sent to correct URL."""
+        route = respx.delete(f"{FAKE_BASE_URL}/v1/tasks/77").mock(
+            return_value=httpx.Response(
+                200,
+                json={"status": "success", "result": []},
+            )
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        await client.delete_task(77)
+
+        request = route.calls[0].request
+        assert "/v1/tasks/77" in str(request.url)
+        assert request.method == "DELETE"
+
+    async def test_delete_task_api_error(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Test non-success status raises HostawayResponseError."""
+        respx.delete(f"{FAKE_BASE_URL}/v1/tasks/42").mock(
+            return_value=httpx.Response(
+                200,
+                json={"status": "fail", "result": "not found"},
+            )
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with pytest.raises(HostawayResponseError, match="Delete failed"):
+            await client.delete_task(42)
+
+    async def test_delete_task_404(self, mock_httpx_client: httpx.AsyncClient) -> None:
+        """Test 404 raises HostawayResponseError."""
+        respx.delete(f"{FAKE_BASE_URL}/v1/tasks/999").mock(
+            return_value=httpx.Response(404, text="Not Found")
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with pytest.raises(HostawayResponseError):
+            await client.delete_task(999)
+
+
+class TestGetTasks:
+    """Tests for HostawayApiClient.get_tasks()."""
+
+    async def test_get_tasks_success_no_params(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Test successful get tasks returns list."""
+        respx.get(f"{FAKE_BASE_URL}/v1/tasks").mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "status": "success",
+                    "result": [
+                        {"id": 1, "title": "Task 1"},
+                        {"id": 2, "title": "Task 2"},
+                    ],
+                },
+            )
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        result = await client.get_tasks()
+
+        assert len(result) == 2
+        assert result[0]["id"] == 1
+        assert result[1]["title"] == "Task 2"
+
+    async def test_get_tasks_paginates_with_offset(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Test get_tasks() aggregates all offset pages."""
+        page1 = [
+            {"id": i, "title": f"Task {i}"} for i in range(1, DEFAULT_PAGE_LIMIT + 1)
+        ]
+        page2 = [{"id": DEFAULT_PAGE_LIMIT + 1, "title": "Task final"}]
+
+        route = respx.get(f"{FAKE_BASE_URL}/v1/tasks")
+        route.side_effect = [
+            httpx.Response(200, json={"status": "success", "result": page1}),
+            httpx.Response(200, json={"status": "success", "result": page2}),
+        ]
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        result = await client.get_tasks({"listingMapId": 123, "status": "pending"})
+
+        assert len(result) == DEFAULT_PAGE_LIMIT + 1
+        assert route.call_count == 2
+        first_request = route.calls[0].request
+        second_request = route.calls[1].request
+        assert "listingMapId=123" in str(first_request.url)
+        assert "status=pending" in str(first_request.url)
+        assert f"limit={DEFAULT_PAGE_LIMIT}" in str(first_request.url)
+        assert "offset=0" in str(first_request.url)
+        assert f"offset={DEFAULT_PAGE_LIMIT}" in str(second_request.url)
+
+    async def test_get_tasks_empty_list(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Test empty result returns empty list."""
+        respx.get(f"{FAKE_BASE_URL}/v1/tasks").mock(
+            return_value=httpx.Response(
+                200,
+                json={"status": "success", "result": []},
+            )
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        result = await client.get_tasks()
+
+        assert result == []
+
+    async def test_get_tasks_api_error(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Test non-success status raises HostawayResponseError."""
+        respx.get(f"{FAKE_BASE_URL}/v1/tasks").mock(
+            return_value=httpx.Response(
+                200,
+                json={"status": "fail", "result": "error"},
+            )
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with pytest.raises(HostawayResponseError, match="Get tasks failed"):
+            await client.get_tasks()
+
+    async def test_get_tasks_missing_result_list(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Test missing result list raises HostawayResponseError."""
+        respx.get(f"{FAKE_BASE_URL}/v1/tasks").mock(
+            return_value=httpx.Response(
+                200,
+                json={"status": "success", "result": {"bad": "data"}},
+            )
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with pytest.raises(HostawayResponseError, match="'result' must be a list"):
+            await client.get_tasks()
+
+    async def test_get_tasks_rejects_non_object_items(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Test malformed task items raise HostawayResponseError."""
+        respx.get(f"{FAKE_BASE_URL}/v1/tasks").mock(
+            return_value=httpx.Response(
+                200,
+                json={"status": "success", "result": [{"id": 1}, "bad-item"]},
+            )
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with pytest.raises(HostawayResponseError, match="items must be JSON objects"):
+            await client.get_tasks()

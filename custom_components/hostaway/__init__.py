@@ -153,5 +153,9 @@ async def async_unload_entry(
             hass.services.async_remove(DOMAIN, "set_door_code")
             hass.services.async_remove(DOMAIN, "get_reservations")
             hass.services.async_remove(DOMAIN, "find_reservation")
+            hass.services.async_remove(DOMAIN, "create_task")
+            hass.services.async_remove(DOMAIN, "update_task")
+            hass.services.async_remove(DOMAIN, "delete_task")
+            hass.services.async_remove(DOMAIN, "get_tasks")
 
     return unload_ok
