@@ -261,6 +261,9 @@ automation:
 
 ### Create task on low battery
 
+This example uses `action:` instead of `service:` because
+`response_variable` requires the newer action syntax.
+
 ```yaml
 automation:
   - alias: "Create maintenance task on low battery"
