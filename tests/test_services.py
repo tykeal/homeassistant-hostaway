@@ -1467,14 +1467,37 @@ class TestCreateTask:
     @patch(
         "custom_components.hostaway.services.HostawayApiClient.create_task",
         new_callable=AsyncMock,
-        side_effect=HostawayResponseError("API error"),
+        side_effect=HostawayResponseError("validation error: title is required"),
     )
-    async def test_create_task_api_error(
+    async def test_create_task_validation_error(
         self,
         mock_create: AsyncMock,
         hass: HomeAssistant,
     ) -> None:
-        """API error raises HomeAssistantError."""
+        """Validation-style API errors raise ServiceValidationError."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        with pytest.raises(ServiceValidationError, match="Invalid task data"):
+            await hass.services.async_call(
+                DOMAIN,
+                "create_task",
+                {"title": "Task"},
+                blocking=True,
+                return_response=True,
+            )
+
+    @patch(
+        "custom_components.hostaway.services.HostawayApiClient.create_task",
+        new_callable=AsyncMock,
+        side_effect=HostawayResponseError("Resource not found: /v1/tasks"),
+    )
+    async def test_create_task_not_found_error(
+        self,
+        mock_create: AsyncMock,
+        hass: HomeAssistant,
+    ) -> None:
+        """Generic API failures remain HomeAssistantError."""
         entry = _make_entry()
         await _setup_entry(hass, entry)
 
@@ -1483,6 +1506,25 @@ class TestCreateTask:
                 DOMAIN,
                 "create_task",
                 {"title": "Task"},
+                blocking=True,
+                return_response=True,
+            )
+
+    @pytest.mark.parametrize("bad_value", [{"1": 2}, "123"])
+    async def test_create_task_categories_map_requires_list(
+        self,
+        hass: HomeAssistant,
+        bad_value: object,
+    ) -> None:
+        """Non-list categories_map values are rejected at schema level."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        with pytest.raises(vol.MultipleInvalid, match="expected a list"):
+            await hass.services.async_call(
+                DOMAIN,
+                "create_task",
+                {"title": "Task", "categories_map": bad_value},
                 blocking=True,
                 return_response=True,
             )
@@ -1671,6 +1713,25 @@ class TestUpdateTask:
                 DOMAIN,
                 "update_task",
                 {"task_id": 42},
+                blocking=True,
+                return_response=True,
+            )
+
+    @pytest.mark.parametrize("bad_value", [{"1": 2}, "123"])
+    async def test_update_task_categories_map_requires_list(
+        self,
+        hass: HomeAssistant,
+        bad_value: object,
+    ) -> None:
+        """Non-list categories_map values are rejected at schema level."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        with pytest.raises(vol.MultipleInvalid, match="expected a list"):
+            await hass.services.async_call(
+                DOMAIN,
+                "update_task",
+                {"task_id": 42, "categories_map": bad_value},
                 blocking=True,
                 return_response=True,
             )

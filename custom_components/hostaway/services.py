@@ -174,6 +174,48 @@ def _strict_string(value: Any) -> str:
     return value
 
 
+def _positive_int_list(value: Any) -> list[int]:
+    """Validate a list of positive integers without container coercion.
+
+    Args:
+        value: The value to validate.
+
+    Returns:
+        The validated list of positive integers.
+
+    Raises:
+        vol.Invalid: If the value is not a list of positive integers.
+    """
+    if not isinstance(value, list):
+        raise vol.Invalid("expected a list")
+    return [_positive_int(item) for item in value]
+
+
+def _is_user_correctable_task_error(exc: HostawayResponseError) -> bool:
+    """Return whether a task API error likely reflects invalid user input.
+
+    Args:
+        exc: The response error raised by the API client.
+
+    Returns:
+        True when the message looks like a validation or field error that
+        the caller can correct.
+    """
+    message = str(exc).lower()
+    if "not found" in message:
+        return False
+    return any(
+        marker in message
+        for marker in (
+            "validation",
+            "invalid",
+            "required",
+            "missing field",
+            "field error",
+        )
+    )
+
+
 SERVICE_SET_DOOR_CODE_SCHEMA = vol.Schema(
     {
         vol.Required("reservation_id"): _positive_int,
@@ -214,7 +256,7 @@ SERVICE_CREATE_TASK_SCHEMA = vol.Schema(
         vol.Optional("status"): vol.In(_TASK_STATUS_VALUES),
         vol.Optional("priority"): _positive_int,
         vol.Optional("assignee_user_id"): _positive_int,
-        vol.Optional("categories_map"): vol.All(list, [_positive_int]),
+        vol.Optional("categories_map"): _positive_int_list,
         vol.Optional("can_start_from"): _non_empty_string,
         vol.Optional("should_end_by"): _non_empty_string,
         vol.Optional("config_entry_id"): _strict_string,
@@ -232,7 +274,7 @@ SERVICE_UPDATE_TASK_SCHEMA = vol.Schema(
         vol.Optional("status"): vol.In(_TASK_STATUS_VALUES),
         vol.Optional("priority"): _positive_int,
         vol.Optional("assignee_user_id"): _positive_int,
-        vol.Optional("categories_map"): vol.All(list, [_positive_int]),
+        vol.Optional("categories_map"): _positive_int_list,
         vol.Optional("can_start_from"): _non_empty_string,
         vol.Optional("should_end_by"): _non_empty_string,
         vol.Optional("resolution_note"): _strict_string,
@@ -402,6 +444,14 @@ async def async_handle_create_task(
 
     try:
         return await api_client.create_task(payload)
+    except HostawayResponseError as exc:
+        if _is_user_correctable_task_error(exc):
+            raise ServiceValidationError(
+                f"Invalid task data: {exc}",
+            ) from exc
+        raise HomeAssistantError(
+            f"Failed to create task: {exc}",
+        ) from exc
     except HostawayApiError as exc:
         raise HomeAssistantError(
             f"Failed to create task: {exc}",
