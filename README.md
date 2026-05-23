@@ -14,8 +14,8 @@ integration for
 This integration connects Home Assistant to your Hostaway
 account using OAuth 2.0 client credentials authentication.
 It provides sensor entities for your property listings and
-reservations, plus services for managing door codes and
-retrieving reservation data.
+reservations, plus services for managing door codes, tasks,
+and retrieving reservation data.
 
 **Features:**
 
@@ -25,6 +25,7 @@ retrieving reservation data.
 - Listing sensors for property details
 - Reservation sensors with guest and door code info
 - Services for door code management and reservation queries
+- Task management services (create, update, delete, list)
 - Automatic retry with exponential backoff on API errors
 - HACS compatible
 
@@ -124,6 +125,87 @@ Fetch reservations for a listing and fire a
 | `listing_id` | Yes | Listing ID |
 | `config_entry_id` | No | Required if multiple entries |
 
+### `hostaway.create_task`
+
+Create a new task in Hostaway. Supports `response_variable` for
+accessing the created task data. Supported `status` values are
+`pending`, `confirmed`, `inProgress`, `completed`, and
+`cancelled`.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `title` | Yes | Task title |
+| `description` | No | Detailed task description |
+| `listing_id` | No | Associated listing ID |
+| `listing_name` | No | Listing by internal name (resolved from cache) |
+| `reservation_id` | No | Associated reservation ID |
+| `status` | No | Task status |
+| `priority` | No | Priority level (positive integer) |
+| `assignee_user_id` | No | Assigned user ID |
+| `categories_map` | No | List of category IDs |
+| `can_start_from` | No | Earliest start date (ISO format) |
+| `should_end_by` | No | Deadline date (ISO format) |
+| `config_entry_id` | No | Required if multiple entries |
+
+### `hostaway.update_task`
+
+Update an existing task. At least one field besides `task_id`
+must be provided. Supports `response_variable`.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `task_id` | Yes | Task ID to update |
+| `title` | No | New task title |
+| `description` | No | New description |
+| `listing_id` | No | New listing ID |
+| `listing_name` | No | New listing by internal name |
+| `reservation_id` | No | New reservation ID |
+| `status` | No | New status |
+| `priority` | No | New priority level |
+| `assignee_user_id` | No | New assignee user ID |
+| `categories_map` | No | New list of category IDs |
+| `can_start_from` | No | New earliest start date |
+| `should_end_by` | No | New deadline date |
+| `resolution_note` | No | Note for resolving/completing |
+| `config_entry_id` | No | Required if multiple entries |
+
+### `hostaway.delete_task`
+
+Delete a task from Hostaway.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `task_id` | Yes | Task ID to delete |
+| `config_entry_id` | No | Required if multiple entries |
+
+### `hostaway.get_tasks`
+
+Retrieve tasks with optional filters. Supports
+`response_variable`.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `listing_id` | No | Filter by listing ID |
+| `listing_name` | No | Filter by listing internal name |
+| `reservation_id` | No | Filter by reservation ID |
+| `status` | No | Filter by status |
+| `can_start_from_start` | No | Date range start filter |
+| `can_start_from_end` | No | Date range end filter |
+| `config_entry_id` | No | Required if multiple entries |
+
+### `hostaway.find_reservation`
+
+Look up a reservation by guest name and dates. Supports
+`response_variable`.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `guest_name` | Yes | Guest name (case-insensitive substring) |
+| `check_in` | Yes | Arrival date (exact match) |
+| `check_out` | Yes | Departure date (exact match) |
+| `listing_id` | No | Limit to a specific listing |
+| `config_entry_id` | No | Required if multiple entries |
+
 ## Automation Examples
 
 ### Set door code on reservation confirmation
@@ -175,6 +257,28 @@ automation:
             {{ trigger.event.data.listing_name }}:
             {{ trigger.event.data.reservations | length }}
             reservations
+```
+
+### Create task on low battery
+
+```yaml
+automation:
+  - alias: "Create maintenance task on low battery"
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.smoke_detector_battery
+        below: 20
+    action:
+      - action: hostaway.create_task
+        data:
+          title: "Replace smoke detector batteries"
+          description: >-
+            Battery level at
+            {{ states('sensor.smoke_detector_battery') }}%
+          listing_name: "ocean-suite-1"
+          status: "pending"
+          priority: 1
+        response_variable: task_result
 ```
 
 ## License
