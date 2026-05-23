@@ -1401,6 +1401,8 @@ class TestCreateTask:
         hass: HomeAssistant,
     ) -> None:
         """Listing name resolves to listing ID via coordinator."""
+        from custom_components.hostaway import services as services_mod
+
         entry = _make_entry()
         await _setup_entry(hass, entry)
 
@@ -1414,14 +1416,19 @@ class TestCreateTask:
             12345: listing
         }
 
-        result = await hass.services.async_call(
-            DOMAIN,
-            "create_task",
-            {"title": "Task", "listing_name": "ocean-suite-1"},
-            blocking=True,
-            return_response=True,
-        )
+        with patch(
+            "custom_components.hostaway.services._resolve_entry_data",
+            wraps=services_mod._resolve_entry_data,
+        ) as mock_resolve:
+            result = await hass.services.async_call(
+                DOMAIN,
+                "create_task",
+                {"title": "Task", "listing_name": "ocean-suite-1"},
+                blocking=True,
+                return_response=True,
+            )
 
+        mock_resolve.assert_called_once()
         mock_create.assert_called_once_with({"title": "Task", "listingMapId": 12345})
         assert result["listingMapId"] == 12345  # type: ignore[index]
 
@@ -1654,6 +1661,8 @@ class TestUpdateTask:
         hass: HomeAssistant,
     ) -> None:
         """Listing name resolves to ID in update."""
+        from custom_components.hostaway import services as services_mod
+
         entry = _make_entry()
         await _setup_entry(hass, entry)
 
@@ -1666,14 +1675,19 @@ class TestUpdateTask:
             12345: listing
         }
 
-        result = await hass.services.async_call(
-            DOMAIN,
-            "update_task",
-            {"task_id": 42, "listing_name": "ocean-suite-1"},
-            blocking=True,
-            return_response=True,
-        )
+        with patch(
+            "custom_components.hostaway.services._resolve_entry_data",
+            wraps=services_mod._resolve_entry_data,
+        ) as mock_resolve:
+            result = await hass.services.async_call(
+                DOMAIN,
+                "update_task",
+                {"task_id": 42, "listing_name": "ocean-suite-1"},
+                blocking=True,
+                return_response=True,
+            )
 
+        mock_resolve.assert_called_once()
         mock_update.assert_called_once_with(42, {"listingMapId": 12345})
         assert result["listingMapId"] == 12345  # type: ignore[index]
 
@@ -1850,6 +1864,8 @@ class TestGetTasks:
         hass: HomeAssistant,
     ) -> None:
         """Listing name filter resolves to listingMapId param."""
+        from custom_components.hostaway import services as services_mod
+
         entry = _make_entry()
         await _setup_entry(hass, entry)
 
@@ -1862,14 +1878,19 @@ class TestGetTasks:
             12345: listing
         }
 
-        result = await hass.services.async_call(
-            DOMAIN,
-            "get_tasks",
-            {"listing_name": "ocean-suite-1"},
-            blocking=True,
-            return_response=True,
-        )
+        with patch(
+            "custom_components.hostaway.services._resolve_entry_data",
+            wraps=services_mod._resolve_entry_data,
+        ) as mock_resolve:
+            result = await hass.services.async_call(
+                DOMAIN,
+                "get_tasks",
+                {"listing_name": "ocean-suite-1"},
+                blocking=True,
+                return_response=True,
+            )
 
+        mock_resolve.assert_called_once()
         mock_get.assert_called_once_with({"listingMapId": 12345})
         assert result["tasks"][0]["listingMapId"] == 12345  # type: ignore[call-overload, index]
 

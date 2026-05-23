@@ -19,7 +19,7 @@ from custom_components.hostaway.api.exceptions import (
     HostawayReservationLockedError,
     HostawayResponseError,
 )
-from custom_components.hostaway.api.models import HostawayReservation
+from custom_components.hostaway.api.models import HostawayListing, HostawayReservation
 from custom_components.hostaway.const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -346,19 +346,61 @@ def _resolve_entry_data(
     )
 
 
+def _get_listing_name_index(listings_coordinator: Any) -> dict[str, int]:
+    """Return a cached internal-name index for listing lookups.
+
+    Args:
+        listings_coordinator: The listings coordinator for the entry.
+
+    Returns:
+        Mapping of ``internal_name`` to Hostaway listing ID.
+
+    Raises:
+        ServiceValidationError: If listings data is unavailable.
+    """
+    listings: dict[int, HostawayListing] | None = listings_coordinator.data
+    if listings is None:
+        raise ServiceValidationError(
+            "Listings data not available for name resolution",
+        )
+
+    cache_key = id(listings)
+    cached_key = getattr(
+        listings_coordinator,
+        "_hostaway_listing_name_index_key",
+        None,
+    )
+    cached_index = getattr(
+        listings_coordinator,
+        "_hostaway_listing_name_index",
+        None,
+    )
+    if cache_key != cached_key or not isinstance(cached_index, dict):
+        cached_index = {
+            listing.internal_name: listing.id
+            for listing in listings.values()
+            if listing.internal_name is not None
+        }
+        listings_coordinator._hostaway_listing_name_index_key = cache_key
+        listings_coordinator._hostaway_listing_name_index = cached_index
+
+    result: dict[str, int] = cached_index
+    return result
+
+
 def _resolve_listing_id(
-    hass: HomeAssistant,
     call_data: dict[str, Any],
+    entry_data: dict[str, Any],
 ) -> int | None:
     """Resolve a listing ID from call data.
 
     If ``listing_id`` is provided directly, it takes precedence.
-    If ``listing_name`` is provided, searches the listings
-    coordinator cache for a matching ``internal_name``.
+    If ``listing_name`` is provided, resolves it via a cached
+    ``internal_name`` index built from the listings coordinator.
 
     Args:
-        hass: Home Assistant instance.
         call_data: Service call data dictionary.
+        entry_data: Runtime data for the resolved config entry.
 
     Returns:
         The resolved listing ID, or None if neither field present.
@@ -375,20 +417,11 @@ def _resolve_listing_id(
         return None
 
     listing_name: str = call_data["listing_name"]
-
-    # Get listings coordinator from entry data
-    entry_data = _resolve_entry_data(hass, call_data)
     listings_coordinator = entry_data["listings_coordinator"]
+    listing_name_index = _get_listing_name_index(listings_coordinator)
 
-    if listings_coordinator.data is None:
-        raise ServiceValidationError(
-            "Listings data not available for name resolution",
-        )
-
-    for listing in listings_coordinator.data.values():
-        if listing.internal_name == listing_name:
-            resolved: int = listing.id
-            return resolved
+    if listing_name in listing_name_index:
+        return listing_name_index[listing_name]
 
     raise ServiceValidationError(
         f"Listing '{listing_name}' not found",
@@ -435,11 +468,12 @@ async def async_handle_create_task(
     if call.data.get("should_end_by") is not None:
         payload["shouldEndBy"] = call.data["should_end_by"]
 
-    listing_id = _resolve_listing_id(hass, call.data)
+    entry_data = _resolve_entry_data(hass, call.data)
+
+    listing_id = _resolve_listing_id(call.data, entry_data)
     if listing_id is not None:
         payload["listingMapId"] = listing_id
 
-    entry_data = _resolve_entry_data(hass, call.data)
     api_client: HostawayApiClient = entry_data["api_client"]
 
     try:
@@ -503,7 +537,9 @@ async def async_handle_update_task(
     if call.data.get("resolution_note") is not None:
         payload["resolutionNote"] = call.data["resolution_note"]
 
-    listing_id = _resolve_listing_id(hass, call.data)
+    entry_data = _resolve_entry_data(hass, call.data)
+
+    listing_id = _resolve_listing_id(call.data, entry_data)
     if listing_id is not None:
         payload["listingMapId"] = listing_id
 
@@ -512,7 +548,6 @@ async def async_handle_update_task(
             "At least one field to update must be provided",
         )
 
-    entry_data = _resolve_entry_data(hass, call.data)
     api_client: HostawayApiClient = entry_data["api_client"]
 
     try:
@@ -590,8 +625,9 @@ async def async_handle_get_tasks(
         HomeAssistantError: On API failure.
     """
     params: dict[str, Any] = {}
+    entry_data = _resolve_entry_data(hass, call.data)
 
-    listing_id = _resolve_listing_id(hass, call.data)
+    listing_id = _resolve_listing_id(call.data, entry_data)
     if listing_id is not None:
         params["listingMapId"] = listing_id
     if call.data.get("reservation_id") is not None:
@@ -603,7 +639,6 @@ async def async_handle_get_tasks(
     if call.data.get("can_start_from_end") is not None:
         params["canStartFromEnd"] = call.data["can_start_from_end"]
 
-    entry_data = _resolve_entry_data(hass, call.data)
     api_client: HostawayApiClient = entry_data["api_client"]
 
     try:
