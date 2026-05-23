@@ -181,7 +181,8 @@ Delete a task from Hostaway.
 ### `hostaway.get_tasks`
 
 Retrieve tasks with optional filters. Supports
-`response_variable`.
+`response_variable`; the response is a mapping with a
+`tasks` list.
 
 | Parameter | Required | Description |
 | --- | --- | --- |
