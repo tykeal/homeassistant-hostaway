@@ -118,6 +118,7 @@ class TestServiceLifecycle:
         assert hass.services.has_service(DOMAIN, "set_door_code")
         assert hass.services.has_service(DOMAIN, "get_reservations")
         assert hass.services.has_service(DOMAIN, "get_users")
+        assert hass.services.has_service(DOMAIN, "get_groups")
 
     async def test_services_removed_on_last_unload(
         self,
@@ -135,6 +136,7 @@ class TestServiceLifecycle:
         assert not hass.services.has_service(DOMAIN, "set_door_code")
         assert not hass.services.has_service(DOMAIN, "get_reservations")
         assert not hass.services.has_service(DOMAIN, "get_users")
+        assert not hass.services.has_service(DOMAIN, "get_groups")
 
     async def test_services_registered_once_multi_entry(
         self,
@@ -167,6 +169,7 @@ class TestServiceLifecycle:
         assert hass.services.has_service(DOMAIN, "set_door_code")
         assert hass.services.has_service(DOMAIN, "get_reservations")
         assert hass.services.has_service(DOMAIN, "get_users")
+        assert hass.services.has_service(DOMAIN, "get_groups")
 
 
 class TestSetDoorCode:
@@ -2094,6 +2097,64 @@ class TestGetUsers:
             await hass.services.async_call(
                 DOMAIN,
                 "get_users",
+                {},
+                blocking=True,
+                return_response=True,
+            )
+
+
+class TestGetGroups:
+    """Tests for the hostaway.get_groups service."""
+
+    @patch(
+        "custom_components.hostaway.services.HostawayApiClient.get_groups",
+        new_callable=AsyncMock,
+        return_value=[
+            {"id": 10, "name": "Ops"},
+            {"id": 11, "name": "Cleaning"},
+        ],
+    )
+    async def test_get_groups_success(
+        self,
+        mock_get: AsyncMock,
+        hass: HomeAssistant,
+    ) -> None:
+        """Get groups returns the group list."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        result = await hass.services.async_call(
+            DOMAIN,
+            "get_groups",
+            {},
+            blocking=True,
+            return_response=True,
+        )
+
+        mock_get.assert_called_once_with()
+        assert result["groups"] == [  # type: ignore[index]
+            {"id": 10, "name": "Ops"},
+            {"id": 11, "name": "Cleaning"},
+        ]
+
+    @patch(
+        "custom_components.hostaway.services.HostawayApiClient.get_groups",
+        new_callable=AsyncMock,
+        side_effect=HostawayResponseError("API error"),
+    )
+    async def test_get_groups_api_error(
+        self,
+        mock_get: AsyncMock,
+        hass: HomeAssistant,
+    ) -> None:
+        """API error raises HomeAssistantError."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        with pytest.raises(HomeAssistantError, match="Failed to retrieve groups"):
+            await hass.services.async_call(
+                DOMAIN,
+                "get_groups",
                 {},
                 blocking=True,
                 return_response=True,

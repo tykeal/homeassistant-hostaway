@@ -208,6 +208,17 @@ Supports `response_variable`.
 | --- | --- | --- |
 | `config_entry_id` | No | Required if multiple entries |
 
+### `hostaway.get_groups`
+
+Retrieve all user groups from the Hostaway account. Use
+this to look up group IDs for the
+`can_be_picked_by_group_id` task field. Supports
+`response_variable`.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `config_entry_id` | No | Required if multiple entries |
+
 ### `hostaway.find_reservation`
 
 Look up a reservation by guest name and dates. Supports

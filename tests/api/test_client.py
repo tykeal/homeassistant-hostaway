@@ -1164,3 +1164,101 @@ class TestGetUsers:
 
         with pytest.raises(HostawayResponseError, match="items must be JSON objects"):
             await client.get_users()
+
+
+class TestGetGroups:
+    """Tests for HostawayApiClient.get_groups()."""
+
+    async def test_get_groups_success(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Test get_groups() calls GET /v1/userGroups and returns the result list."""
+        route = respx.get(f"{FAKE_BASE_URL}/v1/userGroups").mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "status": "success",
+                    "result": [
+                        {"id": 10, "name": "Ops"},
+                        {"id": 11, "name": "Cleaning"},
+                    ],
+                },
+            )
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        result = await client.get_groups()
+
+        assert route.called
+        assert result == [{"id": 10, "name": "Ops"}, {"id": 11, "name": "Cleaning"}]
+
+    async def test_get_groups_api_error(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Test non-success status raises HostawayResponseError."""
+        respx.get(f"{FAKE_BASE_URL}/v1/userGroups").mock(
+            return_value=httpx.Response(
+                200,
+                json={"status": "fail", "result": "error"},
+            )
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with pytest.raises(HostawayResponseError, match="API error"):
+            await client.get_groups()
+
+    async def test_get_groups_missing_result_list(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Test missing result list raises HostawayResponseError."""
+        respx.get(f"{FAKE_BASE_URL}/v1/userGroups").mock(
+            return_value=httpx.Response(
+                200,
+                json={"status": "success", "result": {"bad": "data"}},
+            )
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with pytest.raises(HostawayResponseError, match="'result' must be a list"):
+            await client.get_groups()
+
+    async def test_get_groups_rejects_non_object_items(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Test malformed group items raise HostawayResponseError."""
+        respx.get(f"{FAKE_BASE_URL}/v1/userGroups").mock(
+            return_value=httpx.Response(
+                200,
+                json={"status": "success", "result": [{"id": 10}, "bad-item"]},
+            )
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with pytest.raises(HostawayResponseError, match="items must be JSON objects"):
+            await client.get_groups()
+
+    async def test_get_groups_empty_result(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Test get_groups() returns an empty list when the API does."""
+        respx.get(f"{FAKE_BASE_URL}/v1/userGroups").mock(
+            return_value=httpx.Response(
+                200,
+                json={"status": "success", "result": []},
+            )
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        result = await client.get_groups()
+
+        assert result == []
