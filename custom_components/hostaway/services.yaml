@@ -468,8 +468,8 @@ get_users:
   name: Get users
   description: >-
     Retrieve all users from the Hostaway account. Use this
-    to look up user IDs for task assignment fields
-    (assignee, supervisor, group).
+    to look up user IDs for task assignee and supervisor
+    fields.
   fields:
     config_entry_id:
       name: Config entry ID

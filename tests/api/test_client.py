@@ -1113,3 +1113,54 @@ class TestGetUsers:
 
         assert route.called
         assert result == [{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}]
+
+    async def test_get_users_api_error(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Test non-success status raises HostawayResponseError."""
+        respx.get(f"{FAKE_BASE_URL}/v1/users").mock(
+            return_value=httpx.Response(
+                200,
+                json={"status": "fail", "result": "error"},
+            )
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with pytest.raises(HostawayResponseError, match="API error"):
+            await client.get_users()
+
+    async def test_get_users_missing_result_list(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Test missing result list raises HostawayResponseError."""
+        respx.get(f"{FAKE_BASE_URL}/v1/users").mock(
+            return_value=httpx.Response(
+                200,
+                json={"status": "success", "result": {"bad": "data"}},
+            )
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with pytest.raises(HostawayResponseError, match="'result' must be a list"):
+            await client.get_users()
+
+    async def test_get_users_rejects_non_object_items(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Test malformed user items raise HostawayResponseError."""
+        respx.get(f"{FAKE_BASE_URL}/v1/users").mock(
+            return_value=httpx.Response(
+                200,
+                json={"status": "success", "result": [{"id": 1}, "bad-item"]},
+            )
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with pytest.raises(HostawayResponseError, match="items must be JSON objects"):
+            await client.get_users()
