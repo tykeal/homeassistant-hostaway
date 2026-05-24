@@ -305,6 +305,12 @@ SERVICE_GET_TASKS_SCHEMA = vol.Schema(
     }
 )
 
+SERVICE_GET_USERS_SCHEMA = vol.Schema(
+    {
+        vol.Optional("config_entry_id"): _strict_string,
+    }
+)
+
 
 def _resolve_entry_data(
     hass: HomeAssistant,
@@ -667,6 +673,42 @@ async def async_handle_get_tasks(
     return {"tasks": tasks}
 
 
+async def async_handle_get_users(
+    hass: HomeAssistant,
+    call: ServiceCall,
+) -> dict[str, Any]:
+    """Handle hostaway.get_users service call.
+
+    Resolves the correct config entry and returns the Hostaway
+    account users list for lookup workflows.
+
+    Args:
+        hass: Home Assistant instance.
+        call: The incoming service call.
+
+    Returns:
+        Dict containing the users list: {"users": [...]}.
+
+    Raises:
+        HomeAssistantError: On API failure.
+    """
+    entry_data = _resolve_entry_data(hass, call.data)
+    api_client: HostawayApiClient = entry_data["api_client"]
+
+    try:
+        users = await api_client.get_users()
+    except HostawayResponseError as exc:
+        raise HomeAssistantError(
+            f"Failed to retrieve users: {exc}",
+        ) from exc
+    except HostawayApiError as exc:
+        raise HomeAssistantError(
+            f"Failed to retrieve users: {exc}",
+        ) from exc
+
+    return {"users": users}
+
+
 async def async_handle_set_door_code(
     hass: HomeAssistant,
     call: ServiceCall,
@@ -1009,5 +1051,20 @@ def async_setup_services(hass: HomeAssistant) -> None:
             "get_tasks",
             _handle_get_tasks,
             schema=SERVICE_GET_TASKS_SCHEMA,
+            supports_response=SupportsResponse.ONLY,
+        )
+
+    async def _handle_get_users(
+        call: ServiceCall,
+    ) -> dict[str, Any]:
+        """Delegate to get_users handler."""
+        return await async_handle_get_users(hass, call)
+
+    if not hass.services.has_service(DOMAIN, "get_users"):
+        hass.services.async_register(
+            DOMAIN,
+            "get_users",
+            _handle_get_users,
+            schema=SERVICE_GET_USERS_SCHEMA,
             supports_response=SupportsResponse.ONLY,
         )

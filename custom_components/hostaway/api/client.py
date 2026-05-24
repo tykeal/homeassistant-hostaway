@@ -528,6 +528,22 @@ class HostawayApiClient:
 
         return all_tasks
 
+    async def get_users(self) -> list[dict[str, Any]]:
+        """Retrieve all users via GET /v1/users.
+
+        Returns:
+            List of user dictionaries from the API response.
+
+        Raises:
+            HostawayResponseError: On unexpected response format.
+            HostawayAuthError: On authentication failure.
+            HostawayConnectionError: On network failure.
+            HostawayRateLimitError: On rate limit exhaustion.
+        """
+        response = await self._request("GET", "/v1/users")
+        parsed = self._parse_response(response)
+        return self._extract_results(parsed)
+
     async def update_reservation(
         self, reservation_id: int, data: dict[str, Any]
     ) -> dict[str, Any]:

@@ -198,6 +198,16 @@ Retrieve tasks with optional filters. Supports
 | `can_start_from_end` | No | Date range end filter |
 | `config_entry_id` | No | Required if multiple entries |
 
+### `hostaway.get_users`
+
+Retrieve all users from the Hostaway account. Use this to
+look up user IDs for task assignee and supervisor fields.
+Supports `response_variable`.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `config_entry_id` | No | Required if multiple entries |
+
 ### `hostaway.find_reservation`
 
 Look up a reservation by guest name and dates. Supports

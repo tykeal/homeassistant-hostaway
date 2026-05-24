@@ -157,5 +157,6 @@ async def async_unload_entry(
             hass.services.async_remove(DOMAIN, "update_task")
             hass.services.async_remove(DOMAIN, "delete_task")
             hass.services.async_remove(DOMAIN, "get_tasks")
+            hass.services.async_remove(DOMAIN, "get_users")
 
     return unload_ok

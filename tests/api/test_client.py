@@ -1084,3 +1084,32 @@ class TestGetTasks:
 
         with pytest.raises(HostawayResponseError, match="items must be JSON objects"):
             await client.get_tasks()
+
+
+class TestGetUsers:
+    """Tests for HostawayApiClient.get_users()."""
+
+    async def test_get_users_success(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Test get_users() calls GET /v1/users and returns the result list."""
+        route = respx.get(f"{FAKE_BASE_URL}/v1/users").mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "status": "success",
+                    "result": [
+                        {"id": 1, "name": "Alice"},
+                        {"id": 2, "name": "Bob"},
+                    ],
+                },
+            )
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        result = await client.get_users()
+
+        assert route.called
+        assert result == [{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}]

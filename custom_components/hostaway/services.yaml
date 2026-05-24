@@ -464,6 +464,23 @@ get_tasks:
         config_entry:
           integration: hostaway
 
+get_users:
+  name: Get users
+  description: >-
+    Retrieve all users from the Hostaway account. Use this
+    to look up user IDs for task assignment fields
+    (assignee, supervisor, group).
+  fields:
+    config_entry_id:
+      name: Config entry ID
+      description: >-
+        Target a specific Hostaway config entry. Required
+        only when multiple accounts are configured.
+      required: false
+      selector:
+        config_entry:
+          integration: hostaway
+
 find_reservation:
   name: Find reservation
   description: >-
