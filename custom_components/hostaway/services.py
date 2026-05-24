@@ -311,6 +311,12 @@ SERVICE_GET_USERS_SCHEMA = vol.Schema(
     }
 )
 
+SERVICE_GET_GROUPS_SCHEMA = vol.Schema(
+    {
+        vol.Optional("config_entry_id"): _strict_string,
+    }
+)
+
 
 def _resolve_entry_data(
     hass: HomeAssistant,
@@ -709,6 +715,42 @@ async def async_handle_get_users(
     return {"users": users}
 
 
+async def async_handle_get_groups(
+    hass: HomeAssistant,
+    call: ServiceCall,
+) -> dict[str, Any]:
+    """Handle hostaway.get_groups service call.
+
+    Resolves the correct config entry and returns the Hostaway
+    account groups list for lookup workflows.
+
+    Args:
+        hass: Home Assistant instance.
+        call: The incoming service call.
+
+    Returns:
+        Dict containing the groups list: {"groups": [...]}.
+
+    Raises:
+        HomeAssistantError: On API failure.
+    """
+    entry_data = _resolve_entry_data(hass, call.data)
+    api_client: HostawayApiClient = entry_data["api_client"]
+
+    try:
+        groups = await api_client.get_groups()
+    except HostawayResponseError as exc:
+        raise HomeAssistantError(
+            f"Failed to retrieve groups: {exc}",
+        ) from exc
+    except HostawayApiError as exc:
+        raise HomeAssistantError(
+            f"Failed to retrieve groups: {exc}",
+        ) from exc
+
+    return {"groups": groups}
+
+
 async def async_handle_set_door_code(
     hass: HomeAssistant,
     call: ServiceCall,
@@ -1066,5 +1108,20 @@ def async_setup_services(hass: HomeAssistant) -> None:
             "get_users",
             _handle_get_users,
             schema=SERVICE_GET_USERS_SCHEMA,
+            supports_response=SupportsResponse.ONLY,
+        )
+
+    async def _handle_get_groups(
+        call: ServiceCall,
+    ) -> dict[str, Any]:
+        """Delegate to get_groups handler."""
+        return await async_handle_get_groups(hass, call)
+
+    if not hass.services.has_service(DOMAIN, "get_groups"):
+        hass.services.async_register(
+            DOMAIN,
+            "get_groups",
+            _handle_get_groups,
+            schema=SERVICE_GET_GROUPS_SCHEMA,
             supports_response=SupportsResponse.ONLY,
         )

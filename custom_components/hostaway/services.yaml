@@ -481,6 +481,23 @@ get_users:
         config_entry:
           integration: hostaway
 
+get_groups:
+  name: Get groups
+  description: >-
+    Retrieve all user groups from the Hostaway account.
+    Use this to look up group IDs for the
+    can_be_picked_by_group_id task assignment field.
+  fields:
+    config_entry_id:
+      name: Config entry ID
+      description: >-
+        Target a specific Hostaway config entry. Required
+        only when multiple accounts are configured.
+      required: false
+      selector:
+        config_entry:
+          integration: hostaway
+
 find_reservation:
   name: Find reservation
   description: >-
