@@ -168,6 +168,25 @@ create_task:
         number:
           min: 1
           mode: box
+    can_be_picked_by_group_id:
+      name: Pickup group ID
+      description: >-
+        Group ID that can pick up this task.
+      required: false
+      example: 5
+      selector:
+        number:
+          min: 1
+          mode: box
+    supervisor_user_id:
+      name: Supervisor user ID
+      description: Supervisor user ID for this task.
+      required: false
+      example: 10
+      selector:
+        number:
+          min: 1
+          mode: box
     categories_map:
       name: Categories
       description: List of category IDs.
@@ -287,6 +306,25 @@ update_task:
       description: New assigned user ID.
       required: false
       example: 42
+      selector:
+        number:
+          min: 1
+          mode: box
+    can_be_picked_by_group_id:
+      name: Pickup group ID
+      description: >-
+        Group ID that can pick up this task.
+      required: false
+      example: 5
+      selector:
+        number:
+          min: 1
+          mode: box
+    supervisor_user_id:
+      name: Supervisor user ID
+      description: Supervisor user ID for this task.
+      required: false
+      example: 10
       selector:
         number:
           min: 1

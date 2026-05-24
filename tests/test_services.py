@@ -1366,6 +1366,8 @@ class TestCreateTask:
                 "status": "confirmed",
                 "priority": 2,
                 "assignee_user_id": 42,
+                "can_be_picked_by_group_id": 5,
+                "supervisor_user_id": 10,
                 "categories_map": [1, 2],
                 "can_start_from": "2025-07-15",
                 "should_end_by": "2025-07-20",
@@ -1383,6 +1385,8 @@ class TestCreateTask:
                 "status": "confirmed",
                 "priority": 2,
                 "assigneeUserId": 42,
+                "canBePickedByGroupId": 5,
+                "supervisorUserId": 10,
                 "categoriesMap": [1, 2],
                 "canStartFrom": "2025-07-15",
                 "shouldEndBy": "2025-07-20",
@@ -1626,6 +1630,48 @@ class TestUpdateTask:
             {"title": "New Title", "priority": 3, "resolutionNote": "Done"},
         )
         assert result["title"] == "New Title"  # type: ignore[index]
+
+    @patch(
+        "custom_components.hostaway.services.HostawayApiClient.update_task",
+        new_callable=AsyncMock,
+        return_value={
+            "id": 42,
+            "assigneeUserId": 42,
+            "canBePickedByGroupId": 5,
+            "supervisorUserId": 10,
+        },
+    )
+    async def test_update_task_assignee_fields(
+        self,
+        mock_update: AsyncMock,
+        hass: HomeAssistant,
+    ) -> None:
+        """Assignee-related fields map to Hostaway payload keys."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        result = await hass.services.async_call(
+            DOMAIN,
+            "update_task",
+            {
+                "task_id": 42,
+                "assignee_user_id": 42,
+                "can_be_picked_by_group_id": 5,
+                "supervisor_user_id": 10,
+            },
+            blocking=True,
+            return_response=True,
+        )
+
+        mock_update.assert_called_once_with(
+            42,
+            {
+                "assigneeUserId": 42,
+                "canBePickedByGroupId": 5,
+                "supervisorUserId": 10,
+            },
+        )
+        assert result["canBePickedByGroupId"] == 5  # type: ignore[index]
 
     @patch(
         "custom_components.hostaway.services.HostawayApiClient.update_task",

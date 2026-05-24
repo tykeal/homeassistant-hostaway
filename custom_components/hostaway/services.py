@@ -256,6 +256,8 @@ SERVICE_CREATE_TASK_SCHEMA = vol.Schema(
         vol.Optional("status"): vol.In(_TASK_STATUS_VALUES),
         vol.Optional("priority"): _positive_int,
         vol.Optional("assignee_user_id"): _positive_int,
+        vol.Optional("can_be_picked_by_group_id"): _positive_int,
+        vol.Optional("supervisor_user_id"): _positive_int,
         vol.Optional("categories_map"): _positive_int_list,
         vol.Optional("can_start_from"): _non_empty_string,
         vol.Optional("should_end_by"): _non_empty_string,
@@ -274,6 +276,8 @@ SERVICE_UPDATE_TASK_SCHEMA = vol.Schema(
         vol.Optional("status"): vol.In(_TASK_STATUS_VALUES),
         vol.Optional("priority"): _positive_int,
         vol.Optional("assignee_user_id"): _positive_int,
+        vol.Optional("can_be_picked_by_group_id"): _positive_int,
+        vol.Optional("supervisor_user_id"): _positive_int,
         vol.Optional("categories_map"): _positive_int_list,
         vol.Optional("can_start_from"): _non_empty_string,
         vol.Optional("should_end_by"): _non_empty_string,
@@ -461,6 +465,10 @@ async def async_handle_create_task(
         payload["priority"] = call.data["priority"]
     if call.data.get("assignee_user_id") is not None:
         payload["assigneeUserId"] = call.data["assignee_user_id"]
+    if call.data.get("can_be_picked_by_group_id") is not None:
+        payload["canBePickedByGroupId"] = call.data["can_be_picked_by_group_id"]
+    if call.data.get("supervisor_user_id") is not None:
+        payload["supervisorUserId"] = call.data["supervisor_user_id"]
     if call.data.get("categories_map") is not None:
         payload["categoriesMap"] = call.data["categories_map"]
     if call.data.get("can_start_from") is not None:
@@ -528,6 +536,10 @@ async def async_handle_update_task(
         payload["priority"] = call.data["priority"]
     if call.data.get("assignee_user_id") is not None:
         payload["assigneeUserId"] = call.data["assignee_user_id"]
+    if call.data.get("can_be_picked_by_group_id") is not None:
+        payload["canBePickedByGroupId"] = call.data["can_be_picked_by_group_id"]
+    if call.data.get("supervisor_user_id") is not None:
+        payload["supervisorUserId"] = call.data["supervisor_user_id"]
     if call.data.get("categories_map") is not None:
         payload["categoriesMap"] = call.data["categories_map"]
     if call.data.get("can_start_from") is not None:

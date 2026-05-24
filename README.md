@@ -142,6 +142,8 @@ accessing the created task data. Supported `status` values are
 | `status` | No | Task status |
 | `priority` | No | Priority level (positive integer) |
 | `assignee_user_id` | No | Assigned user ID |
+| `can_be_picked_by_group_id` | No | Group ID that can pick up the task |
+| `supervisor_user_id` | No | Supervisor user ID |
 | `categories_map` | No | List of category IDs |
 | `can_start_from` | No | Earliest start date (ISO format) |
 | `should_end_by` | No | Deadline date (ISO format) |
@@ -163,6 +165,8 @@ must be provided. Supports `response_variable`.
 | `status` | No | New status |
 | `priority` | No | New priority level |
 | `assignee_user_id` | No | New assignee user ID |
+| `can_be_picked_by_group_id` | No | New pickup group ID |
+| `supervisor_user_id` | No | New supervisor user ID |
 | `categories_map` | No | New list of category IDs |
 | `can_start_from` | No | New earliest start date |
 | `should_end_by` | No | New deadline date |
