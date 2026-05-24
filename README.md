@@ -142,6 +142,8 @@ accessing the created task data. Supported `status` values are
 | `status` | No | Task status |
 | `priority` | No | Priority level (positive integer) |
 | `assignee_user_id` | No | Assigned user ID |
+| `can_be_picked_by_group_id` | No | Group ID that can pick up the task |
+| `supervisor_user_id` | No | Supervisor user ID |
 | `categories_map` | No | List of category IDs |
 | `can_start_from` | No | Earliest start date (ISO format) |
 | `should_end_by` | No | Deadline date (ISO format) |
@@ -163,6 +165,8 @@ must be provided. Supports `response_variable`.
 | `status` | No | New status |
 | `priority` | No | New priority level |
 | `assignee_user_id` | No | New assignee user ID |
+| `can_be_picked_by_group_id` | No | New pickup group ID |
+| `supervisor_user_id` | No | New supervisor user ID |
 | `categories_map` | No | New list of category IDs |
 | `can_start_from` | No | New earliest start date |
 | `should_end_by` | No | New deadline date |
@@ -192,6 +196,16 @@ Retrieve tasks with optional filters. Supports
 | `status` | No | Filter by status |
 | `can_start_from_start` | No | Date range start filter |
 | `can_start_from_end` | No | Date range end filter |
+| `config_entry_id` | No | Required if multiple entries |
+
+### `hostaway.get_users`
+
+Retrieve all users from the Hostaway account. Use this to
+look up user IDs for task assignee and supervisor fields.
+Supports `response_variable`.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
 | `config_entry_id` | No | Required if multiple entries |
 
 ### `hostaway.find_reservation`

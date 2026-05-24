@@ -117,6 +117,7 @@ class TestServiceLifecycle:
 
         assert hass.services.has_service(DOMAIN, "set_door_code")
         assert hass.services.has_service(DOMAIN, "get_reservations")
+        assert hass.services.has_service(DOMAIN, "get_users")
 
     async def test_services_removed_on_last_unload(
         self,
@@ -133,6 +134,7 @@ class TestServiceLifecycle:
 
         assert not hass.services.has_service(DOMAIN, "set_door_code")
         assert not hass.services.has_service(DOMAIN, "get_reservations")
+        assert not hass.services.has_service(DOMAIN, "get_users")
 
     async def test_services_registered_once_multi_entry(
         self,
@@ -164,6 +166,7 @@ class TestServiceLifecycle:
 
         assert hass.services.has_service(DOMAIN, "set_door_code")
         assert hass.services.has_service(DOMAIN, "get_reservations")
+        assert hass.services.has_service(DOMAIN, "get_users")
 
 
 class TestSetDoorCode:
@@ -1366,6 +1369,8 @@ class TestCreateTask:
                 "status": "confirmed",
                 "priority": 2,
                 "assignee_user_id": 42,
+                "can_be_picked_by_group_id": 5,
+                "supervisor_user_id": 10,
                 "categories_map": [1, 2],
                 "can_start_from": "2025-07-15",
                 "should_end_by": "2025-07-20",
@@ -1383,6 +1388,8 @@ class TestCreateTask:
                 "status": "confirmed",
                 "priority": 2,
                 "assigneeUserId": 42,
+                "canBePickedByGroupId": 5,
+                "supervisorUserId": 10,
                 "categoriesMap": [1, 2],
                 "canStartFrom": "2025-07-15",
                 "shouldEndBy": "2025-07-20",
@@ -1626,6 +1633,48 @@ class TestUpdateTask:
             {"title": "New Title", "priority": 3, "resolutionNote": "Done"},
         )
         assert result["title"] == "New Title"  # type: ignore[index]
+
+    @patch(
+        "custom_components.hostaway.services.HostawayApiClient.update_task",
+        new_callable=AsyncMock,
+        return_value={
+            "id": 42,
+            "assigneeUserId": 42,
+            "canBePickedByGroupId": 5,
+            "supervisorUserId": 10,
+        },
+    )
+    async def test_update_task_assignee_fields(
+        self,
+        mock_update: AsyncMock,
+        hass: HomeAssistant,
+    ) -> None:
+        """Assignee-related fields map to Hostaway payload keys."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        result = await hass.services.async_call(
+            DOMAIN,
+            "update_task",
+            {
+                "task_id": 42,
+                "assignee_user_id": 42,
+                "can_be_picked_by_group_id": 5,
+                "supervisor_user_id": 10,
+            },
+            blocking=True,
+            return_response=True,
+        )
+
+        mock_update.assert_called_once_with(
+            42,
+            {
+                "assigneeUserId": 42,
+                "canBePickedByGroupId": 5,
+                "supervisorUserId": 10,
+            },
+        )
+        assert result["canBePickedByGroupId"] == 5  # type: ignore[index]
 
     @patch(
         "custom_components.hostaway.services.HostawayApiClient.update_task",
@@ -1987,6 +2036,64 @@ class TestGetTasks:
             await hass.services.async_call(
                 DOMAIN,
                 "get_tasks",
+                {},
+                blocking=True,
+                return_response=True,
+            )
+
+
+class TestGetUsers:
+    """Tests for the hostaway.get_users service."""
+
+    @patch(
+        "custom_components.hostaway.services.HostawayApiClient.get_users",
+        new_callable=AsyncMock,
+        return_value=[
+            {"id": 1, "name": "Alice"},
+            {"id": 2, "name": "Bob"},
+        ],
+    )
+    async def test_get_users_success(
+        self,
+        mock_get: AsyncMock,
+        hass: HomeAssistant,
+    ) -> None:
+        """Get users returns the user list."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        result = await hass.services.async_call(
+            DOMAIN,
+            "get_users",
+            {},
+            blocking=True,
+            return_response=True,
+        )
+
+        mock_get.assert_called_once_with()
+        assert result["users"] == [  # type: ignore[index]
+            {"id": 1, "name": "Alice"},
+            {"id": 2, "name": "Bob"},
+        ]
+
+    @patch(
+        "custom_components.hostaway.services.HostawayApiClient.get_users",
+        new_callable=AsyncMock,
+        side_effect=HostawayResponseError("API error"),
+    )
+    async def test_get_users_api_error(
+        self,
+        mock_get: AsyncMock,
+        hass: HomeAssistant,
+    ) -> None:
+        """API error raises HomeAssistantError."""
+        entry = _make_entry()
+        await _setup_entry(hass, entry)
+
+        with pytest.raises(HomeAssistantError, match="Failed to retrieve users"):
+            await hass.services.async_call(
+                DOMAIN,
+                "get_users",
                 {},
                 blocking=True,
                 return_response=True,
