@@ -56,3 +56,24 @@ ignore:
     package:
       name: zeroconf
       type: python
+  # Same rationale as above: transitive via homeassistant core for
+  # mDNS discovery, not used directly by this integration. Fixed in
+  # zeroconf >= 0.149.7; remove once upstream updates.
+  - vulnerability: GHSA-rfg2-pjw2-56x2
+    package:
+      name: zeroconf
+      type: python
+  # Same rationale as above: transitive via homeassistant core for
+  # mDNS discovery, not used directly by this integration. Fixed in
+  # zeroconf >= 0.149.6; remove once upstream updates.
+  - vulnerability: GHSA-phvx-9mgw-67r5
+    package:
+      name: zeroconf
+      type: python
+  # Same rationale as above: transitive via homeassistant core for
+  # mDNS discovery, not used directly by this integration. Fixed in
+  # zeroconf >= 0.149.12; remove once upstream updates.
+  - vulnerability: GHSA-9663-mqmp-p9mm
+    package:
+      name: zeroconf
+      type: python
