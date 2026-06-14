@@ -5,6 +5,7 @@
 from homeassistant.const import Platform
 
 DOMAIN: str = "hostaway"
+VERSION: str = "0.0.0"
 CONF_CLIENT_ID: str = "client_id"
 CONF_CLIENT_SECRET: str = "client_secret"
 CONF_SELECTED_LISTINGS: str = "selected_listings"
