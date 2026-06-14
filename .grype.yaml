@@ -42,8 +42,9 @@ ignore:
     package:
       name: aiohttp
       type: python
-  # uv is a build/dev tool, not a runtime dependency. The advisory is
-  # fixed in uv >= 0.11.15; remove once the pinned version updates.
+  # uv is a transitive dependency pulled in via homeassistant and dev
+  # tooling. This integration does not depend on uv directly. The
+  # advisory is fixed in uv >= 0.11.15; remove once upstream updates.
   - vulnerability: GHSA-4gg8-gxpx-9rph
     package:
       name: uv
