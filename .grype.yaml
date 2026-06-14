@@ -27,3 +27,32 @@ ignore:
     package:
       name: idna
       type: python
+  # aiohttp is a transitive dependency pulled in via homeassistant
+  # core. This integration uses httpx directly, not aiohttp. The
+  # advisory is fixed in aiohttp >= 3.14.0; remove once upstream
+  # updates.
+  - vulnerability: GHSA-jg22-mg44-37j8
+    package:
+      name: aiohttp
+      type: python
+  # Same rationale as above: transitive via homeassistant core, fix
+  # lands in aiohttp >= 3.14.0. Remove once the upstream chain
+  # updates.
+  - vulnerability: GHSA-hg6j-4rv6-33pg
+    package:
+      name: aiohttp
+      type: python
+  # uv is a build/dev tool, not a runtime dependency. The advisory is
+  # fixed in uv >= 0.11.15; remove once the pinned version updates.
+  - vulnerability: GHSA-4gg8-gxpx-9rph
+    package:
+      name: uv
+      type: python
+  # zeroconf is a transitive dependency pulled in via homeassistant
+  # core for mDNS discovery. This integration does not use zeroconf
+  # directly. Fixed in zeroconf >= 0.149.5; remove once upstream
+  # updates.
+  - vulnerability: GHSA-9pgc-3ccv-5297
+    package:
+      name: zeroconf
+      type: python
