@@ -6,8 +6,10 @@
 **Prerequisites**: plan.md ✅, spec.md ✅, research.md ✅, data-model.md ✅,
 quickstart.md ✅
 
-**Tests**: Existing 66 tests serve as the behavioral equivalence gate. No new
-test creation required — only patch path updates for the new module structure.
+**Tests**: The existing 66 service tests are the primary behavioral equivalence
+gate during refactoring. Final validation still requires the full 317-test
+suite to pass. No new test creation is required — only patch path updates for
+the new module structure.
 
 **Organization**: Tasks are grouped by user story to enable independent
 implementation and testing of each story.

@@ -13,14 +13,15 @@ is purely structural — no behavioral changes.
 
 ## Quick Verification
 
-After implementation, run the full test suite:
+After implementation, run the service test suite first:
 
 ```bash
 uv run pytest tests/test_services.py -v
 ```
 
-All 66 tests must pass. The only test changes are patch path updates (string
-replacements pointing to sub-modules instead of the monolithic module).
+All 66 service tests must pass. The only test changes are patch path updates
+(string replacements pointing to sub-modules instead of the monolithic module).
+Run the full repository test suite during final validation.
 
 ## Package Layout
 

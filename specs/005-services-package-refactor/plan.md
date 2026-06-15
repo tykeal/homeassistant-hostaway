@@ -7,7 +7,12 @@
 
 ## Summary
 
-Refactor the monolithic `custom_components/hostaway/services.py` (1129 lines) into a `services/` package with focused sub-modules organized by responsibility. The package will use a table-driven registration approach to reduce `async_setup_services()` from ~136 lines to under 30 lines. The refactor must be transparent — all 66 existing service tests must pass without behavioral changes.
+Refactor the monolithic `custom_components/hostaway/services.py` (1129 lines)
+into a `services/` package with focused sub-modules organized by
+responsibility. The package will use a table-driven registration approach to
+reduce `async_setup_services()` from ~136 lines to under 30 lines. The
+refactor must be transparent — all 66 service tests and the full 317-test
+suite must pass without behavioral changes.
 
 ## Technical Context
 
