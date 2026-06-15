@@ -127,6 +127,17 @@ repos:
     hooks:
       - id: reuse
 
+  - repo: local
+    hooks:
+      - id: aislop
+        name: aislop ci
+        entry: aislop ci --staged
+        language: node
+        additional_dependencies:
+          - aislop@0.12.0
+        pass_filenames: false
+        require_serial: true
+
   # - repo: local
   #   hooks:
   #     - id: mypy-cache
