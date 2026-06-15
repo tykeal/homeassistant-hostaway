@@ -173,8 +173,10 @@ confirming no complexity violations are reported for `client.py`.
 - The `# aislop-ignore-file ai-slop/hallucinated-import` directive is an
   established project convention for in-repo imports
 - The SPDX header format follows the existing pattern:
+  <!-- REUSE-IgnoreStart -->
   `# SPDX-FileCopyrightText: 2026 Andrew Grimberg <tykeal@bardicgrove.org>` and
-  `# SPDX-License-Identifier&#58; Apache-2.0`
+  `# SPDX-License-Identifier: Apache-2.0`
+  <!-- REUSE-IgnoreEnd -->
 - Python 3.14 is the target runtime as specified in the project configuration
 - The `redaction.py` module only needs to export functions used by `client.py`;
   no other modules currently depend on the redaction helpers

@@ -47,8 +47,10 @@ on
 imports work correctly
 
 - [ ] T003 Create `custom_components/hostaway/api/redaction.py` with SPDX header
+      <!-- REUSE-IgnoreStart -->
       (`# SPDX-FileCopyrightText: 2026 Andrew Grimberg <tykeal@bardicgrove.org>`
-      and `# SPDX-License-Identifier&#58; Apache-2.0`), module docstring, and
+      and `# SPDX-License-Identifier: Apache-2.0`), module docstring, and
+      <!-- REUSE-IgnoreEnd -->
       `# aislop-ignore-file ai-slop/hallucinated-import` directive
 - [ ] T004 Add imports to `custom_components/hostaway/api/redaction.py`: `json`,
       `logging`, `re`, `typing.Any`, `httpx`

@@ -30,7 +30,8 @@ uv run pytest --tb=short -q
 Create `custom_components/hostaway/api/redaction.py` containing:
 
 - SPDX license header
-- `# aislop-ignore-file ai-slop/hallucinated-import` directive
+- `# aislop-ignore-file ai-slop/hallucinated-import -- HA runtime provides these
+  packages` directive
 - All redaction constants (`_MAX_RESPONSE_BODY_LOG`, `_REDACTED`,
   `_SENSITIVE_KEY_TOKENS`, `_CONTROL_CHAR_RE`, `_SENSITIVE_KEY_PATTERN`,
   `_TEXT_REDACT_RE`, `_BEARER_RE`)
