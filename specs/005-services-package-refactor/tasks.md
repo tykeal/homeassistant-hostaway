@@ -312,7 +312,8 @@ Task: "Extract helpers and state into custom_components/hostaway/services/helper
 5. Complete Phase 5: User Story 3 (test validation)
 6. **STOP and VALIDATE**: Run `uv run pytest tests/test_services.py -v` — all
    66 tests pass
-7. The refactor is functionally complete at this point
+7. The MVP refactor is functionally complete at this point; continue to Phase 7
+   for full-suite validation
 
 ### Incremental Delivery
 
