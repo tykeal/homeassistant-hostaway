@@ -1,15 +1,15 @@
+<!-- markdownlint-disable MD013 -->
+
 # Research: API Client Complexity Refactor
 
-**Feature**: 004-api-client-refactor
-**Date**: 2026-06-15
-**Status**: Complete
+**Feature**: 004-api-client-refactor **Date**: 2026-06-15 **Status**: Complete
 
 ## Research Tasks
 
 ### RT-01: Module Extraction Pattern for Python
 
-**Question**: What is the best practice for extracting functions from one
-module into a sibling module within the same Python package?
+**Question**: What is the best practice for extracting functions from one module
+into a sibling module within the same Python package?
 
 **Decision**: Extract all redaction/logging helpers as module-level functions
 into `redaction.py` within the same `custom_components/hostaway/api/` package.
@@ -19,15 +19,15 @@ import style.
 **Rationale**:
 
 - Keeps the dependency unidirectional (`client.py` → `redaction.py`); no
-  circular imports possible since `redaction.py` has zero imports from the
-  api package.
-- Module-level functions (not class methods) are the correct choice because
-  the redaction helpers are pure functions with no class state dependency.
+  circular imports possible since `redaction.py` has zero imports from the api
+  package.
+- Module-level functions (not class methods) are the correct choice because the
+  redaction helpers are pure functions with no class state dependency.
 - The existing `__init__.py` does NOT export redaction helpers (they are
   underscore-prefixed private functions), so the public API surface remains
   unchanged.
-- `redaction.py` will include `_safe_response_body` as the only function
-  that depends on `httpx.Response`, making the coupling explicit and minimal.
+- `redaction.py` will include `_safe_response_body` as the only function that
+  depends on `httpx.Response`, making the coupling explicit and minimal.
 
 **Alternatives considered**:
 
@@ -41,19 +41,19 @@ import style.
 
 ### RT-02: Method Decomposition Strategy for `_request()`
 
-**Question**: How should the `_request()` method be decomposed to maintain
-the retry loop structure while extracting per-status handler logic?
+**Question**: How should the `_request()` method be decomposed to maintain the
+retry loop structure while extracting per-status handler logic?
 
 **Decision**: Extract three private methods on `HostawayApiClient`:
 
-1. `_handle_403(method, path, params, json, response, _retried_auth)` —
-   handles 403 classification, logging, token invalidation, and auth-retry.
-   Returns an `httpx.Response` on successful retry; raises on failure.
-2. `_handle_429(response, attempt, backoff)` — calculates rate-limit delay,
-   logs warning, sleeps. Returns updated backoff value; raises
+1. `_handle_403(method, path, params, json, response, _retried_auth)` — handles
+   403 classification, logging, token invalidation, and auth-retry. Returns an
+   `httpx.Response` on successful retry; raises on failure.
+2. `_handle_429(response, attempt, backoff)` — calculates rate-limit delay, logs
+   warning, sleeps. Returns updated backoff value; raises
    `HostawayRateLimitError` at max retries.
-3. `_handle_server_error(response, attempt, backoff)` — calculates 5xx
-   retry delay, logs warning, sleeps. Returns updated backoff; raises
+3. `_handle_server_error(response, attempt, backoff)` — calculates 5xx retry
+   delay, logs warning, sleeps. Returns updated backoff; raises
    `HostawayConnectionError` at max retries.
 
 **Rationale**:
@@ -90,24 +90,24 @@ the retry loop structure while extracting per-status handler logic?
 
 **Analysis — Current `client.py` (890 lines)**:
 
-| Section | Lines | After refactor |
-|---------|-------|----------------|
-| SPDX header + imports | 38 | ~30 (remove `json`, `re`; add redaction import) |
-| Redaction constants + functions + 403-classifier | 170 | 0 (moved to `redaction.py`) |
-| Class def + `__init__` | 35 | ~35 |
-| Domain methods (12 methods) | 362 | ~200 (consolidated via helpers) |
-| `_request()` | 165 | ~65 (dispatches to handlers) |
-| Handler methods (new) | 0 | ~60 (`_handle_403/429/server_error`) |
-| `_parse_response` + `_extract_results` | 55 | ~55 |
-| Module-level retry utilities | 62 | ~62 |
-| **Total** | **890** | **~370** ✅ |
+| Section                                          | Lines   | After refactor                                  |
+| ------------------------------------------------ | ------- | ----------------------------------------------- |
+| SPDX header + imports                            | 38      | ~30 (remove `json`, `re`; add redaction import) |
+| Redaction constants + functions + 403-classifier | 170     | 0 (moved to `redaction.py`)                     |
+| Class def + `__init__`                           | 35      | ~35                                             |
+| Domain methods (12 methods)                      | 362     | ~200 (consolidated via helpers)                 |
+| `_request()`                                     | 165     | ~65 (dispatches to handlers)                    |
+| Handler methods (new)                            | 0       | ~60 (`_handle_403/429/server_error`)            |
+| `_parse_response` + `_extract_results`           | 55      | ~55                                             |
+| Module-level retry utilities                     | 62      | ~62                                             |
+| **Total**                                        | **890** | **~370** ✅                                     |
 
 **Domain method consolidation strategy**:
 
 - `create_task`, `update_task`, `update_reservation` share identical
   response-parsing logic → extract `_mutate(method, path, json)` helper
-- `get_all_listings`, `get_all_reservations`, `get_tasks` share pagination
-  loop logic → extract `_paginate_*` helpers or use concise inline patterns
+- `get_all_listings`, `get_all_reservations`, `get_tasks` share pagination loop
+  logic → extract `_paginate_*` helpers or use concise inline patterns
 - Docstrings shortened to minimum that satisfies interrogate (purpose line +
   Args/Returns/Raises without verbose prose descriptions)
 
@@ -152,9 +152,8 @@ the retry loop structure while extracting per-status handler logic?
 - `redaction.py` has no knowledge of `HostawayApiClient` or any other
   api-package symbols.
 - The `_is_auth_403_body` function takes a plain `str` argument (the
-  already-extracted body text), not a response object — this was a
-  deliberate design choice in the original code that enables clean
-  extraction.
+  already-extracted body text), not a response object — this was a deliberate
+  design choice in the original code that enables clean extraction.
 - `_safe_response_body` takes an `httpx.Response` directly, which is a
   third-party type, not a project type — no coupling to client internals.
 
@@ -175,12 +174,12 @@ No imports from `custom_components.hostaway.*` — zero coupling risk.
 
 ### RT-05: TDD Applicability for Pure Refactoring
 
-**Question**: Does the constitution's TDD requirement (Red-Green-Refactor)
-apply to a behavior-preserving refactoring?
+**Question**: Does the constitution's TDD requirement (Red-Green-Refactor) apply
+to a behavior-preserving refactoring?
 
 **Decision**: TDD's "write a failing test first" does not apply to pure
-refactoring where behavior is unchanged. The 317 existing tests serve as
-the "green" baseline. The refactoring follows the "Refactor" phase of TDD:
+refactoring where behavior is unchanged. The 317 existing tests serve as the
+"green" baseline. The refactoring follows the "Refactor" phase of TDD:
 restructure code while keeping all tests green.
 
 **Rationale**:
@@ -201,13 +200,12 @@ remain green throughout the refactoring process.
 
 All research questions are resolved. Key findings:
 
-1. **Extraction target**: 170 lines move to `redaction.py` (constants,
-   regex patterns, 5 helper functions, 403-classifier)
-2. **Line budget**: <400 target requires domain method consolidation in
-   addition to redaction extraction; achievable via shared helpers and
-   concise docstrings
-3. **`_request()` target**: <80 lines achievable by extracting 3 handler
-   methods that own their own sleep/raise logic
+1. **Extraction target**: 170 lines move to `redaction.py` (constants, regex
+   patterns, 5 helper functions, 403-classifier)
+2. **Line budget**: <400 target requires domain method consolidation in addition
+   to redaction extraction; achievable via shared helpers and concise docstrings
+3. **`_request()` target**: <80 lines achievable by extracting 3 handler methods
+   that own their own sleep/raise logic
 4. **No circular imports**: `redaction.py` depends only on stdlib + httpx
-5. **TDD**: Existing 317 tests serve as refactoring safety net; no new
-   tests required for behavior-preserving changes
+5. **TDD**: Existing 317 tests serve as refactoring safety net; no new tests
+   required for behavior-preserving changes

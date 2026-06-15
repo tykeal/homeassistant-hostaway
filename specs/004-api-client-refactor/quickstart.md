@@ -1,7 +1,6 @@
 # Quickstart: API Client Complexity Refactor
 
-**Feature**: 004-api-client-refactor
-**Date**: 2026-06-15
+**Feature**: 004-api-client-refactor **Date**: 2026-06-15
 
 ## Prerequisites
 
@@ -62,8 +61,8 @@ Extract three private methods on `HostawayApiClient`:
 
 ### Step 4: Consolidate domain methods
 
-Reduce repetition in paginated fetch methods and mutation methods
-via shared private helper patterns to achieve <400 line target.
+Reduce repetition in paginated fetch methods and mutation methods via shared
+private helper patterns to achieve <400 line target.
 
 ## Verification Commands
 

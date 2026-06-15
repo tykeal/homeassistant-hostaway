@@ -1,8 +1,7 @@
 # Specification Quality Checklist: API Client Complexity Refactor
 
-**Purpose**: Validate specification completeness and quality before proceeding to planning
-**Created**: 2026-06-15
-**Feature**: [spec.md](../spec.md)
+**Purpose**: Validate specification completeness and quality before proceeding
+to planning **Created**: 2026-06-15 **Feature**: [spec.md](../spec.md)
 
 ## Content Quality
 
@@ -31,5 +30,9 @@
 
 ## Notes
 
-- All items pass validation. Spec is ready for `/speckit.clarify` or `/speckit.plan`.
-- This is a pure refactoring feature — the specification necessarily references file names, function names, and line counts as these are the measurable targets of the refactoring work (not implementation choices but rather the problem statement itself).
+- All items pass validation. Spec is ready for `/speckit.clarify` or
+  `/speckit.plan`.
+- This is a pure refactoring feature — the specification necessarily references
+  file names, function names, and line counts as these are the measurable
+  targets of the refactoring work (not implementation choices but rather the
+  problem statement itself).
