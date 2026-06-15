@@ -12,7 +12,7 @@
 
 **Decision**: Use a list of `ServiceDefinition` named tuples iterated in a single loop within `async_setup_services()`.
 
-**Rationale**: Home Assistant's `hass.services.async_register()` accepts a handler callable, a schema, and an optional `supports_response` parameter. A table-driven approach replaces 8 individual closure definitions + 8 registration blocks (~136 lines) with a single loop over a list of definitions (~20 lines). The handler injection pattern uses `functools.partial` to bind `hass` to each handler.
+**Rationale**: Home Assistant's `hass.services.async_register()` accepts a handler callable, a schema, and an optional `supports_response` parameter. A table-driven approach replaces 9 individual closure definitions + 9 registration blocks (~136 lines) with a single loop over a list of definitions (~20 lines). The handler injection pattern uses `functools.partial` to bind `hass` to each handler.
 
 **Pattern**:
 
@@ -54,7 +54,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
 **Alternatives considered**:
 
 - **Decorators on handlers**: Rejected — requires runtime module introspection and non-obvious registration ordering.
-- **Class-based service registry**: Rejected — over-engineered for 8 services; NamedTuple is simpler.
+- **Class-based service registry**: Rejected — over-engineered for 9 services; NamedTuple is simpler.
 - **Dict-based definitions**: Rejected — NamedTuple provides type safety and named field access.
 
 ---

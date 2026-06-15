@@ -73,7 +73,7 @@ That's it — no closures, no duplicate registration code.
 
 | Decision | Rationale |
 |----------|-----------|
-| `functools.partial` for hass injection | Replaces 8 closure definitions; cleaner than lambdas |
+| `functools.partial` for hass injection | Replaces 9 closure definitions; cleaner than lambdas |
 | `NamedTuple` for service definitions | Type-safe, immutable, supports named field access |
 | Validators in `schemas.py` | Centralized; validators are schema concerns, not handler concerns |
 | Locked-state in `helpers.py` | Module-level state stays in helpers; handlers remain stateless |

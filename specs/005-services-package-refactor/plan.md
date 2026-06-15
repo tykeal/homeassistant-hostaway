@@ -19,7 +19,7 @@ Refactor the monolithic `custom_components/hostaway/services.py` (1129 lines) in
 **Project Type**: Home Assistant custom integration (plugin)
 **Performance Goals**: No event loop blocking; zero overhead vs. current implementation
 **Constraints**: File size limits per FR-015; `async_setup_services()` ≤ 30 lines (FR-016)
-**Scale/Scope**: 8 services, 1129 LOC source → 6 files in package, ~66 test methods unchanged
+**Scale/Scope**: 9 services, 1129 LOC source → 6 files in package, ~66 test methods unchanged
 
 ## Constitution Check
 

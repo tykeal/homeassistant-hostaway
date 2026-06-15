@@ -101,7 +101,7 @@ each module imports from helpers/schemas only
 `async_unregister_services()`.
 
 **Independent Test**: `async_setup_services()` is ≤ 30 lines; service
-registration table contains all 8 services (set_door_code, get_reservations,
+registration table contains all 9 services (set_door_code, get_reservations,
 find_reservation, create_task, update_task, delete_task, get_tasks, get_users,
 get_groups); `async_unregister_services()` removes all services via the same
 table.

@@ -31,15 +31,15 @@ SERVICE_DEFINITIONS: list[ServiceDefinition] = [
         schema=SERVICE_SET_DOOR_CODE_SCHEMA,
         supports_response=None,
     ),
-    # ... 7 more entries
+    # ... 8 more entries
 ]
 ```
 
 ---
 
-### Service Registration Table (MODULE_DEFINITIONS)
+### Service Registration Table (SERVICE_DEFINITIONS)
 
-The complete service table containing all 8 services:
+The complete service table containing all 9 services:
 
 | Service Name | Handler Module | Response Support |
 |--------------|---------------|-----------------|
