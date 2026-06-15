@@ -7,6 +7,8 @@ for property management automation. Manages the API client
 lifecycle and token persistence across HA restarts.
 """
 
+# aislop-ignore-file ai-slop/hallucinated-import -- HA runtime provides these packages
+
 from __future__ import annotations
 
 import logging

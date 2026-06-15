@@ -2,7 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """API constants for the Hostaway client library."""
 
+# aislop-ignore-next-line ai-slop/hardcoded-url -- intentional token endpoint
 TOKEN_URL: str = "https://api.hostaway.com/v1/accessTokens"
+# aislop-ignore-next-line ai-slop/hardcoded-url -- intentional API base URL
 BASE_URL: str = "https://api.hostaway.com"
 DEFAULT_TIMEOUT: int = 30
 TOKEN_READY_DELAY: float = 1.0

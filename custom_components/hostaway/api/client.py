@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """HTTP client for authenticated Hostaway API requests."""
 
+# aislop-ignore-file ai-slop/hallucinated-import -- in-repo component imports
+
 from __future__ import annotations
 
 import asyncio
