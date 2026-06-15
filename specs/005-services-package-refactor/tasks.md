@@ -1,3 +1,5 @@
+<!-- markdownlint-disable MD013 -->
+
 # Tasks: Services Package Refactor
 
 **Input**: Design documents from `/specs/005-services-package-refactor/`
