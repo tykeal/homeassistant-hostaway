@@ -15,7 +15,7 @@ ci:
     Signed-off-by: pre-commit-ci[bot] <pre-commit-ci[bot]@pre-commit.ci>
 
     Changes in this pull request are as follows:
-  skip: [mypy]
+  skip: [mypy, aislop]
 
 exclude: |
   (?x)(
