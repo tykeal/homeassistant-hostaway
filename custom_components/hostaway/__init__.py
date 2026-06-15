@@ -97,7 +97,6 @@ async def async_setup_entry(
             f"Hostaway API error during setup: {exc}",
         ) from exc
 
-    # Create coordinators
     listings_coordinator = HostawayListingsCoordinator(hass, entry, api_client)
     reservations_coordinator = HostawayReservationsCoordinator(hass, entry, api_client)
 
