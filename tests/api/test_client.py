@@ -12,7 +12,7 @@ import pytest
 import respx
 
 from custom_components.hostaway.api.auth import HostawayTokenManager
-from custom_components.hostaway.api.client import HostawayApiClient, _safe_response_body
+from custom_components.hostaway.api.client import HostawayApiClient
 from custom_components.hostaway.api.const import DEFAULT_PAGE_LIMIT
 from custom_components.hostaway.api.exceptions import (
     HostawayAuthError,
@@ -21,6 +21,7 @@ from custom_components.hostaway.api.exceptions import (
     HostawayReservationLockedError,
     HostawayResponseError,
 )
+from custom_components.hostaway.api.redaction import _safe_response_body
 from tests.helpers import (
     FAKE_BASE_URL,
     FAKE_TOKEN,
@@ -234,7 +235,7 @@ class TestHttpClientCore:
         # Force _safe_response_body to simulate unreadable body.
         with (
             patch(
-                "custom_components.hostaway.api.client._safe_response_body",
+                "custom_components.hostaway.api.redaction._safe_response_body",
                 return_value="<unavailable>",
             ),
             pytest.raises(HostawayAuthError) as exc_info,
@@ -301,7 +302,7 @@ class TestHttpClientCore:
         client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
 
         with patch(
-            "custom_components.hostaway.api.client._safe_response_body",
+            "custom_components.hostaway.api.redaction._safe_response_body",
             return_value="<unavailable>",
         ):
             response = await client._request("GET", "/v1/listings")
@@ -487,7 +488,7 @@ class TestHttpClientCore:
         response = httpx.Response(200, text='{"x": 1}')
 
         with patch(
-            "custom_components.hostaway.api.client._redact_sensitive",
+            "custom_components.hostaway.api.redaction._redact_sensitive",
             side_effect=RecursionError("too deep"),
         ):
             assert _safe_response_body(response) == "<unavailable>"
