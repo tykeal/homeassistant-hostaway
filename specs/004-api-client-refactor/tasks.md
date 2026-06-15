@@ -34,7 +34,7 @@ implementation and verification of each story.
 - [ ] T001 Verify all 317 tests pass on current branch with
       `uv run pytest --tb=short -q`
 - [ ] T002 Record baseline line counts:
-      `wc -l custom_components/hostaway/api/client.py` (expect 890)
+      `wc -l custom_components/hostaway/api/client.py` (expect 891)
 
 ---
 
@@ -93,7 +93,7 @@ helpers, `client.py` imports from it, and all tests pass
 
 ## Phase 3: User Story 1 — Maintainer Works on Smaller, Focused Files (Priority: P1) 🎯 MVP
 
-**Goal**: Reduce `client.py` from 890 lines to under 400 lines by completing the
+**Goal**: Reduce `client.py` from 891 lines to under 400 lines by completing the
 redaction extraction (Phase 2) and consolidating repetitive domain method
 patterns
 
@@ -137,7 +137,7 @@ lines, all tests pass — User Story 1 complete
 
 ## Phase 4: User Story 2 — Maintainer Reads a Concise `_request()` Method (Priority: P2)
 
-**Goal**: Decompose the 165-line `_request()` method into a dispatcher under 80
+**Goal**: Decompose the 166-line `_request()` method into a dispatcher under 80
 lines plus three focused per-status handler methods
 
 **Independent Test**: Verify `_request()` spans fewer than 80 lines and all 317
@@ -161,7 +161,9 @@ tests pass with identical behavior
       `custom_components/hostaway/api/client.py` to dispatch to `_handle_403()`,
       `_handle_429()`, and `_handle_server_error()` instead of inline logic
 - [ ] T028 [US2] Verify `_request()` method is under 80 lines using
-      `awk '/^    async def _request/,/^    (async )?def [a-z_]/' custom_components/hostaway/api/client.py | wc -l`
+      a short Python snippet that counts from `async def _request` to the next
+      top-level method definition without matching the `_request()` signature as
+      both the start and end of the range
 - [ ] T029 [US2] Run full test suite (`uv run pytest --tb=short -q`) and confirm
       all 317 tests pass after `_request()` decomposition
 - [ ] T030 [US2] Run linting

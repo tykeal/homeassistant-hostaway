@@ -8,9 +8,9 @@ specs/004-api-client-refactor/spec.md **Input**: Feature specification from
 
 ## Summary
 
-Refactor `custom_components/hostaway/api/client.py` (currently 890 lines) to
+Refactor `custom_components/hostaway/api/client.py` (currently 891 lines) to
 reduce complexity below aislop thresholds: extract redaction/logging helpers and
-constants into a new `redaction.py` module, and decompose the 165-line
+constants into a new `redaction.py` module, and decompose the 166-line
 `_request()` method into smaller per-status handler methods (`_handle_403`,
 `_handle_429`, `_handle_server_error`). The refactoring is behavior-preserving —
 all 317 existing tests must pass without modification.
@@ -25,7 +25,7 @@ Assistant custom component (Linux/generic) **Project Type**: Library (custom
 integration API client) **Performance Goals**: Must not block HA event loop;
 async throughout **Constraints**: `client.py` < 400 lines, `_request()` < 80
 lines, `redaction.py` < 400 lines, zero public API changes **Scale/Scope**:
-Single module extraction + method decomposition within existing 890-line file
+Single module extraction + method decomposition within existing 891-line file
 
 ## Constitution Check
 

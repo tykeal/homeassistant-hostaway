@@ -79,8 +79,30 @@ wc -l custom_components/hostaway/api/redaction.py
 # Expected: <400 (targeting ~185)
 
 # Check _request() line count
-awk '/^    async def _request/,/^    (async )?def [a-z_]/' \
-  custom_components/hostaway/api/client.py | wc -l
+python - <<'PY'
+from pathlib import Path
+
+lines = (
+    Path("custom_components/hostaway/api/client.py")
+    .read_text()
+    .splitlines()
+)
+start = next(
+    i
+    for i, line in enumerate(lines)
+    if line.startswith("    async def _request")
+)
+end = next(
+    (
+        i
+        for i in range(start + 1, len(lines))
+        if lines[i].startswith("    def ")
+        or lines[i].startswith("    async def ")
+    ),
+    len(lines),
+)
+print(end - start)
+PY
 # Expected: <80
 
 # Run linting

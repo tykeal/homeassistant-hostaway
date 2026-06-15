@@ -1,9 +1,10 @@
 # Feature Specification: API Client Complexity Refactor
 
 **Feature Branch**: `feat/004-api-client-refactor` **Created**: 2026-06-15
-**Status**: Draft **Input**: Refactor api/client.py to reduce complexity —
-extract redaction/logging helpers into a new module and decompose `_request()`
-into smaller handler methods.
+**Status**: Draft **Input**: Refactor
+`custom_components/hostaway/api/client.py` to reduce complexity — extract
+redaction/logging helpers into a new module and decompose `_request()` into
+smaller handler methods.
 
 ## User Scenarios & Testing _(mandatory)_
 
@@ -155,9 +156,9 @@ confirming no complexity violations are reported for `client.py`.
 ### Measurable Outcomes
 
 - **SC-001**: `client.py` contains fewer than 400 lines after refactoring
-  (currently 890 lines)
+  (currently 891 lines)
 - **SC-002**: `_request()` method contains fewer than 80 lines after refactoring
-  (currently ~165 lines)
+  (currently 166 lines)
 - **SC-003**: All 317 existing tests pass without modification
 - **SC-004**: No automated complexity linter violations are reported for
   `client.py` or `redaction.py`

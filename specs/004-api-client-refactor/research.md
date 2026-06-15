@@ -88,7 +88,7 @@ retry loop structure while extracting per-status handler logic?
 2. **Domain method consolidation** via shared private helpers (−150-200 lines)
 3. **`_request()` decomposition** (achieves <80 target for that method)
 
-**Analysis — Current `client.py` (890 lines)**:
+**Analysis — Current `client.py` (891 lines)**:
 
 | Section                                          | Lines   | After refactor                                  |
 | ------------------------------------------------ | ------- | ----------------------------------------------- |
@@ -96,11 +96,11 @@ retry loop structure while extracting per-status handler logic?
 | Redaction constants + functions + 403-classifier | 170     | 0 (moved to `redaction.py`)                     |
 | Class def + `__init__`                           | 35      | ~35                                             |
 | Domain methods (12 methods)                      | 362     | ~200 (consolidated via helpers)                 |
-| `_request()`                                     | 165     | ~65 (dispatches to handlers)                    |
+| `_request()`                                     | 166     | ~65 (dispatches to handlers)                    |
 | Handler methods (new)                            | 0       | ~60 (`_handle_403/429/server_error`)            |
 | `_parse_response` + `_extract_results`           | 55      | ~55                                             |
 | Module-level retry utilities                     | 62      | ~62                                             |
-| **Total**                                        | **890** | **~370** ✅                                     |
+| **Total**                                        | **891** | **~370** ✅                                     |
 
 **Domain method consolidation strategy**:
 
