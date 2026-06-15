@@ -486,7 +486,7 @@ class TestLockedReservationHandling:
         await _setup_entry(hass, entry)
 
         with caplog.at_level(
-            "DEBUG", logger="custom_components.hostaway.services.reservation_handlers"
+            "DEBUG", logger="custom_components.hostaway.services.helpers"
         ):
             await hass.services.async_call(
                 DOMAIN,
@@ -524,7 +524,7 @@ class TestLockedReservationHandling:
         await _setup_entry(hass, entry)
 
         with caplog.at_level(
-            "DEBUG", logger="custom_components.hostaway.services.reservation_handlers"
+            "DEBUG", logger="custom_components.hostaway.services.helpers"
         ):
             await hass.services.async_call(
                 DOMAIN,
@@ -580,7 +580,7 @@ class TestLockedReservationHandling:
         await _setup_entry(hass, entry)
 
         with caplog.at_level(
-            "WARNING", logger="custom_components.hostaway.services.reservation_handlers"
+            "WARNING", logger="custom_components.hostaway.services.helpers"
         ):
             await hass.services.async_call(
                 DOMAIN,
@@ -628,7 +628,7 @@ class TestLockedReservationHandling:
         monkeypatch.setattr(helpers_mod.time, "monotonic", fake_monotonic)
 
         with caplog.at_level(
-            "WARNING", logger="custom_components.hostaway.services.reservation_handlers"
+            "WARNING", logger="custom_components.hostaway.services.helpers"
         ):
             await hass.services.async_call(
                 DOMAIN,
