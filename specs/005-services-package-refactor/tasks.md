@@ -31,12 +31,15 @@ implementation and testing of each story.
 ## Phase 1: Setup (Shared Infrastructure)
 
 **Purpose**: Create the services package directory and establish the skeleton
+while preserving the `custom_components.hostaway.services` import path
 
 - [ ] T001 Create services package directory at
   `custom_components/hostaway/services/`
-- [ ] T002 Create empty `custom_components/hostaway/services/__init__.py` with
-  SPDX header, aislop comment using `ai-slop/hallucinated-import`, and module
-  docstring placeholder
+- [ ] T002 Replace `custom_components/hostaway/services.py` with
+  `custom_components/hostaway/services/__init__.py` in the same change,
+  preserving the `custom_components.hostaway.services` import path while adding
+  the SPDX header, aislop comment using `ai-slop/hallucinated-import`, and
+  module docstring placeholder
 
 ---
 
@@ -167,9 +170,9 @@ tests pass with zero failures.
   logger name assertions from `custom_components.hostaway.services` to
   `custom_components.hostaway.services.reservation_handlers` (or appropriate
   sub-module)
-- [ ] T016 [US3] Delete the old monolithic
-  `custom_components/hostaway/services.py` file (the package directory
-  `services/` now replaces it)
+- [ ] T016 [US3] Verify the old monolithic
+  `custom_components/hostaway/services.py` file has been removed and no
+  compatibility module remains alongside the `services/` package
 - [ ] T017 [US3] Run service test suite (`uv run pytest tests/test_services.py
   -v`) and confirm all 66 tests pass with zero failures
 
@@ -341,10 +344,10 @@ This refactor is inherently sequential due to strong inter-story dependencies:
 
 - [P] tasks = different files, no dependencies on incomplete tasks
 - [Story] label maps task to specific user story for traceability
-- The old `services.py` MUST be deleted (T016) only after the package is fully
-  functional
-- `services.py` and `services/` directory cannot coexist — Python would be
-  ambiguous
+- The old `services.py` MUST be replaced when `services/__init__.py` is
+  introduced; the package can then be refactored internally across later tasks
+- `services.py` and a `services/` package (`services/__init__.py`) cannot
+  coexist — Python would be ambiguous once the package initializer exists
 - Git tracks this as delete + create (not rename) since paths differ
   structurally
 - All handler function signatures remain identical — only module location

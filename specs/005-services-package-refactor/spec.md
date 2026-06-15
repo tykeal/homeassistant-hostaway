@@ -80,8 +80,8 @@ modification and confirming they pass.
 **Acceptance Scenarios**:
 
 1. **Given** the full test suite, **When** all 317 tests are executed against
-   the refactored code, **Then** all tests pass without modification to test
-   files (except import path updates if needed).
+   the refactored code, **Then** all tests pass without changes to test logic
+   or assertions (except import or patch path updates if needed).
 2. **Given** a user calls any Hostaway service via Home Assistant, **When** the
    call is processed, **Then** the response and side effects are identical to
    the pre-refactor behavior.
