@@ -1,0 +1,16 @@
+# SPDX-FileCopyrightText: 2026 Andrew Grimberg <tykeal@bardicgrove.org>
+# SPDX-License-Identifier: Apache-2.0
+#
+# aislop configuration for Home Assistant custom component
+#
+# This integration imports from the Home Assistant runtime environment
+# (homeassistant.*, voluptuous, custom_components.*) which are not
+# declared as runtime dependencies in pyproject.toml. The
+# hallucinated-import rule produces false positives for this project
+# architecture.
+
+rules:
+  # HA runtime provides these packages — not hallucinated
+  ai-slop/hallucinated-import: "off"
+  # API base URLs are intentional constants
+  ai-slop/hardcoded-url: "off"
