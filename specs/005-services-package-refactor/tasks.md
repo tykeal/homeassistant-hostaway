@@ -33,9 +33,9 @@ implementation and testing of each story.
 **Purpose**: Create the services package directory and establish the skeleton
 while preserving the `custom_components.hostaway.services` import path
 
-- [ ] T001 Create services package directory at
+- [x] T001 Create services package directory at
   `custom_components/hostaway/services/`
-- [ ] T002 Replace `custom_components/hostaway/services.py` with
+- [x] T002 Replace `custom_components/hostaway/services.py` with
   `custom_components/hostaway/services/__init__.py` in the same change,
   preserving the `custom_components.hostaway.services` import path while adding
   the SPDX header, aislop comment using `ai-slop/hallucinated-import`, and
@@ -52,7 +52,7 @@ extraction can begin.
 **⚠️ CRITICAL**: No handler extraction (US1) can begin until schemas.py and
 helpers.py are in place.
 
-- [ ] T003 [P] Extract all validator functions (`_positive_int`,
+- [x] T003 [P] Extract all validator functions (`_positive_int`,
   `_non_empty_string`, `_strict_string`, `_positive_int_list`,
   `_is_user_correctable_task_error`) and schema definitions
   (`SERVICE_SET_DOOR_CODE_SCHEMA`, `SERVICE_GET_RESERVATIONS_SCHEMA`,
@@ -61,7 +61,7 @@ helpers.py are in place.
   `SERVICE_GET_TASKS_SCHEMA`, `SERVICE_GET_USERS_SCHEMA`,
   `SERVICE_GET_GROUPS_SCHEMA`) and constant `_TASK_STATUS_VALUES` into
   `custom_components/hostaway/services/schemas.py`
-- [ ] T004 [P] Extract helper functions (`_resolve_entry_data`,
+- [x] T004 [P] Extract helper functions (`_resolve_entry_data`,
   `_get_listing_name_index`, `_resolve_listing_id`, `_prune_locked_state`,
   `_log_locked_reservation`) and module-level state
   (`_LOCKED_LOG_COOLDOWN_SECONDS`, `_LOCKED_RESERVATION_LOG_STATE`) into
@@ -82,17 +82,17 @@ handler functions are accessible from their new locations.
 
 ### Implementation for User Story 1
 
-- [ ] T005 [P] [US1] Extract reservation handlers
+- [x] T005 [P] [US1] Extract reservation handlers
   (`async_handle_set_door_code`, `async_handle_get_reservations`,
   `async_handle_find_reservation`, `_reservation_result`) into
   `custom_components/hostaway/services/reservation_handlers.py` with imports
   from `helpers` and `schemas`
-- [ ] T006 [P] [US1] Extract task handlers (`async_handle_create_task`,
+- [x] T006 [P] [US1] Extract task handlers (`async_handle_create_task`,
   `async_handle_update_task`, `async_handle_delete_task`,
   `async_handle_get_tasks`) into
   `custom_components/hostaway/services/task_handlers.py` with imports from
   `helpers` and `schemas`
-- [ ] T007 [P] [US1] Extract lookup handlers (`async_handle_get_users`,
+- [x] T007 [P] [US1] Extract lookup handlers (`async_handle_get_users`,
   `async_handle_get_groups`) into
   `custom_components/hostaway/services/lookup_handlers.py` with imports from
   `helpers` and `schemas`
@@ -116,17 +116,17 @@ table.
 
 ### Implementation for User Story 2
 
-- [ ] T008 [US2] Implement `ServiceDefinition` NamedTuple and
+- [x] T008 [US2] Implement `ServiceDefinition` NamedTuple and
   `SERVICE_DEFINITIONS` list (9 entries) in
   `custom_components/hostaway/services/__init__.py` importing handlers from
   sub-modules and schemas from `schemas.py`
-- [ ] T009 [US2] Implement table-driven `async_setup_services(hass)` function
+- [x] T009 [US2] Implement table-driven `async_setup_services(hass)` function
   (< 30 lines) using `functools.partial` for hass injection and idempotent
   registration check in `custom_components/hostaway/services/__init__.py`
-- [ ] T010 [US2] Implement table-driven `async_unregister_services(hass)`
+- [x] T010 [US2] Implement table-driven `async_unregister_services(hass)`
   function using `SERVICE_DEFINITIONS` table in
   `custom_components/hostaway/services/__init__.py`
-- [ ] T011 [US2] Update `custom_components/hostaway/__init__.py` to import
+- [x] T011 [US2] Update `custom_components/hostaway/__init__.py` to import
   `async_unregister_services` from the services package and replace the 9
   inline `hass.services.async_remove()` calls with a single
   `async_unregister_services(hass)` call
@@ -146,34 +146,34 @@ tests pass with zero failures.
 
 ### Implementation for User Story 3
 
-- [ ] T012 [US3] Update test patch paths for reservation handler tests in
+- [x] T012 [US3] Update test patch paths for reservation handler tests in
   `tests/test_services.py`: change
   `custom_components.hostaway.services.HostawayApiClient` to
   `custom_components.hostaway.services.reservation_handlers.HostawayApiClient`
   for reservation-related method patches (`update_reservation` and
   `get_all_reservations`)
-- [ ] T013 [US3] Update test patch paths for task handler tests in
+- [x] T013 [US3] Update test patch paths for task handler tests in
   `tests/test_services.py`: change
   `custom_components.hostaway.services.HostawayApiClient` to
   `custom_components.hostaway.services.task_handlers.HostawayApiClient` for
   task-related method patches (create_task, update_task, delete_task,
   get_tasks)
-- [ ] T014 [US3] Update test patch paths for lookup handler tests in
+- [x] T014 [US3] Update test patch paths for lookup handler tests in
   `tests/test_services.py`: change
   `custom_components.hostaway.services.HostawayApiClient` to
   `custom_components.hostaway.services.lookup_handlers.HostawayApiClient` for
   lookup-related method patches (get_users, get_groups)
-- [ ] T015 [US3] Update test patch paths for helper references in
+- [x] T015 [US3] Update test patch paths for helper references in
   `tests/test_services.py`: change
   `custom_components.hostaway.services._resolve_entry_data` to
   `custom_components.hostaway.services.helpers._resolve_entry_data` and update
   logger name assertions from `custom_components.hostaway.services` to
   `custom_components.hostaway.services.reservation_handlers` (or appropriate
   sub-module)
-- [ ] T016 [US3] Verify the old monolithic
+- [x] T016 [US3] Verify the old monolithic
   `custom_components/hostaway/services.py` file has been removed and no
   compatibility module remains alongside the `services/` package
-- [ ] T017 [US3] Run service test suite (`uv run pytest tests/test_services.py
+- [x] T017 [US3] Run service test suite (`uv run pytest tests/test_services.py
   -v`) and confirm all 66 tests pass with zero failures
 
 **Checkpoint**: Behavioral equivalence proven — all tests pass, services.yaml
@@ -193,24 +193,24 @@ the `ai-slop/hallucinated-import` token, and has a module-level docstring.
 
 ### Implementation for User Story 4
 
-- [ ] T018 [P] [US4] Verify and finalize SPDX header (`#
+- [x] T018 [P] [US4] Verify and finalize SPDX header (`#
   SPDX-FileCopyrightText: 2026 Andrew Grimberg` / `# SPDX-License-Identifier:
   Apache-2.0`), aislop comment (`# aislop-ignore-file
   ai-slop/hallucinated-import -- HA runtime provides these packages`), and
   module docstring in `custom_components/hostaway/services/__init__.py`
-- [ ] T019 [P] [US4] Verify and finalize SPDX header, aislop comment using the
+- [x] T019 [P] [US4] Verify and finalize SPDX header, aislop comment using the
   `ai-slop/hallucinated-import` token, and module docstring in
   `custom_components/hostaway/services/schemas.py`
-- [ ] T020 [P] [US4] Verify and finalize SPDX header, aislop comment using the
+- [x] T020 [P] [US4] Verify and finalize SPDX header, aislop comment using the
   `ai-slop/hallucinated-import` token, and module docstring in
   `custom_components/hostaway/services/helpers.py`
-- [ ] T021 [P] [US4] Verify and finalize SPDX header, aislop comment using the
+- [x] T021 [P] [US4] Verify and finalize SPDX header, aislop comment using the
   `ai-slop/hallucinated-import` token, and module docstring in
   `custom_components/hostaway/services/reservation_handlers.py`
-- [ ] T022 [P] [US4] Verify and finalize SPDX header, aislop comment using the
+- [x] T022 [P] [US4] Verify and finalize SPDX header, aislop comment using the
   `ai-slop/hallucinated-import` token, and module docstring in
   `custom_components/hostaway/services/task_handlers.py`
-- [ ] T023 [P] [US4] Verify and finalize SPDX header, aislop comment using the
+- [x] T023 [P] [US4] Verify and finalize SPDX header, aislop comment using the
   `ai-slop/hallucinated-import` token, and module docstring in
   `custom_components/hostaway/services/lookup_handlers.py`
 
@@ -222,19 +222,19 @@ the `ai-slop/hallucinated-import` token, and has a module-level docstring.
 
 **Purpose**: Final validation, file size checks, and pre-commit compliance
 
-- [ ] T024 Validate file size targets: `__init__.py` < 80, `schemas.py` < 200,
+- [x] T024 Validate file size targets: `__init__.py` < 80, `schemas.py` < 200,
   `helpers.py` < 200, `reservation_handlers.py` < 400, `task_handlers.py` <
   400, `lookup_handlers.py` < 150 lines (run `wc -l
   custom_components/hostaway/services/*.py`)
-- [ ] T025 Verify `async_setup_services()` is ≤ 30 lines in
+- [x] T025 Verify `async_setup_services()` is ≤ 30 lines in
   `custom_components/hostaway/services/__init__.py`
-- [ ] T026 Verify `services.yaml` is unchanged (no modifications to
+- [x] T026 Verify `services.yaml` is unchanged (no modifications to
   `custom_components/hostaway/services.yaml`)
-- [ ] T027 Run full project test suite (`uv run pytest`) to confirm all 317
+- [x] T027 Run full project test suite (`uv run pytest`) to confirm all 317
   tests pass
-- [ ] T028 Run pre-commit hooks (`pre-commit run --all-files`) and resolve any
+- [x] T028 Run pre-commit hooks (`pre-commit run --all-files`) and resolve any
   lint/type/format issues
-- [ ] T029 Run type checking (`uv run mypy
+- [x] T029 Run type checking (`uv run mypy
   custom_components/hostaway/services/`) and confirm zero errors
 
 ---
