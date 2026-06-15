@@ -131,7 +131,8 @@ repos:
     hooks:
       - id: aislop
         name: aislop ci
-        entry: aislop ci --staged
+        entry: aislop
+        args: [ci, --staged]
         language: node
         additional_dependencies:
           - aislop@0.12.0
