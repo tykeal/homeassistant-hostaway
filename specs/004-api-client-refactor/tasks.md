@@ -31,9 +31,9 @@ implementation and verification of each story.
 
 **Purpose**: Verify baseline and prepare the branch for refactoring
 
-- [ ] T001 Verify all 317 tests pass on current branch with
+- [x] T001 Verify all 317 tests pass on current branch with
       `uv run pytest --tb=short -q`
-- [ ] T002 Record baseline line counts:
+- [x] T002 Record baseline line counts:
       `wc -l custom_components/hostaway/api/client.py` (expect 891)
 
 ---
@@ -46,46 +46,46 @@ on
 **⚠️ CRITICAL**: User Story 1 cannot complete until this module exists and
 imports work correctly
 
-- [ ] T003 Create `custom_components/hostaway/api/redaction.py` with SPDX header
+- [x] T003 Create `custom_components/hostaway/api/redaction.py` with SPDX header
       <!-- REUSE-IgnoreStart -->
       (`# SPDX-FileCopyrightText: 2026 Andrew Grimberg <tykeal@bardicgrove.org>`
       and `# SPDX-License-Identifier: Apache-2.0`), module docstring, and
       <!-- REUSE-IgnoreEnd -->
       `# aislop-ignore-file ai-slop/hallucinated-import` directive
-- [ ] T004 Add imports to `custom_components/hostaway/api/redaction.py`: `json`,
+- [x] T004 Add imports to `custom_components/hostaway/api/redaction.py`: `json`,
       `logging`, `re`, `typing.Any`, `httpx`
-- [ ] T005 Extract constants `_MAX_RESPONSE_BODY_LOG`, `_REDACTED`,
+- [x] T005 Extract constants `_MAX_RESPONSE_BODY_LOG`, `_REDACTED`,
       `_SENSITIVE_KEY_TOKENS`, `_CONTROL_CHAR_RE`, `_SENSITIVE_KEY_PATTERN`,
       `_TEXT_REDACT_RE`, `_BEARER_RE` from
       `custom_components/hostaway/api/client.py` into
       `custom_components/hostaway/api/redaction.py`
-- [ ] T006 Extract function `_is_sensitive_key(key: str) -> bool` from
+- [x] T006 Extract function `_is_sensitive_key(key: str) -> bool` from
       `custom_components/hostaway/api/client.py` into
       `custom_components/hostaway/api/redaction.py`
-- [ ] T007 Extract function `_redact_sensitive(value: Any) -> Any` from
+- [x] T007 Extract function `_redact_sensitive(value: Any) -> Any` from
       `custom_components/hostaway/api/client.py` into
       `custom_components/hostaway/api/redaction.py`
-- [ ] T008 Extract function `_redact_plain_text(text: str) -> str` from
+- [x] T008 Extract function `_redact_plain_text(text: str) -> str` from
       `custom_components/hostaway/api/client.py` into
       `custom_components/hostaway/api/redaction.py`
-- [ ] T009 Extract function `_sanitize_for_log(text: str) -> str` from
+- [x] T009 Extract function `_sanitize_for_log(text: str) -> str` from
       `custom_components/hostaway/api/client.py` into
       `custom_components/hostaway/api/redaction.py`
-- [ ] T010 Extract function
+- [x] T010 Extract function
       `_safe_response_body(response: httpx.Response, max_len: int = 500) -> str`
       from `custom_components/hostaway/api/client.py` into
       `custom_components/hostaway/api/redaction.py`
-- [ ] T011 Extract `_AUTH_403_PHRASES` tuple and
+- [x] T011 Extract `_AUTH_403_PHRASES` tuple and
       `_is_auth_403_body(body: str) -> bool` function from
       `custom_components/hostaway/api/client.py` into
       `custom_components/hostaway/api/redaction.py`
-- [ ] T012 Update `custom_components/hostaway/api/client.py` to import
+- [x] T012 Update `custom_components/hostaway/api/client.py` to import
       `_is_auth_403_body` and `_safe_response_body` from
       `custom_components.hostaway.api.redaction`
-- [ ] T013 Remove extracted constants, functions, and unused imports
+- [x] T013 Remove extracted constants, functions, and unused imports
       (`import json`, `import re`) from
       `custom_components/hostaway/api/client.py`
-- [ ] T014 Run full test suite (`uv run pytest --tb=short -q`) and confirm all
+- [x] T014 Run full test suite (`uv run pytest --tb=short -q`) and confirm all
       317 tests pass after redaction extraction
 
 **Checkpoint**: Foundation ready — `redaction.py` exists with all extracted
@@ -106,29 +106,29 @@ lines, and all 317 tests pass
 
 ### Implementation for User Story 1
 
-- [ ] T015 [US1] Identify repetitive response-parsing patterns across domain
+- [x] T015 [US1] Identify repetitive response-parsing patterns across domain
       methods (`create_task`, `update_task`, `update_reservation`) in
       `custom_components/hostaway/api/client.py` and extract a shared
       `_mutate()` private helper method
-- [ ] T016 [US1] Identify repetitive pagination patterns across domain methods
+- [x] T016 [US1] Identify repetitive pagination patterns across domain methods
       (`get_all_listings`, `get_all_reservations`, `get_tasks`) in
       `custom_components/hostaway/api/client.py` and consolidate into concise
       inline patterns or shared helpers
-- [ ] T017 [US1] Shorten domain method docstrings in
+- [x] T017 [US1] Shorten domain method docstrings in
       `custom_components/hostaway/api/client.py` to minimum that satisfies
       interrogate (purpose line + Args/Returns/Raises without verbose prose)
-- [ ] T018 [US1] Verify `custom_components/hostaway/api/client.py` is under 400
+- [x] T018 [US1] Verify `custom_components/hostaway/api/client.py` is under 400
       lines with `wc -l`
-- [ ] T019 [US1] Verify `custom_components/hostaway/api/redaction.py` is under
+- [x] T019 [US1] Verify `custom_components/hostaway/api/redaction.py` is under
       400 lines with `wc -l`
-- [ ] T020 [US1] Run full test suite (`uv run pytest --tb=short -q`) and confirm
+- [x] T020 [US1] Run full test suite (`uv run pytest --tb=short -q`) and confirm
       all 317 tests pass after domain consolidation
-- [ ] T021 [US1] Run linting
+- [x] T021 [US1] Run linting
       (`uv run ruff check custom_components/hostaway/api/`) and confirm zero
       violations
-- [ ] T022 [US1] Run type checking
+- [x] T022 [US1] Run type checking
       (`uv run mypy custom_components/hostaway/api/`) and confirm zero errors
-- [ ] T023 [US1] Run docstring coverage
+- [x] T023 [US1] Run docstring coverage
       (`uv run interrogate -v custom_components/hostaway/api/`) and confirm 100%
       coverage
 
@@ -147,31 +147,31 @@ tests pass with identical behavior
 
 ### Implementation for User Story 2
 
-- [ ] T024 [US2] Extract
+- [x] T024 [US2] Extract
       `_handle_403(self, method: str, path: str, *, params, json, response, _retried_auth: bool) -> httpx.Response`
       private method in `custom_components/hostaway/api/client.py` encapsulating
       403 classification, logging, token invalidation, and auth-retry logic
-- [ ] T025 [US2] Extract
+- [x] T025 [US2] Extract
       `_handle_429(self, response: httpx.Response, attempt: int, backoff: float) -> float`
       private method in `custom_components/hostaway/api/client.py` encapsulating
       rate-limit delay calculation, warning log, and sleep
-- [ ] T026 [US2] Extract
+- [x] T026 [US2] Extract
       `_handle_server_error(self, response: httpx.Response, attempt: int, backoff: float) -> float`
       private method in `custom_components/hostaway/api/client.py` encapsulating
       5xx retry delay, warning log, and sleep
-- [ ] T027 [US2] Refactor `_request()` in
+- [x] T027 [US2] Refactor `_request()` in
       `custom_components/hostaway/api/client.py` to dispatch to `_handle_403()`,
       `_handle_429()`, and `_handle_server_error()` instead of inline logic
-- [ ] T028 [US2] Verify `_request()` method is under 80 lines using
+- [x] T028 [US2] Verify `_request()` method is under 80 lines using
       a short Python snippet that counts from `async def _request` to the next
       top-level method definition without matching the `_request()` signature as
       both the start and end of the range
-- [ ] T029 [US2] Run full test suite (`uv run pytest --tb=short -q`) and confirm
+- [x] T029 [US2] Run full test suite (`uv run pytest --tb=short -q`) and confirm
       all 317 tests pass after `_request()` decomposition
-- [ ] T030 [US2] Run linting
+- [x] T030 [US2] Run linting
       (`uv run ruff check custom_components/hostaway/api/`) and confirm zero
       violations
-- [ ] T031 [US2] Run type checking
+- [x] T031 [US2] Run type checking
       (`uv run mypy custom_components/hostaway/api/`) and confirm zero errors
 
 **Checkpoint**: `_request()` is under 80 lines, handler methods work correctly,
@@ -189,14 +189,14 @@ refactored modules
 
 ### Implementation for User Story 3
 
-- [ ] T032 [US3] Verify no `complexity/file-too-large` violation for
+- [x] T032 [US3] Verify no `complexity/file-too-large` violation for
       `custom_components/hostaway/api/client.py` (under 400 lines confirmed)
-- [ ] T033 [US3] Verify no `complexity/function-too-long` violation for any
+- [x] T033 [US3] Verify no `complexity/function-too-long` violation for any
       function in `custom_components/hostaway/api/client.py` (all methods under
       80 lines)
-- [ ] T034 [US3] Verify no `complexity/file-too-large` violation for
+- [x] T034 [US3] Verify no `complexity/file-too-large` violation for
       `custom_components/hostaway/api/redaction.py` (under 400 lines confirmed)
-- [ ] T035 [US3] Run pre-commit hooks on both files:
+- [x] T035 [US3] Run pre-commit hooks on both files:
       `pre-commit run --files custom_components/hostaway/api/client.py custom_components/hostaway/api/redaction.py`
 
 **Checkpoint**: All automated quality gates pass — User Story 3 complete
@@ -207,18 +207,18 @@ refactored modules
 
 **Purpose**: Final validation, commit hygiene, and documentation
 
-- [ ] T036 [P] Verify `custom_components/hostaway/api/__init__.py` exports are
+- [x] T036 [P] Verify `custom_components/hostaway/api/__init__.py` exports are
       unchanged (no public API surface changes)
-- [ ] T037 [P] Verify one-way dependency: confirm `redaction.py` does NOT import
+- [x] T037 [P] Verify one-way dependency: confirm `redaction.py` does NOT import
       from `client.py` or any other `custom_components.hostaway.api.*` module
-- [ ] T038 Run full pre-commit suite on all changed files
-- [ ] T039 Create atomic commit 1: Extract redaction module (T003–T014) with
+- [x] T038 Run full pre-commit suite on all changed files
+- [x] T039 Create atomic commit 1: Extract redaction module (T003–T014) with
       conventional commit message and sign-off
-- [ ] T040 Create atomic commit 2: Decompose `_request()` into handler methods
+- [x] T040 Create atomic commit 2: Decompose `_request()` into handler methods
       (T024–T031) with conventional commit message and sign-off
-- [ ] T041 Create atomic commit 3: Consolidate domain method patterns
+- [x] T041 Create atomic commit 3: Consolidate domain method patterns
       (T015–T023) with conventional commit message and sign-off
-- [ ] T042 Run quickstart.md validation commands end-to-end to confirm all
+- [x] T042 Run quickstart.md validation commands end-to-end to confirm all
       verification steps pass
 
 ---
