@@ -93,8 +93,9 @@ modification and confirming they pass.
 ### User Story 4 - Code Standards Compliance (Priority: P2)
 
 As a project maintainer, I want all new files to include proper SPDX license
-headers, aislop ignore comments, and module docstrings so that the codebase
-remains compliant with licensing and linting standards.
+headers, aislop ignore comments using the `ai-slop/hallucinated-import` token,
+and module docstrings so that the codebase remains compliant with licensing and
+linting standards.
 
 **Why this priority**: Important for ongoing compliance but does not affect
 functionality. Can be verified independently of behavior.
@@ -108,8 +109,8 @@ of required headers and docstrings.
    are inspected, **Then** it contains an SPDX header specifying Apache-2.0 and
    2026 Andrew Grimberg.
 2. **Given** any file in the new `services/` package, **When** its contents are
-   searched, **Then** it contains the aislop-ignore-file comment for
-   hallucinated-import.
+   searched, **Then** it contains an aislop ignore comment using the
+   `ai-slop/hallucinated-import` token.
 3. **Given** any file in the new `services/` package, **When** its module-level
    docstring is inspected, **Then** it contains a meaningful description of the
    module's purpose.
@@ -161,7 +162,8 @@ of required headers and docstrings.
 - **FR-013**: The old `services.py` file MUST be removed once the package is in
   place.
 - **FR-014**: Each new file MUST include an SPDX license header (Apache-2.0,
-  2026 Andrew Grimberg), an aislop-ignore-file comment, and a module docstring.
+  2026 Andrew Grimberg), an aislop ignore comment using the
+  `ai-slop/hallucinated-import` token, and a module docstring.
 - **FR-015**: File size targets MUST be met: `__init__.py` < 80 lines,
   `schemas.py` < 200 lines, `helpers.py` < 200 lines, `reservation_handlers.py`
   < 400 lines, `task_handlers.py` < 400 lines, `lookup_handlers.py` < 150
@@ -193,8 +195,8 @@ of required headers and docstrings.
 - **SC-005**: Adding a new service requires modifying only 2 locations: adding
   the handler function in the appropriate sub-module, and adding a single entry
   to the service registration table.
-- **SC-006**: All new files contain the required SPDX header, aislop comment,
-  and module docstring.
+- **SC-006**: All new files contain the required SPDX header, aislop comment
+  using the `ai-slop/hallucinated-import` token, and module docstring.
 - **SC-007**: The integration loads and registers all services identically to
   pre-refactor behavior when tested in a Home Assistant environment.
 

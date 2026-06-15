@@ -35,7 +35,7 @@ suite must pass without behavioral changes.
 | I. Code Quality & Testing | ✅ PASS | Refactor only — existing tests validate equivalence. TDD cycle: existing tests serve as the "red" suite for the new structure. |
 | II. API Client Design | ✅ N/A | No changes to API client layer. |
 | III. Atomic Commit Discipline | ✅ PLAN | Implementation will use atomic commits per module extraction. |
-| IV. Licensing & Attribution | ✅ PLAN | Every new file gets SPDX header + aislop comment (FR-014). |
+| IV. Licensing & Attribution | ✅ PLAN | Every new file gets SPDX header + aislop comment using `ai-slop/hallucinated-import` (FR-014). |
 | V. Pre-Commit Integrity | ✅ PLAN | All hooks must pass; ruff, mypy, interrogate, reuse-tool. |
 | VI. Agent Co-Authorship & DCO | ✅ PLAN | Commits include Co-authored-by and DCO sign-off. |
 | VII. User Experience Consistency | ✅ N/A | No user-facing changes (transparent refactor). |

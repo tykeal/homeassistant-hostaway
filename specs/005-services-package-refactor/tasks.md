@@ -35,7 +35,8 @@ implementation and testing of each story.
 - [ ] T001 Create services package directory at
   `custom_components/hostaway/services/`
 - [ ] T002 Create empty `custom_components/hostaway/services/__init__.py` with
-  SPDX header, aislop comment, and module docstring placeholder
+  SPDX header, aislop comment using `ai-slop/hallucinated-import`, and module
+  docstring placeholder
 
 ---
 
@@ -169,7 +170,7 @@ tests pass with zero failures.
 - [ ] T016 [US3] Delete the old monolithic
   `custom_components/hostaway/services.py` file (the package directory
   `services/` now replaces it)
-- [ ] T017 [US3] Run full test suite (`uv run pytest tests/test_services.py
+- [ ] T017 [US3] Run service test suite (`uv run pytest tests/test_services.py
   -v`) and confirm all 66 tests pass with zero failures
 
 **Checkpoint**: Behavioral equivalence proven — all tests pass, services.yaml
@@ -179,30 +180,36 @@ unchanged, integration loads identically
 
 ## Phase 6: User Story 4 - Code Standards Compliance (Priority: P2)
 
-**Goal**: All new files contain proper SPDX license headers, aislop-ignore-file
-comments, and meaningful module docstrings.
+**Goal**: All new files contain proper SPDX license headers, aislop ignore
+comments using the `ai-slop/hallucinated-import` token, and meaningful module
+docstrings.
 
 **Independent Test**: Each file in `custom_components/hostaway/services/`
-starts with the required SPDX header, contains `aislop-ignore-file:
-hallucinated-import`, and has a module-level docstring.
+starts with the required SPDX header, contains an aislop ignore comment using
+the `ai-slop/hallucinated-import` token, and has a module-level docstring.
 
 ### Implementation for User Story 4
 
 - [ ] T018 [P] [US4] Verify and finalize SPDX header (`#
   SPDX-FileCopyrightText: 2026 Andrew Grimberg` / `# SPDX-License-Identifier:
-  Apache-2.0`), aislop comment (`# aislop-ignore-file: hallucinated-import`),
-  and module docstring in `custom_components/hostaway/services/__init__.py`
-- [ ] T019 [P] [US4] Verify and finalize SPDX header, aislop comment, and
-  module docstring in `custom_components/hostaway/services/schemas.py`
-- [ ] T020 [P] [US4] Verify and finalize SPDX header, aislop comment, and
-  module docstring in `custom_components/hostaway/services/helpers.py`
-- [ ] T021 [P] [US4] Verify and finalize SPDX header, aislop comment, and
-  module docstring in
+  Apache-2.0`), aislop comment (`# aislop-ignore-file
+  ai-slop/hallucinated-import -- HA runtime provides these packages`), and
+  module docstring in `custom_components/hostaway/services/__init__.py`
+- [ ] T019 [P] [US4] Verify and finalize SPDX header, aislop comment using the
+  `ai-slop/hallucinated-import` token, and module docstring in
+  `custom_components/hostaway/services/schemas.py`
+- [ ] T020 [P] [US4] Verify and finalize SPDX header, aislop comment using the
+  `ai-slop/hallucinated-import` token, and module docstring in
+  `custom_components/hostaway/services/helpers.py`
+- [ ] T021 [P] [US4] Verify and finalize SPDX header, aislop comment using the
+  `ai-slop/hallucinated-import` token, and module docstring in
   `custom_components/hostaway/services/reservation_handlers.py`
-- [ ] T022 [P] [US4] Verify and finalize SPDX header, aislop comment, and
-  module docstring in `custom_components/hostaway/services/task_handlers.py`
-- [ ] T023 [P] [US4] Verify and finalize SPDX header, aislop comment, and
-  module docstring in `custom_components/hostaway/services/lookup_handlers.py`
+- [ ] T022 [P] [US4] Verify and finalize SPDX header, aislop comment using the
+  `ai-slop/hallucinated-import` token, and module docstring in
+  `custom_components/hostaway/services/task_handlers.py`
+- [ ] T023 [P] [US4] Verify and finalize SPDX header, aislop comment using the
+  `ai-slop/hallucinated-import` token, and module docstring in
+  `custom_components/hostaway/services/lookup_handlers.py`
 
 **Checkpoint**: All files comply with licensing and linting standards
 
