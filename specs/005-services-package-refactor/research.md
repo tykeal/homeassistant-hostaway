@@ -166,13 +166,14 @@ async_unregister_services(hass)
 | Target File | Content | Est. Lines | Limit |
 |-------------|---------|-----------|-------|
 | `__init__.py` | Imports, `ServiceDefinition`, `SERVICE_DEFINITIONS` list, `async_setup_services`, `async_unregister_services` | ~65 | < 80 |
-| `schemas.py` | 8 schema definitions + 5 validator functions (`_positive_int`, `_non_empty_string`, `_strict_string`, `_positive_int_list`, `_is_user_correctable_task_error`) + constants (`_TASK_STATUS_VALUES`) | ~175 | < 200 |
+| `schemas.py` | 9 schema definitions + 5 validator functions (`_positive_int`, `_non_empty_string`, `_strict_string`, `_positive_int_list`, `_is_user_correctable_task_error`) + constants (`_TASK_STATUS_VALUES`) | ~175 | < 200 |
 | `helpers.py` | `_resolve_entry_data`, `_get_listing_name_index`, `_resolve_listing_id`, `_prune_locked_state`, `_log_locked_reservation`, module-level state (`_LOCKED_*`) | ~165 | < 200 |
 | `reservation_handlers.py` | `async_handle_set_door_code`, `async_handle_get_reservations`, `async_handle_find_reservation`, `_reservation_result` | ~310 | < 400 |
 | `task_handlers.py` | `async_handle_create_task`, `async_handle_update_task`, `async_handle_delete_task`, `async_handle_get_tasks` | ~340 | < 400 |
 | `lookup_handlers.py` | `async_handle_get_users`, `async_handle_get_groups` | ~95 | < 150 |
 
-**Total current**: 1129 lines → Estimated total after split: ~1150 lines (slight increase from file headers and imports in each module).
+**Total current**: ~1130 lines → Estimated total after split: ~1150 lines
+(slight increase from file headers and imports in each module).
 
 ---
 

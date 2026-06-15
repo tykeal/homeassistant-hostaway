@@ -7,7 +7,7 @@
 
 ## Summary
 
-Refactor the monolithic `custom_components/hostaway/services.py` (1129 lines)
+Refactor the monolithic `custom_components/hostaway/services.py` (~1130 lines)
 into a `services/` package with focused sub-modules organized by
 responsibility. The package will use a table-driven registration approach to
 reduce `async_setup_services()` from ~136 lines to under 30 lines. The
@@ -24,7 +24,7 @@ suite must pass without behavioral changes.
 **Project Type**: Home Assistant custom integration (plugin)
 **Performance Goals**: No event loop blocking; zero overhead vs. current implementation
 **Constraints**: File size limits per FR-015; `async_setup_services()` ≤ 30 lines (FR-016)
-**Scale/Scope**: 9 services, 1129 LOC source → 6 files in package, ~66 test methods unchanged
+**Scale/Scope**: 9 services, ~1130 LOC source → 6 files in package, ~66 test methods unchanged
 
 ## Constitution Check
 

@@ -74,8 +74,9 @@ continue working exactly as before.
 **Why this priority**: Any behavioral regression would directly impact end
 users. The refactor must be invisible to consumers of the integration.
 
-**Independent Test**: Can be tested by running all 317 existing tests without
-modification and confirming they pass.
+**Independent Test**: Can be tested by running all 317 existing tests with only
+import or patch path updates to the test files (no logic or assertion changes)
+and confirming they pass.
 
 **Acceptance Scenarios**:
 

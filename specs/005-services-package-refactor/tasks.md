@@ -150,8 +150,8 @@ tests pass with zero failures.
   `tests/test_services.py`: change
   `custom_components.hostaway.services.HostawayApiClient` to
   `custom_components.hostaway.services.reservation_handlers.HostawayApiClient`
-  for reservation-related method patches (update_reservation,
-  get_all_reservations, get_reservation)
+  for reservation-related method patches (`update_reservation` and
+  `get_all_reservations`)
 - [ ] T013 [US3] Update test patch paths for task handler tests in
   `tests/test_services.py`: change
   `custom_components.hostaway.services.HostawayApiClient` to

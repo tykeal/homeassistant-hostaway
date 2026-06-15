@@ -8,7 +8,7 @@
 ## Overview
 
 This refactor converts the monolithic `custom_components/hostaway/services.py`
-(1129 lines) into a `services/` package with focused sub-modules. The change
+(~1130 lines) into a `services/` package with focused sub-modules. The change
 is purely structural — no behavioral changes.
 
 ## Quick Verification
