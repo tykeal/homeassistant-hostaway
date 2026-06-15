@@ -115,9 +115,7 @@ async def async_setup_entry(
     }
 
     # Register services (idempotent, safe for multi-entry)
-    from custom_components.hostaway.services import (
-        async_setup_services,
-    )
+    from custom_components.hostaway.services import async_setup_services
 
     async_setup_services(hass)
 
@@ -151,14 +149,8 @@ async def async_unload_entry(
 
         # Remove services when no entries remain
         if not hass.data.get(DOMAIN):
-            hass.services.async_remove(DOMAIN, "set_door_code")
-            hass.services.async_remove(DOMAIN, "get_reservations")
-            hass.services.async_remove(DOMAIN, "find_reservation")
-            hass.services.async_remove(DOMAIN, "create_task")
-            hass.services.async_remove(DOMAIN, "update_task")
-            hass.services.async_remove(DOMAIN, "delete_task")
-            hass.services.async_remove(DOMAIN, "get_tasks")
-            hass.services.async_remove(DOMAIN, "get_users")
-            hass.services.async_remove(DOMAIN, "get_groups")
+            from custom_components.hostaway.services import async_unregister_services
+
+            async_unregister_services(hass)
 
     return unload_ok
