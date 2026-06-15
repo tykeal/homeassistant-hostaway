@@ -15,7 +15,7 @@ ci:
     Signed-off-by: pre-commit-ci[bot] <pre-commit-ci[bot]@pre-commit.ci>
 
     Changes in this pull request are as follows:
-  skip: [mypy]
+  skip: [mypy, aislop]
 
 exclude: |
   (?x)(
@@ -126,6 +126,18 @@ repos:
     rev: 9fabf9eb815a57aac116b435e8346c200cdb8604  # frozen: v6.2.0
     hooks:
       - id: reuse
+
+  - repo: local
+    hooks:
+      - id: aislop
+        name: aislop ci
+        entry: aislop
+        args: [ci, --staged]
+        language: node
+        additional_dependencies:
+          - aislop@0.12.0
+        pass_filenames: false
+        require_serial: true
 
   # - repo: local
   #   hooks:
