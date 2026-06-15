@@ -497,7 +497,6 @@ async def async_setup_entry(
     entities: list[SensorEntity] = []
     known_listing_ids: set[int] = set()
 
-    # Create listing sensors and reservation status sensors
     if listings_coordinator.data:
         for listing_id in listings_coordinator.data:
             known_listing_ids.add(listing_id)
