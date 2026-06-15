@@ -176,7 +176,7 @@ class TestSetDoorCode:
     """Tests for the hostaway.set_door_code service."""
 
     @patch(
-        "custom_components.hostaway.services.HostawayApiClient.update_reservation",
+        "custom_components.hostaway.services.reservation_handlers.HostawayApiClient.update_reservation",
         new_callable=AsyncMock,
         return_value={"id": 99001, "doorCode": "1234"},
     )
@@ -202,7 +202,7 @@ class TestSetDoorCode:
         )
 
     @patch(
-        "custom_components.hostaway.services.HostawayApiClient.update_reservation",
+        "custom_components.hostaway.services.reservation_handlers.HostawayApiClient.update_reservation",
         new_callable=AsyncMock,
         return_value={"id": 99001, "doorCode": "5678"},
     )
@@ -237,7 +237,7 @@ class TestSetDoorCode:
         )
 
     @patch(
-        "custom_components.hostaway.services.HostawayApiClient.update_reservation",
+        "custom_components.hostaway.services.reservation_handlers.HostawayApiClient.update_reservation",
         new_callable=AsyncMock,
         return_value={"id": 99001, "doorCode": "1234"},
     )
@@ -318,7 +318,7 @@ class TestSetDoorCode:
             )
 
     @patch(
-        "custom_components.hostaway.services.HostawayApiClient.update_reservation",
+        "custom_components.hostaway.services.reservation_handlers.HostawayApiClient.update_reservation",
         new_callable=AsyncMock,
         side_effect=HostawayResponseError("Resource not found: /v1/reservations/99999"),
     )
@@ -340,7 +340,7 @@ class TestSetDoorCode:
             )
 
     @patch(
-        "custom_components.hostaway.services.HostawayApiClient.update_reservation",
+        "custom_components.hostaway.services.reservation_handlers.HostawayApiClient.update_reservation",
         new_callable=AsyncMock,
         side_effect=HostawayRateLimitError("Rate limit exceeded", retry_after=60.0),
     )
@@ -461,14 +461,14 @@ class TestLockedReservationHandling:
     @pytest.fixture(autouse=True)
     def _clear_locked_state(self) -> Iterator[None]:
         """Reset module-level rate-limit state between tests."""
-        from custom_components.hostaway import services as services_mod
+        from custom_components.hostaway.services import helpers as helpers_mod
 
-        services_mod._LOCKED_RESERVATION_LOG_STATE.clear()
+        helpers_mod._LOCKED_RESERVATION_LOG_STATE.clear()
         yield
-        services_mod._LOCKED_RESERVATION_LOG_STATE.clear()
+        helpers_mod._LOCKED_RESERVATION_LOG_STATE.clear()
 
     @patch(
-        "custom_components.hostaway.services.HostawayApiClient.update_reservation",
+        "custom_components.hostaway.services.reservation_handlers.HostawayApiClient.update_reservation",
         new_callable=AsyncMock,
         side_effect=HostawayReservationLockedError(
             "Reservation locked: PUT /v1/reservations/59426054 "
@@ -485,7 +485,9 @@ class TestLockedReservationHandling:
         entry = _make_entry()
         await _setup_entry(hass, entry)
 
-        with caplog.at_level("DEBUG", logger="custom_components.hostaway.services"):
+        with caplog.at_level(
+            "DEBUG", logger="custom_components.hostaway.services.reservation_handlers"
+        ):
             await hass.services.async_call(
                 DOMAIN,
                 "set_door_code",
@@ -505,7 +507,7 @@ class TestLockedReservationHandling:
         )
 
     @patch(
-        "custom_components.hostaway.services.HostawayApiClient.update_reservation",
+        "custom_components.hostaway.services.reservation_handlers.HostawayApiClient.update_reservation",
         new_callable=AsyncMock,
         side_effect=HostawayReservationLockedError(
             "Reservation locked: PUT /v1/reservations/59426054 returned 403"
@@ -521,7 +523,9 @@ class TestLockedReservationHandling:
         entry = _make_entry()
         await _setup_entry(hass, entry)
 
-        with caplog.at_level("DEBUG", logger="custom_components.hostaway.services"):
+        with caplog.at_level(
+            "DEBUG", logger="custom_components.hostaway.services.reservation_handlers"
+        ):
             await hass.services.async_call(
                 DOMAIN,
                 "set_door_code",
@@ -559,7 +563,7 @@ class TestLockedReservationHandling:
         assert debugs, "Expected DEBUG rate-limited message on repeat"
 
     @patch(
-        "custom_components.hostaway.services.HostawayApiClient.update_reservation",
+        "custom_components.hostaway.services.reservation_handlers.HostawayApiClient.update_reservation",
         new_callable=AsyncMock,
         side_effect=HostawayReservationLockedError(
             "Reservation locked: PUT /v1/reservations/X returned 403"
@@ -575,7 +579,9 @@ class TestLockedReservationHandling:
         entry = _make_entry()
         await _setup_entry(hass, entry)
 
-        with caplog.at_level("WARNING", logger="custom_components.hostaway.services"):
+        with caplog.at_level(
+            "WARNING", logger="custom_components.hostaway.services.reservation_handlers"
+        ):
             await hass.services.async_call(
                 DOMAIN,
                 "set_door_code",
@@ -594,7 +600,7 @@ class TestLockedReservationHandling:
         assert any("222" in m for m in warnings)
 
     @patch(
-        "custom_components.hostaway.services.HostawayApiClient.update_reservation",
+        "custom_components.hostaway.services.reservation_handlers.HostawayApiClient.update_reservation",
         new_callable=AsyncMock,
         side_effect=HostawayReservationLockedError(
             "Reservation locked: PUT /v1/reservations/333 returned 403"
@@ -608,7 +614,7 @@ class TestLockedReservationHandling:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """After cooldown expires a new WARNING is emitted for same id."""
-        from custom_components.hostaway import services as services_mod
+        from custom_components.hostaway.services import helpers as helpers_mod
 
         entry = _make_entry()
         await _setup_entry(hass, entry)
@@ -619,9 +625,11 @@ class TestLockedReservationHandling:
             """Return the controllable monotonic clock value."""
             return fake_now[0]
 
-        monkeypatch.setattr(services_mod.time, "monotonic", fake_monotonic)
+        monkeypatch.setattr(helpers_mod.time, "monotonic", fake_monotonic)
 
-        with caplog.at_level("WARNING", logger="custom_components.hostaway.services"):
+        with caplog.at_level(
+            "WARNING", logger="custom_components.hostaway.services.reservation_handlers"
+        ):
             await hass.services.async_call(
                 DOMAIN,
                 "set_door_code",
@@ -636,7 +644,7 @@ class TestLockedReservationHandling:
             assert len(first_warnings) == 1
 
             caplog.clear()
-            fake_now[0] += services_mod._LOCKED_LOG_COOLDOWN_SECONDS + 1
+            fake_now[0] += helpers_mod._LOCKED_LOG_COOLDOWN_SECONDS + 1
 
             await hass.services.async_call(
                 DOMAIN,
@@ -709,7 +717,7 @@ class TestGetReservations:
         assert res["door_code"] == "1234"
 
     @patch(
-        "custom_components.hostaway.services.HostawayApiClient.get_all_reservations",
+        "custom_components.hostaway.services.reservation_handlers.HostawayApiClient.get_all_reservations",
         new_callable=AsyncMock,
     )
     async def test_listing_name_from_coordinator_cache(
@@ -759,7 +767,7 @@ class TestGetReservations:
             )
 
     @patch(
-        "custom_components.hostaway.services.HostawayApiClient.get_all_reservations",
+        "custom_components.hostaway.services.reservation_handlers.HostawayApiClient.get_all_reservations",
         new_callable=AsyncMock,
         return_value=[],
     )
@@ -790,7 +798,7 @@ class TestGetReservations:
         assert events[0]["reservations"] == []
 
     @patch(
-        "custom_components.hostaway.services.HostawayApiClient.get_all_reservations",
+        "custom_components.hostaway.services.reservation_handlers.HostawayApiClient.get_all_reservations",
         new_callable=AsyncMock,
         return_value=[],
     )
@@ -820,7 +828,7 @@ class TestGetReservations:
         assert events[0]["listing_name"] == "Unknown"
 
     @patch(
-        "custom_components.hostaway.services.HostawayApiClient.get_all_reservations",
+        "custom_components.hostaway.services.reservation_handlers.HostawayApiClient.get_all_reservations",
         new_callable=AsyncMock,
         side_effect=HostawayResponseError("Server error"),
     )
@@ -842,7 +850,7 @@ class TestGetReservations:
             )
 
     @patch(
-        "custom_components.hostaway.services.HostawayApiClient.get_all_reservations",
+        "custom_components.hostaway.services.reservation_handlers.HostawayApiClient.get_all_reservations",
         new_callable=AsyncMock,
         side_effect=HostawayResponseError("Resource not found: /v1/reservations"),
     )
@@ -1010,7 +1018,7 @@ class TestGetReservations:
         assert reservations[0]["guest_name"] == "Jane Doe"  # type: ignore[call-overload, index]
 
     @patch(
-        "custom_components.hostaway.services.HostawayApiClient.get_all_reservations",
+        "custom_components.hostaway.services.reservation_handlers.HostawayApiClient.get_all_reservations",
         new_callable=AsyncMock,
     )
     async def test_force_refresh_hits_api(
@@ -1144,7 +1152,7 @@ class TestFindReservation:
         assert result["reservation"] is None  # type: ignore[index]
 
     @patch(
-        "custom_components.hostaway.services.HostawayApiClient.get_all_reservations",
+        "custom_components.hostaway.services.reservation_handlers.HostawayApiClient.get_all_reservations",
         new_callable=AsyncMock,
     )
     async def test_falls_back_to_api(
@@ -1318,7 +1326,7 @@ class TestCreateTask:
     """Tests for the hostaway.create_task service."""
 
     @patch(
-        "custom_components.hostaway.services.HostawayApiClient.create_task",
+        "custom_components.hostaway.services.task_handlers.HostawayApiClient.create_task",
         new_callable=AsyncMock,
         return_value={"id": 100, "title": "Test Task", "status": "pending"},
     )
@@ -1343,7 +1351,7 @@ class TestCreateTask:
         assert result["id"] == 100  # type: ignore[index]
 
     @patch(
-        "custom_components.hostaway.services.HostawayApiClient.create_task",
+        "custom_components.hostaway.services.task_handlers.HostawayApiClient.create_task",
         new_callable=AsyncMock,
         return_value={
             "id": 101,
@@ -1401,7 +1409,7 @@ class TestCreateTask:
         assert result["id"] == 101  # type: ignore[index]
 
     @patch(
-        "custom_components.hostaway.services.HostawayApiClient.create_task",
+        "custom_components.hostaway.services.task_handlers.HostawayApiClient.create_task",
         new_callable=AsyncMock,
         return_value={"id": 102, "title": "Task", "listingMapId": 12345},
     )
@@ -1411,7 +1419,7 @@ class TestCreateTask:
         hass: HomeAssistant,
     ) -> None:
         """Listing name resolves to listing ID via coordinator."""
-        from custom_components.hostaway import services as services_mod
+        from custom_components.hostaway.services import helpers as helpers_mod
 
         entry = _make_entry()
         await _setup_entry(hass, entry)
@@ -1427,8 +1435,8 @@ class TestCreateTask:
         }
 
         with patch(
-            "custom_components.hostaway.services._resolve_entry_data",
-            wraps=services_mod._resolve_entry_data,
+            "custom_components.hostaway.services.helpers._resolve_entry_data",
+            wraps=helpers_mod._resolve_entry_data,
         ) as mock_resolve:
             result = await hass.services.async_call(
                 DOMAIN,
@@ -1482,7 +1490,7 @@ class TestCreateTask:
             )
 
     @patch(
-        "custom_components.hostaway.services.HostawayApiClient.create_task",
+        "custom_components.hostaway.services.task_handlers.HostawayApiClient.create_task",
         new_callable=AsyncMock,
         side_effect=HostawayResponseError("validation error: title is required"),
     )
@@ -1505,7 +1513,7 @@ class TestCreateTask:
             )
 
     @patch(
-        "custom_components.hostaway.services.HostawayApiClient.create_task",
+        "custom_components.hostaway.services.task_handlers.HostawayApiClient.create_task",
         new_callable=AsyncMock,
         side_effect=HostawayResponseError("Resource not found: /v1/tasks"),
     )
@@ -1547,7 +1555,7 @@ class TestCreateTask:
             )
 
     @patch(
-        "custom_components.hostaway.services.HostawayApiClient.create_task",
+        "custom_components.hostaway.services.task_handlers.HostawayApiClient.create_task",
         new_callable=AsyncMock,
         return_value={"id": 103, "title": "Auto Task"},
     )
@@ -1575,7 +1583,7 @@ class TestUpdateTask:
     """Tests for the hostaway.update_task service."""
 
     @patch(
-        "custom_components.hostaway.services.HostawayApiClient.update_task",
+        "custom_components.hostaway.services.task_handlers.HostawayApiClient.update_task",
         new_callable=AsyncMock,
         return_value={"id": 42, "status": "completed"},
     )
@@ -1600,7 +1608,7 @@ class TestUpdateTask:
         assert result["status"] == "completed"  # type: ignore[index]
 
     @patch(
-        "custom_components.hostaway.services.HostawayApiClient.update_task",
+        "custom_components.hostaway.services.task_handlers.HostawayApiClient.update_task",
         new_callable=AsyncMock,
         return_value={
             "id": 42,
@@ -1638,7 +1646,7 @@ class TestUpdateTask:
         assert result["title"] == "New Title"  # type: ignore[index]
 
     @patch(
-        "custom_components.hostaway.services.HostawayApiClient.update_task",
+        "custom_components.hostaway.services.task_handlers.HostawayApiClient.update_task",
         new_callable=AsyncMock,
         return_value={
             "id": 42,
@@ -1680,7 +1688,7 @@ class TestUpdateTask:
         assert result["canBePickedByGroupId"] == 5  # type: ignore[index]
 
     @patch(
-        "custom_components.hostaway.services.HostawayApiClient.update_task",
+        "custom_components.hostaway.services.task_handlers.HostawayApiClient.update_task",
         new_callable=AsyncMock,
         side_effect=HostawayResponseError("not found"),
     )
@@ -1703,7 +1711,7 @@ class TestUpdateTask:
             )
 
     @patch(
-        "custom_components.hostaway.services.HostawayApiClient.update_task",
+        "custom_components.hostaway.services.task_handlers.HostawayApiClient.update_task",
         new_callable=AsyncMock,
         return_value={"id": 42, "listingMapId": 12345},
     )
@@ -1713,7 +1721,7 @@ class TestUpdateTask:
         hass: HomeAssistant,
     ) -> None:
         """Listing name resolves to ID in update."""
-        from custom_components.hostaway import services as services_mod
+        from custom_components.hostaway.services import helpers as helpers_mod
 
         entry = _make_entry()
         await _setup_entry(hass, entry)
@@ -1728,8 +1736,8 @@ class TestUpdateTask:
         }
 
         with patch(
-            "custom_components.hostaway.services._resolve_entry_data",
-            wraps=services_mod._resolve_entry_data,
+            "custom_components.hostaway.services.helpers._resolve_entry_data",
+            wraps=helpers_mod._resolve_entry_data,
         ) as mock_resolve:
             result = await hass.services.async_call(
                 DOMAIN,
@@ -1744,7 +1752,7 @@ class TestUpdateTask:
         assert result["listingMapId"] == 12345  # type: ignore[index]
 
     @patch(
-        "custom_components.hostaway.services.HostawayApiClient.update_task",
+        "custom_components.hostaway.services.task_handlers.HostawayApiClient.update_task",
         new_callable=AsyncMock,
         side_effect=HostawayResponseError("server error"),
     )
@@ -1807,7 +1815,7 @@ class TestDeleteTask:
     """Tests for the hostaway.delete_task service."""
 
     @patch(
-        "custom_components.hostaway.services.HostawayApiClient.delete_task",
+        "custom_components.hostaway.services.task_handlers.HostawayApiClient.delete_task",
         new_callable=AsyncMock,
         return_value=None,
     )
@@ -1830,7 +1838,7 @@ class TestDeleteTask:
         mock_delete.assert_called_once_with(42)
 
     @patch(
-        "custom_components.hostaway.services.HostawayApiClient.delete_task",
+        "custom_components.hostaway.services.task_handlers.HostawayApiClient.delete_task",
         new_callable=AsyncMock,
         side_effect=HostawayResponseError("not found"),
     )
@@ -1852,7 +1860,7 @@ class TestDeleteTask:
             )
 
     @patch(
-        "custom_components.hostaway.services.HostawayApiClient.delete_task",
+        "custom_components.hostaway.services.task_handlers.HostawayApiClient.delete_task",
         new_callable=AsyncMock,
         side_effect=HostawayResponseError("server error"),
     )
@@ -1878,7 +1886,7 @@ class TestGetTasks:
     """Tests for the hostaway.get_tasks service."""
 
     @patch(
-        "custom_components.hostaway.services.HostawayApiClient.get_tasks",
+        "custom_components.hostaway.services.task_handlers.HostawayApiClient.get_tasks",
         new_callable=AsyncMock,
         return_value=[
             {"id": 1, "title": "Task 1"},
@@ -1906,7 +1914,7 @@ class TestGetTasks:
         assert len(result["tasks"]) == 2  # type: ignore[arg-type, index]
 
     @patch(
-        "custom_components.hostaway.services.HostawayApiClient.get_tasks",
+        "custom_components.hostaway.services.task_handlers.HostawayApiClient.get_tasks",
         new_callable=AsyncMock,
         return_value=[{"id": 1, "title": "Task 1", "listingMapId": 12345}],
     )
@@ -1916,7 +1924,7 @@ class TestGetTasks:
         hass: HomeAssistant,
     ) -> None:
         """Listing name filter resolves to listingMapId param."""
-        from custom_components.hostaway import services as services_mod
+        from custom_components.hostaway.services import helpers as helpers_mod
 
         entry = _make_entry()
         await _setup_entry(hass, entry)
@@ -1931,8 +1939,8 @@ class TestGetTasks:
         }
 
         with patch(
-            "custom_components.hostaway.services._resolve_entry_data",
-            wraps=services_mod._resolve_entry_data,
+            "custom_components.hostaway.services.helpers._resolve_entry_data",
+            wraps=helpers_mod._resolve_entry_data,
         ) as mock_resolve:
             result = await hass.services.async_call(
                 DOMAIN,
@@ -1947,7 +1955,7 @@ class TestGetTasks:
         assert result["tasks"][0]["listingMapId"] == 12345  # type: ignore[call-overload, index]
 
     @patch(
-        "custom_components.hostaway.services.HostawayApiClient.get_tasks",
+        "custom_components.hostaway.services.task_handlers.HostawayApiClient.get_tasks",
         new_callable=AsyncMock,
         return_value=[],
     )
@@ -1971,7 +1979,7 @@ class TestGetTasks:
         mock_get.assert_called_once_with({"status": "pending"})
 
     @patch(
-        "custom_components.hostaway.services.HostawayApiClient.get_tasks",
+        "custom_components.hostaway.services.task_handlers.HostawayApiClient.get_tasks",
         new_callable=AsyncMock,
         return_value=[],
     )
@@ -2022,7 +2030,7 @@ class TestGetTasks:
             )
 
     @patch(
-        "custom_components.hostaway.services.HostawayApiClient.get_tasks",
+        "custom_components.hostaway.services.task_handlers.HostawayApiClient.get_tasks",
         new_callable=AsyncMock,
         side_effect=HostawayResponseError("API error"),
     )
@@ -2049,7 +2057,7 @@ class TestGetUsers:
     """Tests for the hostaway.get_users service."""
 
     @patch(
-        "custom_components.hostaway.services.HostawayApiClient.get_users",
+        "custom_components.hostaway.services.lookup_handlers.HostawayApiClient.get_users",
         new_callable=AsyncMock,
         return_value=[
             {"id": 1, "name": "Alice"},
@@ -2080,7 +2088,7 @@ class TestGetUsers:
         ]
 
     @patch(
-        "custom_components.hostaway.services.HostawayApiClient.get_users",
+        "custom_components.hostaway.services.lookup_handlers.HostawayApiClient.get_users",
         new_callable=AsyncMock,
         side_effect=HostawayResponseError("API error"),
     )
@@ -2107,7 +2115,7 @@ class TestGetGroups:
     """Tests for the hostaway.get_groups service."""
 
     @patch(
-        "custom_components.hostaway.services.HostawayApiClient.get_groups",
+        "custom_components.hostaway.services.lookup_handlers.HostawayApiClient.get_groups",
         new_callable=AsyncMock,
         return_value=[
             {"id": 10, "name": "Ops"},
@@ -2138,7 +2146,7 @@ class TestGetGroups:
         ]
 
     @patch(
-        "custom_components.hostaway.services.HostawayApiClient.get_groups",
+        "custom_components.hostaway.services.lookup_handlers.HostawayApiClient.get_groups",
         new_callable=AsyncMock,
         side_effect=HostawayResponseError("API error"),
     )
