@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Base entity for Hostaway integration."""
 
+# aislop-ignore-file ai-slop/hallucinated-import -- HA runtime provides these packages
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

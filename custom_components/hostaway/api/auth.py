@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Token manager for Hostaway OAuth 2.0 Client Credentials flow."""
 
+# aislop-ignore-file ai-slop/hallucinated-import -- HA runtime provides these packages
+
 from __future__ import annotations
 
 import asyncio

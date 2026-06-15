@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Sensor platform for Hostaway listings and reservations."""
 
+# aislop-ignore-file ai-slop/hallucinated-import -- HA runtime provides these packages
+
 from __future__ import annotations
 
 import logging
