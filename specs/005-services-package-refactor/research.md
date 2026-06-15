@@ -17,7 +17,7 @@
 **Pattern**:
 
 ```python
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Any, NamedTuple
 
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
@@ -27,7 +27,7 @@ class ServiceDefinition(NamedTuple):
     """Definition for a single service registration."""
 
     name: str
-    handler: Callable[[HomeAssistant, ServiceCall], Any]
+    handler: Callable[[HomeAssistant, ServiceCall], Awaitable[Any]]
     schema: vol.Schema
     supports_response: SupportsResponse | None
 

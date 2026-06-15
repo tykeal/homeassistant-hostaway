@@ -15,7 +15,7 @@ fully describes one HA service.
 | Field | Type | Description | Constraints |
 |-------|------|-------------|-------------|
 | `name` | `str` | Service name (e.g., `"set_door_code"`) | Non-empty, unique in table |
-| `handler` | `Callable[[HomeAssistant, ServiceCall], Any]` | Async handler function | Must be awaitable |
+| `handler` | `Callable[[HomeAssistant, ServiceCall], Awaitable[Any]]` | Async handler function | Must be awaitable |
 | `schema` | `vol.Schema` | Voluptuous validation schema | Must validate service call data |
 | `supports_response` | `SupportsResponse \| None` | Response support flag | `None` = no response, `OPTIONAL` or `ONLY` |
 
