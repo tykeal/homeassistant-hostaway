@@ -35,7 +35,7 @@ _GATE: Must pass before Phase 0 research. Re-check after Phase 1 design._
 | ----------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | I. Code Quality & Testing           | ✅ PASS | TDD not applicable to pure refactoring (tests already exist and must remain green); all linting/type checks will be maintained |
 | II. API Client Design               | ✅ PASS | Refactoring improves isolation; no behavioral changes to client                                                                |
-| III. Atomic Commit Discipline       | ✅ PASS | Will use atomic commits: (1) extract redaction module, (2) decompose \_request()                                               |
+| III. Atomic Commit Discipline       | ✅ PASS | Will use 3 atomic commits: (1) extract redaction module, (2) decompose \_request(), (3) consolidate domain methods             |
 | IV. Licensing & Attribution         | ✅ PASS | New `redaction.py` will include SPDX headers per constitution                                                                  |
 | V. Pre-Commit Integrity             | ✅ PASS | All hooks will pass; ruff, mypy, interrogate 100% enforced                                                                     |
 | VI. Agent Co-Authorship & DCO       | ✅ PASS | Commits will include Co-authored-by and Signed-off-by                                                                          |
