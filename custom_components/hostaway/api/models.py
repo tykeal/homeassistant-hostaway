@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Data transfer objects for the Hostaway API client."""
 
-# aislop-ignore-file ai-slop/hallucinated-import -- HA runtime provides these packages
+# aislop-ignore-file ai-slop/hallucinated-import -- in-repo component imports
 
 from __future__ import annotations
 

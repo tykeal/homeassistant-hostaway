@@ -6,12 +6,14 @@ from __future__ import annotations
 
 from typing import Any
 
+from custom_components.hostaway.api.const import BASE_URL, TOKEN_URL
+
 # Common test constants
 FAKE_CLIENT_ID = "test-client-id-12345"
 FAKE_CLIENT_SECRET = "test-client-secret-abcdef"
 FAKE_TOKEN = "test-access-token-jwt"
-FAKE_TOKEN_URL = "https://api.hostaway.com/v1/accessTokens"
-FAKE_BASE_URL = "https://api.hostaway.com"
+FAKE_TOKEN_URL = TOKEN_URL
+FAKE_BASE_URL = BASE_URL
 
 
 def make_token_response(**overrides: Any) -> dict[str, Any]:

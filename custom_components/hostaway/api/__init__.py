@@ -6,7 +6,7 @@ Public API surface for the Hostaway API client package. All symbols
 exported here are part of the stable public interface.
 """
 
-# aislop-ignore-file ai-slop/hallucinated-import -- HA runtime provides these packages
+# aislop-ignore-file ai-slop/hallucinated-import -- in-repo component imports
 
 from custom_components.hostaway.api.auth import HostawayTokenManager
 from custom_components.hostaway.api.client import HostawayApiClient
