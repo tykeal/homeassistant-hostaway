@@ -7,13 +7,13 @@
 
 ## Summary
 
-Refactor the monolithic `custom_components/hostaway/sensor.py` (555 lines) into
-a `sensor/` package with focused sub-modules organized by responsibility. The
+Refactor the monolithic `custom_components/hostaway/sensor.py` into a
+`sensor/` package with focused sub-modules organized by responsibility. The
 package will expose `async_setup_entry` from its `__init__.py` so the Home
-Assistant platform loader resolves `custom_components.hostaway.sensor` unchanged.
-The refactor must be transparent — all 63 sensor tests and the full test suite
-must pass without behavioral changes. This follows the identical pattern
-established by spec 005 (services package refactor).
+Assistant platform loader resolves `custom_components.hostaway.sensor`
+unchanged. The refactor must be transparent — all 63 sensor tests and the
+full test suite must pass without behavioral changes. This follows the
+identical pattern established by spec 005 (services package refactor).
 
 ## Technical Context
 
@@ -25,7 +25,8 @@ established by spec 005 (services package refactor).
 **Project Type**: Home Assistant custom integration (plugin)
 **Performance Goals**: No event loop blocking; zero overhead vs. current implementation
 **Constraints**: Each file in `sensor/` package ≤ 400 lines; `__init__.py` ≤ 100 lines (SC-004)
-**Scale/Scope**: 555 LOC source → 4 files in package, 63 test methods → 3 test modules
+**Scale/Scope**: 1 oversized source module → 4 files in package, 63 test
+methods → 3 test modules
 
 ## Constitution Check
 

@@ -132,8 +132,8 @@ targets may be updated to reflect the new module structure."
 
 ### RQ-4: Test File Split Strategy
 
-**Decision**: Split `tests/test_sensor.py` (1145 lines, 63 tests) into 3
-test modules per FR-013.
+**Decision**: Split the oversized `tests/test_sensor.py` file (63 tests) into
+3 test modules per FR-013.
 
 **Allocation**:
 
@@ -256,6 +256,6 @@ test behavior without changing assertions.
 | `reservation.py` | ~95 (class) | ~40 (imports, headers) | ~135 | ≤ 400 |
 | `helpers.py` | ~125 (maps + functions) | ~35 (imports, headers) | ~160 | ≤ 400 |
 
-**Total current**: 555 lines → Estimated total after split: ~510 lines
-(slight increase from repeated imports, offset by removing the monolithic
-file's combined import block).
+**Total current**: One oversized source module → Estimated total after split:
+~510 lines (slight increase from repeated imports, offset by removing the
+monolithic file's combined import block).

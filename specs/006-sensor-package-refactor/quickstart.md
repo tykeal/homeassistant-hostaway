@@ -8,8 +8,8 @@
 ## Overview
 
 This refactor converts the monolithic `custom_components/hostaway/sensor.py`
-(555 lines) into a `sensor/` package with focused sub-modules. The change is
-purely structural — no behavioral changes. It follows the identical pattern
+into a `sensor/` package with focused sub-modules. The change is purely
+structural — no behavioral changes. It follows the identical pattern
 established by spec 005 (services package refactor).
 
 ## Quick Verification

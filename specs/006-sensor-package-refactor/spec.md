@@ -12,8 +12,8 @@ to reduce file size below the 400-line threshold (issue #70)."
 
 As a developer contributing to the Hostaway integration, I want the sensor
 platform code split into focused, single-responsibility modules so that I can
-locate, understand, and modify individual sensor classes without navigating a
-555-line monolithic file.
+locate, understand, and modify individual sensor classes without navigating an
+oversized monolithic file.
 
 **Why this priority**: The monolithic file directly triggers the aislop
 file-size flag (issue #70). Splitting it into a package eliminates the flag and
@@ -27,10 +27,10 @@ resolves. Full behavioral equivalence is validated in User Story 2.
 
 **Acceptance Scenarios**:
 
-1. **Given** the old `sensor.py` exists as a single 555-line file, **When** the
-   refactor is complete, **Then** `sensor.py` no longer exists and a `sensor/`
-   package directory has taken its place with all sensor logic distributed
-   across sub-modules.
+1. **Given** the old `sensor.py` exists as a single oversized file,
+   **When** the refactor is complete, **Then** `sensor.py` no longer exists
+   and a `sensor/` package directory has taken its place with all sensor logic
+   distributed across sub-modules.
 2. **Given** the integration is loaded by Home Assistant, **When**
    `async_setup_entry()` is called from the package `__init__.py`, **Then** all
    sensor entities are created with the same names, unique IDs, and behavior as
