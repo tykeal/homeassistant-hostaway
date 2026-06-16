@@ -44,7 +44,7 @@ custom_components/hostaway/sensor/
 
 ```
 tests/sensor/
-├── __init__.py          # Empty package marker
+├── __init__.py          # Minimal package marker with required headers
 ├── conftest.py          # Shared helper functions (_make_entry, _make_listing, _make_reservation)
 ├── test_listing.py      # TestListingSensor (12 tests)
 ├── test_reservation.py  # TestSelectReservation + TestDeriveState + TestBuildReservationAttributes + TestReservationStatusSensor (50 tests)

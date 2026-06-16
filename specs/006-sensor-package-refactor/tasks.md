@@ -32,10 +32,19 @@ restructuring is part of User Story 4.
 **Phase Exit Rule**: End the phase with its checkpoint green before moving to
 the next phase.
 
-- [ ] T001 Create sensor package directory at `custom_components/hostaway/sensor/` with empty `__init__.py`
-- [ ] T002 [P] Create empty module custom_components/hostaway/sensor/helpers.py with SPDX header, aislop comment, and docstring
-- [ ] T003 [P] Create empty module custom_components/hostaway/sensor/listing.py with SPDX header, aislop comment, and docstring
-- [ ] T004 [P] Create empty module custom_components/hostaway/sensor/reservation.py with SPDX header, aislop comment, and docstring
+- [ ] T001 Create sensor package directory at
+  `custom_components/hostaway/sensor/` with a minimal `__init__.py` package
+  marker including the required SPDX header, aislop comment, and module
+  docstring
+- [ ] T002 [P] Create minimal module
+  `custom_components/hostaway/sensor/helpers.py` with SPDX header, aislop
+  comment, and docstring
+- [ ] T003 [P] Create minimal module
+  `custom_components/hostaway/sensor/listing.py` with SPDX header, aislop
+  comment, and docstring
+- [ ] T004 [P] Create minimal module
+  `custom_components/hostaway/sensor/reservation.py` with SPDX header,
+  aislop comment, and docstring
 
 ---
 
@@ -48,9 +57,22 @@ the next phase.
 
 **⚠️ CRITICAL**: All user story validation depends on this phase being complete.
 
-- [ ] T005 Extract status maps (_STATUS_PRIORITY, _STATUS_TO_DERIVED,_CANCELLED_STATUSES), module-level state (_MAX_WARNED_STATUSES, _warned_statuses), and helper functions (_select_reservation, _derive_state, _build_reservation_attributes) into custom_components/hostaway/sensor/helpers.py with all required imports (logging, api.models, const)
-- [ ] T006 Extract HostawayListingSensorDescription dataclass, LISTING_SENSOR_DESCRIPTIONS tuple, and HostawayListingSensor class into custom_components/hostaway/sensor/listing.py with all required imports (HA types, entity base, api.models, const)
-- [ ] T007 Extract HostawayReservationStatusSensor class into custom_components/hostaway/sensor/reservation.py with imports from helpers (_select_reservation,_derive_state,_build_reservation_attributes, _CANCELLED_STATUSES) and external dependencies (HA types, entity base, api.models, const)
+- [ ] T005 Extract status maps (`_STATUS_PRIORITY`,
+  `_STATUS_TO_DERIVED`, `_CANCELLED_STATUSES`), module-level state
+  (`_MAX_WARNED_STATUSES`, `_warned_statuses`), and helper functions
+  (`_select_reservation`, `_derive_state`,
+  `_build_reservation_attributes`) into
+  `custom_components/hostaway/sensor/helpers.py` with all required imports
+  (`logging`, `api.models`, `const`)
+- [ ] T006 Extract `HostawayListingSensorDescription`,
+  `LISTING_SENSOR_DESCRIPTIONS`, and `HostawayListingSensor` into
+  `custom_components/hostaway/sensor/listing.py` with all required imports
+  (HA types, entity base, `api.models`, `const`)
+- [ ] T007 Extract `HostawayReservationStatusSensor` into
+  `custom_components/hostaway/sensor/reservation.py` with imports from
+  helpers (`_select_reservation`, `_derive_state`,
+  `_build_reservation_attributes`, `_CANCELLED_STATUSES`) and external
+  dependencies (HA types, entity base, `api.models`, `const`)
 - [ ] T008 Populate `custom_components/hostaway/sensor/__init__.py` with `async_setup_entry`, `_async_add_new_listings`, and imports from `listing.py` and `reservation.py` (must stay ≤ 100 lines)
 - [ ] T009 Delete the old monolithic `custom_components/hostaway/sensor.py`
   after T008 so the package layout becomes active, then perform T015 and T016

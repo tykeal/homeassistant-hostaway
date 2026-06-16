@@ -79,7 +79,7 @@ custom_components/hostaway/
 
 tests/
 ├── sensor/                        # NEW: test package
-│   ├── __init__.py                # Empty package marker
+│   ├── __init__.py                # Minimal package marker with required headers
 │   ├── conftest.py                # Shared fixtures and test helpers
 │   ├── test_listing.py            # TestListingSensor (12 tests)
 │   ├── test_reservation.py        # TestSelectReservation + TestDeriveState + TestBuildReservationAttributes + TestReservationStatusSensor (50 tests)
