@@ -32,17 +32,17 @@ restructuring is part of User Story 4.
 **Phase Exit Rule**: End the phase with its checkpoint green before moving to
 the next phase.
 
-- [ ] T001 Create sensor package directory at
+- [x] T001 Create sensor package directory at
   `custom_components/hostaway/sensor/` with a minimal `__init__.py` package
   marker including the required SPDX header, aislop comment, and module
   docstring
-- [ ] T002 [P] Create minimal module
+- [x] T002 [P] Create minimal module
   `custom_components/hostaway/sensor/helpers.py` with SPDX header, aislop
   comment, and docstring
-- [ ] T003 [P] Create minimal module
+- [x] T003 [P] Create minimal module
   `custom_components/hostaway/sensor/listing.py` with SPDX header, aislop
   comment, and docstring
-- [ ] T004 [P] Create minimal module
+- [x] T004 [P] Create minimal module
   `custom_components/hostaway/sensor/reservation.py` with SPDX header,
   aislop comment, and docstring
 
@@ -57,24 +57,24 @@ the next phase.
 
 **⚠️ CRITICAL**: All user story validation depends on this phase being complete.
 
-- [ ] T005 Extract status maps (`_STATUS_PRIORITY`,
+- [x] T005 Extract status maps (`_STATUS_PRIORITY`,
   `_STATUS_TO_DERIVED`, `_CANCELLED_STATUSES`), module-level state
   (`_MAX_WARNED_STATUSES`, `_warned_statuses`), and helper functions
   (`_select_reservation`, `_derive_state`,
   `_build_reservation_attributes`) into
   `custom_components/hostaway/sensor/helpers.py` with all required imports
   (`logging`, `api.models`, `const`)
-- [ ] T006 Extract `HostawayListingSensorDescription`,
+- [x] T006 Extract `HostawayListingSensorDescription`,
   `LISTING_SENSOR_DESCRIPTIONS`, and `HostawayListingSensor` into
   `custom_components/hostaway/sensor/listing.py` with all required imports
   (HA types, entity base, `api.models`, `const`)
-- [ ] T007 Extract `HostawayReservationStatusSensor` into
+- [x] T007 Extract `HostawayReservationStatusSensor` into
   `custom_components/hostaway/sensor/reservation.py` with imports from
   helpers (`_select_reservation`, `_derive_state`,
   `_build_reservation_attributes`, `_CANCELLED_STATUSES`) and external
   dependencies (HA types, entity base, `api.models`, `const`)
-- [ ] T008 Populate `custom_components/hostaway/sensor/__init__.py` with `async_setup_entry`, `_async_add_new_listings`, and imports from `listing.py` and `reservation.py` (must stay ≤ 100 lines)
-- [ ] T009 Delete the old monolithic `custom_components/hostaway/sensor.py`
+- [x] T008 Populate `custom_components/hostaway/sensor/__init__.py` with `async_setup_entry`, `_async_add_new_listings`, and imports from `listing.py` and `reservation.py` (must stay ≤ 100 lines)
+- [x] T009 Delete the old monolithic `custom_components/hostaway/sensor.py`
   after T008 so the package layout becomes active, then perform T015 and T016
   in the same atomic change set before running validation
 
@@ -99,11 +99,11 @@ Verify `custom_components/hostaway/sensor.py` no longer exists and
 
 ### Implementation for User Story 1
 
-- [ ] T010 [US1] Verify `custom_components/hostaway/sensor/__init__.py` is under 100 lines (SC-004)
-- [ ] T011 [P] [US1] Verify custom_components/hostaway/sensor/helpers.py is under 400 lines (FR-008)
-- [ ] T012 [P] [US1] Verify custom_components/hostaway/sensor/listing.py is under 400 lines (FR-008)
-- [ ] T013 [P] [US1] Verify custom_components/hostaway/sensor/reservation.py is under 400 lines (FR-008)
-- [ ] T014 [US1] Verify old custom_components/hostaway/sensor.py no longer exists (SC-003, FR-009)
+- [x] T010 [US1] Verify `custom_components/hostaway/sensor/__init__.py` is under 100 lines (SC-004)
+- [x] T011 [P] [US1] Verify custom_components/hostaway/sensor/helpers.py is under 400 lines (FR-008)
+- [x] T012 [P] [US1] Verify custom_components/hostaway/sensor/listing.py is under 400 lines (FR-008)
+- [x] T013 [P] [US1] Verify custom_components/hostaway/sensor/reservation.py is under 400 lines (FR-008)
+- [x] T014 [US1] Verify old custom_components/hostaway/sensor.py no longer exists (SC-003, FR-009)
 
 **Checkpoint**: Package structure validated — all files within size limits, old file removed
 
@@ -120,15 +120,15 @@ the next phase.
 
 ### Implementation for User Story 2
 
-- [ ] T015 [US2] Expand `test_entity_ids_via_async_setup_entry` in
+- [x] T015 [US2] Expand `test_entity_ids_via_async_setup_entry` in
   `tests/test_sensor.py` into a characterization test that covers listener
   registration via `entry.async_on_unload(...)`, new-listing entity creation
   in `_async_add_new_listings`, and unload cleanup behavior before validating
   the refactor
-- [ ] T016 [US2] Update import paths and patch targets in
+- [x] T016 [US2] Update import paths and patch targets in
   `tests/test_sensor.py` to reference the new sub-module locations and moved
   `_warned_statuses` module state per research.md RQ-3 and RQ-7
-- [ ] T017 [US2] Run the targeted setup-flow characterization test first, then
+- [x] T017 [US2] Run the targeted setup-flow characterization test first, then
   run `uv run pytest --tb=short` and confirm the full suite passes with zero
   failures (SC-001)
 
@@ -147,11 +147,11 @@ the next phase.
 
 ### Implementation for User Story 3
 
-- [ ] T018 [P] [US3] Verify SPDX header, aislop ignore comment with `ai-slop/hallucinated-import` token, and module docstring in `custom_components/hostaway/sensor/__init__.py`
-- [ ] T019 [P] [US3] Verify SPDX header, aislop ignore comment with ai-slop/hallucinated-import token, and module docstring in custom_components/hostaway/sensor/helpers.py
-- [ ] T020 [P] [US3] Verify SPDX header, aislop ignore comment with ai-slop/hallucinated-import token, and module docstring in custom_components/hostaway/sensor/listing.py
-- [ ] T021 [P] [US3] Verify SPDX header, aislop ignore comment with ai-slop/hallucinated-import token, and module docstring in custom_components/hostaway/sensor/reservation.py
-- [ ] T022 [US3] Verify existing aislop inline suppressions (noqa: RUF012 on _attr_options in HostawayReservationStatusSensor) are preserved in custom_components/hostaway/sensor/reservation.py (FR-011)
+- [x] T018 [P] [US3] Verify SPDX header, aislop ignore comment with `ai-slop/hallucinated-import` token, and module docstring in `custom_components/hostaway/sensor/__init__.py`
+- [x] T019 [P] [US3] Verify SPDX header, aislop ignore comment with ai-slop/hallucinated-import token, and module docstring in custom_components/hostaway/sensor/helpers.py
+- [x] T020 [P] [US3] Verify SPDX header, aislop ignore comment with ai-slop/hallucinated-import token, and module docstring in custom_components/hostaway/sensor/listing.py
+- [x] T021 [P] [US3] Verify SPDX header, aislop ignore comment with ai-slop/hallucinated-import token, and module docstring in custom_components/hostaway/sensor/reservation.py
+- [x] T022 [US3] Verify existing aislop inline suppressions (noqa: RUF012 on _attr_options in HostawayReservationStatusSensor) are preserved in custom_components/hostaway/sensor/reservation.py (FR-011)
 
 **Checkpoint**: All compliance requirements met — headers, comments, and suppressions in place
 
@@ -168,20 +168,20 @@ the next phase.
 
 ### Implementation for User Story 4
 
-- [ ] T023 [US4] Create test package directory `tests/sensor/` with
+- [x] T023 [US4] Create test package directory `tests/sensor/` with
   `__init__.py`, including the required SPDX header, aislop comment using
   `ai-slop/hallucinated-import`, and module docstring
-- [ ] T024 [US4] Create `tests/sensor/conftest.py` with shared helper
+- [x] T024 [US4] Create `tests/sensor/conftest.py` with shared helper
   functions (`_make_entry`, `_make_listing`, `_make_reservation`) plus the
   required SPDX header, aislop comment using `ai-slop/hallucinated-import`,
   and module docstring
-- [ ] T025 [P] [US4] Extract `TestListingSensor` class (12 tests) into
+- [x] T025 [P] [US4] Extract `TestListingSensor` class (12 tests) into
   `tests/sensor/test_listing.py` with updated imports from
   `custom_components.hostaway.sensor.listing`, explicitly importing shared
   helper functions from `tests.sensor.conftest`, and the required SPDX
   header, aislop comment using `ai-slop/hallucinated-import`, and module
   docstring
-- [ ] T026 [P] [US4] Extract `TestSelectReservation`,
+- [x] T026 [P] [US4] Extract `TestSelectReservation`,
   `TestDeriveState`, `TestBuildReservationAttributes`, and
   `TestReservationStatusSensor` classes (50 tests) into
   `tests/sensor/test_reservation.py` with updated imports from
@@ -189,13 +189,13 @@ the next phase.
   `custom_components.hostaway.sensor.reservation`, and shared helper
   functions from `tests.sensor.conftest`, plus the required SPDX header,
   aislop comment using `ai-slop/hallucinated-import`, and module docstring
-- [ ] T027 [P] [US4] Extract `test_entity_ids_via_async_setup_entry` (1 test)
+- [x] T027 [P] [US4] Extract `test_entity_ids_via_async_setup_entry` (1 test)
   into `tests/sensor/test_setup.py` with import from
   `custom_components.hostaway.sensor` and any needed shared helper functions
   from `tests.sensor.conftest`, plus the required SPDX header, aislop
   comment using `ai-slop/hallucinated-import`, and module docstring
-- [ ] T028 [US4] Delete old tests/test_sensor.py file
-- [ ] T029 [US4] Run `uv run pytest tests/sensor/ -v` and confirm 63 tests pass across the new test modules (SC-005)
+- [x] T028 [US4] Delete old tests/test_sensor.py file
+- [x] T029 [US4] Run `uv run pytest tests/sensor/ -v` and confirm 63 tests pass across the new test modules (SC-005)
 
 **Checkpoint**: Test reorganization complete — targeted test execution works, total count preserved
 
@@ -208,10 +208,10 @@ the next phase.
 **Phase Exit Rule**: End the phase with its checkpoint green before declaring
 the work complete.
 
-- [ ] T030 [P] Run `wc -l custom_components/hostaway/sensor/*.py` and confirm all file sizes (SC-002, SC-004)
-- [ ] T031 [P] Run `pre-commit run --all-files` and fix any issues (ruff, mypy, interrogate, reuse-tool)
-- [ ] T032 Run full test suite with `uv run pytest --tb=short` confirming all 317 tests pass (final SC-001 validation)
-- [ ] T033 Verify no new external dependencies introduced (FR-012) by checking pyproject.toml is unchanged
+- [x] T030 [P] Run `wc -l custom_components/hostaway/sensor/*.py` and confirm all file sizes (SC-002, SC-004)
+- [x] T031 [P] Run `pre-commit run --all-files` and fix any issues (ruff, mypy, interrogate, reuse-tool)
+- [x] T032 Run full test suite with `uv run pytest --tb=short` confirming all 317 tests pass (final SC-001 validation)
+- [x] T033 Verify no new external dependencies introduced (FR-012) by checking pyproject.toml is unchanged
 
 ---
 
