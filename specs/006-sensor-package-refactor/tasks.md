@@ -148,9 +148,9 @@ the next phase.
 ### Implementation for User Story 3
 
 - [x] T018 [P] [US3] Verify SPDX header, aislop ignore comment with `ai-slop/hallucinated-import` token, and module docstring in `custom_components/hostaway/sensor/__init__.py`
-- [x] T019 [P] [US3] Verify SPDX header, aislop ignore comment with ai-slop/hallucinated-import token, and module docstring in custom_components/hostaway/sensor/helpers.py
-- [x] T020 [P] [US3] Verify SPDX header, aislop ignore comment with ai-slop/hallucinated-import token, and module docstring in custom_components/hostaway/sensor/listing.py
-- [x] T021 [P] [US3] Verify SPDX header, aislop ignore comment with ai-slop/hallucinated-import token, and module docstring in custom_components/hostaway/sensor/reservation.py
+- [x] T019 [P] [US3] Verify SPDX header, aislop ignore comment with `ai-slop/hallucinated-import` token, and module docstring in custom_components/hostaway/sensor/helpers.py
+- [x] T020 [P] [US3] Verify SPDX header, aislop ignore comment with `ai-slop/hallucinated-import` token, and module docstring in custom_components/hostaway/sensor/listing.py
+- [x] T021 [P] [US3] Verify SPDX header, aislop ignore comment with `ai-slop/hallucinated-import` token, and module docstring in custom_components/hostaway/sensor/reservation.py
 - [x] T022 [US3] Verify existing aislop inline suppressions (noqa: RUF012 on _attr_options in HostawayReservationStatusSensor) are preserved in custom_components/hostaway/sensor/reservation.py (FR-011)
 
 **Checkpoint**: All compliance requirements met — headers, comments, and suppressions in place
