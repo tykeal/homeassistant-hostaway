@@ -123,8 +123,8 @@ the next phase.
 - [ ] T015 [US2] Expand `test_entity_ids_via_async_setup_entry` in
   `tests/test_sensor.py` into a characterization test that covers listener
   registration via `entry.async_on_unload(...)`, new-listing entity creation
-  in `_async_add_new_listings`, and unload cleanup behavior before the
-  refactor proceeds
+  in `_async_add_new_listings`, and unload cleanup behavior before validating
+  the refactor
 - [ ] T016 [US2] Update import paths and patch targets in
   `tests/test_sensor.py` to reference the new sub-module locations and moved
   `_warned_statuses` module state per research.md RQ-3 and RQ-7
