@@ -132,7 +132,7 @@ repos:
       - id: aislop
         name: aislop ci
         entry: aislop
-        args: [ci, --staged]
+        args: [ci]
         language: node
         additional_dependencies:
           - aislop@0.12.0
