@@ -191,7 +191,7 @@ class HostawayApiClient:
                 backoff = min(backoff * BACKOFF_MULTIPLIER, MAX_BACKOFF)
                 continue
             if response.status_code == 403:
-                return await self._handle_403(
+                return await self._handle_forbidden_response(
                     response,
                     method,
                     path,
@@ -202,7 +202,9 @@ class HostawayApiClient:
             if response.status_code == 404:
                 raise HostawayResponseError(f"Resource not found: {path}")
             if response.status_code == 429:
-                delay = self._handle_429(response, attempt, MAX_RETRIES, backoff)
+                delay = self._handle_rate_limit_response(
+                    response, attempt, MAX_RETRIES, backoff
+                )
                 await asyncio.sleep(delay)
                 backoff = min(backoff * BACKOFF_MULTIPLIER, MAX_BACKOFF)
                 continue
@@ -222,7 +224,7 @@ class HostawayApiClient:
             "Request loop exited without returning"
         )  # pragma: no cover
 
-    async def _handle_403(
+    async def _handle_forbidden_response(
         self,
         response: httpx.Response,
         method: str,
@@ -267,7 +269,7 @@ class HostawayApiClient:
             _retried_auth=True,
         )
 
-    def _handle_429(
+    def _handle_rate_limit_response(
         self,
         response: httpx.Response,
         attempt: int,
