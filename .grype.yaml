@@ -42,6 +42,78 @@ ignore:
     package:
       name: aiohttp
       type: python
+  # PyJWT is a transitive dependency pulled in via homeassistant core.
+  # This integration does not depend on PyJWT directly. These
+  # advisories are fixed in PyJWT >= 2.13.0; remove once upstream
+  # updates.
+  - vulnerability: GHSA-w7vc-732c-9m39
+    package:
+      name: PyJWT
+      type: python
+  - vulnerability: GHSA-xgmm-8j9v-c9wx
+    package:
+      name: PyJWT
+      type: python
+  - vulnerability: GHSA-fhv5-28vv-h8m8
+    package:
+      name: PyJWT
+      type: python
+  - vulnerability: GHSA-993g-76c3-p5m4
+    package:
+      name: PyJWT
+      type: python
+  - vulnerability: GHSA-jq35-7prp-9v3f
+    package:
+      name: PyJWT
+      type: python
+  # cryptography is a transitive dependency pulled in via
+  # homeassistant core. This integration does not depend on
+  # cryptography directly. The advisory is fixed in cryptography >=
+  # 48.0.1; remove once upstream updates.
+  - vulnerability: GHSA-537c-gmf6-5ccf
+    package:
+      name: cryptography
+      type: python
+  # aiohttp is a transitive dependency pulled in via homeassistant
+  # core. This integration uses httpx directly, not aiohttp. These
+  # advisories are fixed in aiohttp >= 3.14.0 or >= 3.14.1; remove
+  # once upstream updates.
+  - vulnerability: GHSA-4fvr-rgm6-gqmc
+    package:
+      name: aiohttp
+      type: python
+  - vulnerability: GHSA-63hw-fmq6-xxg2
+    package:
+      name: aiohttp
+      type: python
+  - vulnerability: GHSA-g3cq-j2xw-wf74
+    package:
+      name: aiohttp
+      type: python
+  - vulnerability: GHSA-hpj7-wq8m-9hgp
+    package:
+      name: aiohttp
+      type: python
+  - vulnerability: GHSA-xcgm-r5h9-7989
+    package:
+      name: aiohttp
+      type: python
+  - vulnerability: GHSA-2fqr-mr3j-6wp8
+    package:
+      name: aiohttp
+      type: python
+  - vulnerability: GHSA-4m7w-qmgq-4wj5
+    package:
+      name: aiohttp
+      type: python
+  - vulnerability: GHSA-9x8q-7h8h-wcw9
+    package:
+      name: aiohttp
+      type: python
+  - vulnerability: GHSA-m6qw-4cw2-hm4m
+    package:
+      name: aiohttp
+      type: python
   # uv is a transitive dependency pulled in via homeassistant and dev
   # tooling. This integration does not depend on uv directly. The
   # advisory is fixed in uv >= 0.11.15; remove once upstream updates.
