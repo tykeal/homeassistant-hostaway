@@ -89,7 +89,7 @@ class HostawayApiClient:
         after_id: int | None = None
         while True:
             items = await self._get_reservation_items(listing_id, after_id=after_id)
-            if len(items) == DEFAULT_PAGE_LIMIT:
+            if len(items) >= DEFAULT_PAGE_LIMIT:
                 next_after_id = self._reservation_page_cursor(items, listing_id)
                 if next_after_id is None:
                     reservations.extend(self._parse_reservations(items, listing_id))
