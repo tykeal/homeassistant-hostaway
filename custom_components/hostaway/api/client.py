@@ -103,7 +103,7 @@ class HostawayApiClient:
         limit: int = DEFAULT_PAGE_LIMIT,
     ) -> list[dict[str, Any]]:
         """Return one raw page of reservation payloads."""
-        params: dict[str, int] = {"listingId": listing_id, "limit": limit}
+        params: dict[str, Any] = {"listingId": listing_id, "limit": limit}
         if after_id is not None:
             params["afterId"] = after_id
         return await self._request_results("/v1/reservations", params=params)
