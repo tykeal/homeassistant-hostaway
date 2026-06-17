@@ -614,21 +614,22 @@ class TestPagination:
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Malformed reservations do not break cursor pagination."""
+        listing_id = 54321
         page1 = [
-            make_reservation_response(id=i, listingMapId=100)
+            make_reservation_response(id=i, listingMapId=listing_id)
             for i in range(1, DEFAULT_PAGE_LIMIT)
         ]
         page1.append(
             make_reservation_response(
                 id=DEFAULT_PAGE_LIMIT,
-                listingMapId=100,
+                listingMapId=listing_id,
                 nights=-1,
             )
         )
         page2 = [
             make_reservation_response(
                 id=DEFAULT_PAGE_LIMIT + 1,
-                listingMapId=100,
+                listingMapId=listing_id,
             )
         ]
 
@@ -642,7 +643,7 @@ class TestPagination:
         client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
 
         with caplog.at_level("WARNING", logger="custom_components.hostaway.api.client"):
-            reservations = await client.get_all_reservations(100)
+            reservations = await client.get_all_reservations(listing_id)
 
         ids = {reservation.id for reservation in reservations}
         parsed_first_page = [
@@ -655,8 +656,9 @@ class TestPagination:
         assert DEFAULT_PAGE_LIMIT + 1 in ids
         assert route.call_count == 2
         assert f"afterId={DEFAULT_PAGE_LIMIT}" in str(route.calls[1].request.url)
-        assert "listing 100" in caplog.text
-        assert str(DEFAULT_PAGE_LIMIT) in caplog.text
+        assert (
+            f"reservation {DEFAULT_PAGE_LIMIT} for listing {listing_id}" in caplog.text
+        )
 
     async def test_get_all_reservations_stops_on_missing_cursor(
         self,
