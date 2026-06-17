@@ -76,10 +76,11 @@ class HostawayApiClient:
         limit: int = DEFAULT_PAGE_LIMIT,
     ) -> list[HostawayReservation]:
         """Return one page of reservations for a listing."""
-        params: dict[str, int] = {"listingId": listing_id, "limit": limit}
-        if after_id is not None:
-            params["afterId"] = after_id
-        items = await self._request_results("/v1/reservations", params=params)
+        items = await self._get_reservation_items(
+            listing_id,
+            after_id=after_id,
+            limit=limit,
+        )
         return self._parse_reservations(items, listing_id)
 
     async def get_all_reservations(self, listing_id: int) -> list[HostawayReservation]:
@@ -87,19 +88,25 @@ class HostawayApiClient:
         reservations: list[HostawayReservation] = []
         after_id: int | None = None
         while True:
-            params: dict[str, int] = {
-                "listingId": listing_id,
-                "limit": DEFAULT_PAGE_LIMIT,
-            }
-            if after_id is not None:
-                params["afterId"] = after_id
-            items = await self._request_results("/v1/reservations", params=params)
+            items = await self._get_reservation_items(listing_id, after_id=after_id)
             reservations.extend(self._parse_reservations(items, listing_id))
             if len(items) < DEFAULT_PAGE_LIMIT:
                 return reservations
             after_id = self._reservation_page_cursor(items, listing_id)
             if after_id is None:
                 return reservations
+
+    async def _get_reservation_items(
+        self,
+        listing_id: int,
+        after_id: int | None = None,
+        limit: int = DEFAULT_PAGE_LIMIT,
+    ) -> list[dict[str, Any]]:
+        """Return one raw page of reservation payloads."""
+        params: dict[str, int] = {"listingId": listing_id, "limit": limit}
+        if after_id is not None:
+            params["afterId"] = after_id
+        return await self._request_results("/v1/reservations", params=params)
 
     def _parse_reservations(
         self, items: list[dict[str, Any]], listing_id: int
@@ -119,7 +126,7 @@ class HostawayApiClient:
                     )
                 else:
                     _LOGGER.warning(
-                        "Skipping malformed Hostaway reservation %s for listing %s: %s",
+                        "Skipping malformed Hostaway reservation %r for listing %s: %s",
                         reservation_id,
                         listing_id,
                         exc,
