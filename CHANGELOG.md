@@ -38,6 +38,6 @@ Initial development — will become 0.1.0 on first release.
 ### Fixed
 
 - Reservations with zero nights no longer crash
-  coordinator refreshes.
+  coordinator refreshes
 - A single malformed reservation is skipped and
-  logged instead of failing the whole batch.
+  logged instead of failing the whole batch
