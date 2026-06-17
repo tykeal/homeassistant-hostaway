@@ -608,6 +608,88 @@ class TestPagination:
         assert len(reservations) == DEFAULT_PAGE_LIMIT + 5
         assert route.call_count == 2
 
+    async def test_get_all_reservations_skips_bad_page_items(
+        self,
+        mock_httpx_client: httpx.AsyncClient,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Malformed reservations do not break cursor pagination."""
+        page1 = [
+            make_reservation_response(id=i, listingMapId=100)
+            for i in range(1, DEFAULT_PAGE_LIMIT)
+        ]
+        page1.append(
+            make_reservation_response(
+                id=DEFAULT_PAGE_LIMIT,
+                listingMapId=100,
+                nights=-1,
+            )
+        )
+        page2 = [
+            make_reservation_response(
+                id=DEFAULT_PAGE_LIMIT + 1,
+                listingMapId=100,
+            )
+        ]
+
+        route = respx.get(f"{FAKE_BASE_URL}/v1/reservations")
+        route.side_effect = [
+            httpx.Response(200, json={"status": "success", "result": page1}),
+            httpx.Response(200, json={"status": "success", "result": page2}),
+        ]
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with caplog.at_level("WARNING", logger="custom_components.hostaway.api.client"):
+            reservations = await client.get_all_reservations(100)
+
+        ids = {reservation.id for reservation in reservations}
+        parsed_first_page = [
+            reservation
+            for reservation in reservations
+            if reservation.id < DEFAULT_PAGE_LIMIT
+        ]
+        assert len(parsed_first_page) == DEFAULT_PAGE_LIMIT - 1
+        assert DEFAULT_PAGE_LIMIT not in ids
+        assert DEFAULT_PAGE_LIMIT + 1 in ids
+        assert route.call_count == 2
+        assert f"afterId={DEFAULT_PAGE_LIMIT}" in str(route.calls[1].request.url)
+        assert "listing 100" in caplog.text
+        assert str(DEFAULT_PAGE_LIMIT) in caplog.text
+
+    async def test_get_all_reservations_stops_on_missing_cursor(
+        self,
+        mock_httpx_client: httpx.AsyncClient,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A missing raw cursor ID does not crash pagination."""
+        page = [
+            make_reservation_response(id=i, listingMapId=100)
+            for i in range(1, DEFAULT_PAGE_LIMIT)
+        ]
+        malformed = make_reservation_response(listingMapId=100)
+        del malformed["id"]
+        page.append(malformed)
+
+        route = respx.get(f"{FAKE_BASE_URL}/v1/reservations").mock(
+            return_value=httpx.Response(
+                200,
+                json={"status": "success", "result": page},
+            )
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with caplog.at_level("WARNING", logger="custom_components.hostaway.api.client"):
+            reservations = await client.get_all_reservations(100)
+
+        assert len(reservations) == DEFAULT_PAGE_LIMIT - 1
+        assert route.call_count == 1
+        assert "Stopping reservation pagination for listing 100" in caplog.text
+        assert "id is required" in caplog.text
+
     async def test_empty_result_returns_empty_list(
         self, mock_httpx_client: httpx.AsyncClient
     ) -> None:

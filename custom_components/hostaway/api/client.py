@@ -80,18 +80,66 @@ class HostawayApiClient:
         if after_id is not None:
             params["afterId"] = after_id
         items = await self._request_results("/v1/reservations", params=params)
-        return [HostawayReservation.from_api_response(item) for item in items]
+        return self._parse_reservations(items, listing_id)
 
     async def get_all_reservations(self, listing_id: int) -> list[HostawayReservation]:
         """Return all reservations for a listing."""
         reservations: list[HostawayReservation] = []
         after_id: int | None = None
         while True:
-            page = await self.get_reservations_page(listing_id, after_id=after_id)
-            reservations.extend(page)
-            if len(page) < DEFAULT_PAGE_LIMIT:
+            params: dict[str, int] = {
+                "listingId": listing_id,
+                "limit": DEFAULT_PAGE_LIMIT,
+            }
+            if after_id is not None:
+                params["afterId"] = after_id
+            items = await self._request_results("/v1/reservations", params=params)
+            reservations.extend(self._parse_reservations(items, listing_id))
+            if len(items) < DEFAULT_PAGE_LIMIT:
                 return reservations
-            after_id = page[-1].id
+            after_id = self._reservation_page_cursor(items, listing_id)
+            if after_id is None:
+                return reservations
+
+    def _parse_reservations(
+        self, items: list[dict[str, Any]], listing_id: int
+    ) -> list[HostawayReservation]:
+        """Parse reservation records, skipping malformed API records."""
+        reservations: list[HostawayReservation] = []
+        for item in items:
+            try:
+                reservations.append(HostawayReservation.from_api_response(item))
+            except ValueError as exc:
+                reservation_id = item.get("id")
+                if reservation_id is None:
+                    _LOGGER.warning(
+                        "Skipping malformed Hostaway reservation for listing %s: %s",
+                        listing_id,
+                        exc,
+                    )
+                else:
+                    _LOGGER.warning(
+                        "Skipping malformed Hostaway reservation %s for listing %s: %s",
+                        reservation_id,
+                        listing_id,
+                        exc,
+                    )
+        return reservations
+
+    def _reservation_page_cursor(
+        self, items: list[dict[str, Any]], listing_id: int
+    ) -> int | None:
+        """Return the raw cursor ID for a full reservation page."""
+        cursor = items[-1].get("id")
+        if isinstance(cursor, bool) or not isinstance(cursor, int) or cursor <= 0:
+            _LOGGER.warning(
+                "Stopping reservation pagination for listing %s because "
+                "the last raw reservation has invalid id %r",
+                listing_id,
+                cursor,
+            )
+            return None
+        return cursor
 
     async def create_task(self, data: dict[str, Any]) -> dict[str, Any]:
         """Create a task."""

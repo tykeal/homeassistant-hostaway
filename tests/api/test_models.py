@@ -382,6 +382,18 @@ class TestHostawayReservationFromApiResponse:
         assert res.confirmation_code == "ABC123"
         assert res.nights == 4
 
+    def test_zero_nights_allowed(self) -> None:
+        """Zero-night reservations are valid Hostaway records."""
+        data = make_reservation_response(nights=0)
+        res = HostawayReservation.from_api_response(data)
+        assert res.nights == 0
+
+    def test_negative_nights_raises(self) -> None:
+        """Negative nights remain invalid."""
+        data = make_reservation_response(nights=-1)
+        with pytest.raises(ValueError, match="nights"):
+            HostawayReservation.from_api_response(data)
+
     def test_optional_fields_default_to_none(self) -> None:
         """Optional fields default to None when missing."""
         data = {
