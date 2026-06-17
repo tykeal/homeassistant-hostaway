@@ -137,16 +137,26 @@ class HostawayApiClient:
         self, items: list[dict[str, Any]], listing_id: int
     ) -> int | None:
         """Return the raw cursor ID for a full reservation page."""
-        cursor = items[-1].get("id")
-        if isinstance(cursor, bool) or not isinstance(cursor, int) or cursor <= 0:
-            _LOGGER.warning(
-                "Stopping reservation pagination for listing %s because "
-                "the last raw reservation has invalid id %r",
-                listing_id,
-                cursor,
-            )
-            return None
-        return cursor
+        last_raw_id = items[-1].get("id")
+        for item in reversed(items):
+            cursor = item.get("id")
+            if isinstance(cursor, bool) or not isinstance(cursor, int) or cursor <= 0:
+                continue
+            if cursor != last_raw_id:
+                _LOGGER.warning(
+                    "Using reservation %s as pagination cursor for listing %s "
+                    "because the last raw reservation has invalid id %r",
+                    cursor,
+                    listing_id,
+                    last_raw_id,
+                )
+            return cursor
+        _LOGGER.warning(
+            "Stopping reservation pagination for listing %s because "
+            "the raw reservation page has no valid cursor id",
+            listing_id,
+        )
+        return None
 
     async def create_task(self, data: dict[str, Any]) -> dict[str, Any]:
         """Create a task."""
