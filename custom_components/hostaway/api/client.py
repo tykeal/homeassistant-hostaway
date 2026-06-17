@@ -89,12 +89,25 @@ class HostawayApiClient:
         after_id: int | None = None
         while True:
             items = await self._get_reservation_items(listing_id, after_id=after_id)
+            if len(items) == DEFAULT_PAGE_LIMIT:
+                next_after_id = self._reservation_page_cursor(items, listing_id)
+                if next_after_id is None:
+                    reservations.extend(self._parse_reservations(items, listing_id))
+                    return reservations
+                if after_id is not None and next_after_id <= after_id:
+                    _LOGGER.warning(
+                        "Stopping reservation pagination for listing %s because "
+                        "cursor %s did not advance beyond afterId %s",
+                        listing_id,
+                        next_after_id,
+                        after_id,
+                    )
+                    return reservations
+                reservations.extend(self._parse_reservations(items, listing_id))
+                after_id = next_after_id
+                continue
             reservations.extend(self._parse_reservations(items, listing_id))
-            if len(items) < DEFAULT_PAGE_LIMIT:
-                return reservations
-            after_id = self._reservation_page_cursor(items, listing_id)
-            if after_id is None:
-                return reservations
+            return reservations
 
     async def _get_reservation_items(
         self,
