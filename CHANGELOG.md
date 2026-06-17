@@ -34,3 +34,10 @@ Initial development — will become 0.1.0 on first release.
 - Automatic retry with exponential backoff on API
   rate limits and server errors
 - HACS compatibility
+
+### Fixed
+
+- Reservations with zero nights no longer crash
+  coordinator refreshes.
+- A single malformed reservation is skipped and
+  logged instead of failing the whole batch.
