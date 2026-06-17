@@ -400,7 +400,7 @@ class HostawayReservation:
         total_price = data.get("totalPrice")
         _validate_non_negative(total_price, "total_price", types=(int, float))
         nights = data.get("nights")
-        _validate_positive(nights, "nights")
+        _validate_non_negative(nights, "nights")
 
         return cls(
             id=data["id"],
