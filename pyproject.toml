@@ -23,7 +23,7 @@ test = [
     "pytest>=8.0",
     "pytest-asyncio>=0.25",
     "pytest-cov>=6.0",
-    "pytest-homeassistant-custom-component>=0.13.339",
+    "pytest-homeassistant-custom-component>=0.13.340",
     "respx>=0.22",
 ]
 
@@ -36,7 +36,7 @@ dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.25",
     "pytest-cov>=6.0",
-    "pytest-homeassistant-custom-component>=0.13.339",
+    "pytest-homeassistant-custom-component>=0.13.340",
     "respx>=0.22",
     "ruff>=0.15.17",
 ]
