@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Awaitable, Callable
-from typing import Any, Protocol
+from typing import Any, Protocol, TypeGuard
 
 from custom_components.hostaway.api.const import DEFAULT_PAGE_LIMIT
 from custom_components.hostaway.api.models import HostawayReservation
@@ -70,9 +70,9 @@ def reservation_page_cursor(items: list[dict[str, Any]], listing_id: int) -> int
     last_raw_id = items[-1].get("id")
     for item in reversed(items):
         cursor = item.get("id")
-        if isinstance(cursor, bool) or not isinstance(cursor, int) or cursor <= 0:
+        if not _is_valid_cursor(cursor):
             continue
-        if cursor != last_raw_id:
+        if not _is_valid_cursor(last_raw_id) or cursor != last_raw_id:
             _LOGGER.warning(
                 "Using reservation %s as pagination cursor for listing %s "
                 "because the last raw reservation has invalid id %r",
@@ -135,3 +135,8 @@ def _log_skipped_reservation(
         listing_id,
         exc,
     )
+
+
+def _is_valid_cursor(value: object) -> TypeGuard[int]:
+    """Return whether a raw reservation ID is usable as a cursor."""
+    return not isinstance(value, bool) and isinstance(value, int) and value > 0

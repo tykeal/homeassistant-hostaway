@@ -91,6 +91,26 @@ def test_reservation_page_cursor_uses_last_valid_raw_id(
     assert "invalid id True" in caplog.text
 
 
+def test_reservation_page_cursor_warns_for_bool_last_id(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A boolean final raw ID still emits the fallback warning."""
+    listing_id = 12345
+    items = [
+        make_reservation_response(id=1, listingMapId=listing_id),
+        make_reservation_response(id=True, listingMapId=listing_id),
+    ]
+
+    with caplog.at_level(
+        "WARNING", logger="custom_components.hostaway.api.reservations"
+    ):
+        cursor = reservation_page_cursor(items, listing_id)
+
+    assert cursor == 1
+    assert "Using reservation 1 as pagination cursor" in caplog.text
+    assert "invalid id True" in caplog.text
+
+
 def test_reservation_page_cursor_stops_on_empty_page(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
