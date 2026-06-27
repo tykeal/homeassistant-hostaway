@@ -1145,7 +1145,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'test'", specifier = ">=8.0" },
     { name = "pytest-asyncio", marker = "extra == 'test'", specifier = ">=0.25" },
     { name = "pytest-cov", marker = "extra == 'test'", specifier = ">=6.0" },
-    { name = "pytest-homeassistant-custom-component", marker = "extra == 'test'", specifier = ">=0.13.339" },
+    { name = "pytest-homeassistant-custom-component", marker = "extra == 'test'", specifier = ">=0.13.340" },
     { name = "respx", marker = "extra == 'test'", specifier = ">=0.22" },
 ]
 provides-extras = ["test"]
@@ -1159,7 +1159,7 @@ dev = [
     { name = "pytest", specifier = ">=8.0" },
     { name = "pytest-asyncio", specifier = ">=0.25" },
     { name = "pytest-cov", specifier = ">=6.0" },
-    { name = "pytest-homeassistant-custom-component", specifier = ">=0.13.339" },
+    { name = "pytest-homeassistant-custom-component", specifier = ">=0.13.340" },
     { name = "respx", specifier = ">=0.22" },
     { name = "ruff", specifier = ">=0.15.18" },
 ]
