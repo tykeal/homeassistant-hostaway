@@ -38,7 +38,7 @@ dev = [
     "pytest-cov>=6.0",
     "pytest-homeassistant-custom-component>=0.13.339",
     "respx>=0.22",
-    "ruff>=0.15.17",
+    "ruff>=0.15.18",
 ]
 
 [tool.hatch.version]
