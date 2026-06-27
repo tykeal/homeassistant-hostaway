@@ -52,6 +52,21 @@ def test_reservation_page_cursor_uses_last_valid_raw_id(
     assert "invalid id True" in caplog.text
 
 
+def test_reservation_page_cursor_stops_on_empty_page(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The cursor returns None when a raw page is empty."""
+    listing_id = 12345
+
+    with caplog.at_level(
+        "WARNING", logger="custom_components.hostaway.api.reservations"
+    ):
+        cursor = reservation_page_cursor([], listing_id)
+
+    assert cursor is None
+    assert "raw reservation page is empty" in caplog.text
+
+
 def test_reservation_page_cursor_stops_without_valid_id(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

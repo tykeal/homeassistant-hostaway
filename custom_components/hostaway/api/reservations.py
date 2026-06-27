@@ -60,6 +60,13 @@ def parse_reservations(
 
 def reservation_page_cursor(items: list[dict[str, Any]], listing_id: int) -> int | None:
     """Return the raw cursor ID for a full reservation page."""
+    if not items:
+        _LOGGER.warning(
+            "Stopping reservation pagination for listing %s because "
+            "the raw reservation page is empty",
+            listing_id,
+        )
+        return None
     last_raw_id = items[-1].get("id")
     for item in reversed(items):
         cursor = item.get("id")
