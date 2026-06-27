@@ -1,0 +1,145 @@
+# SPDX-FileCopyrightText: 2026 Andrew Grimberg <tykeal@bardicgrove.org>
+# SPDX-License-Identifier: Apache-2.0
+"""Tests for Hostaway reservation pagination helpers."""
+
+from __future__ import annotations
+
+from typing import Any
+
+import pytest
+
+from custom_components.hostaway.api.const import DEFAULT_PAGE_LIMIT
+from custom_components.hostaway.api.reservations import (
+    fetch_all_reservations,
+    parse_reservations,
+    reservation_page_cursor,
+)
+from tests.helpers import make_reservation_response
+
+
+async def test_fetch_all_reservations_does_not_parse_stale_page(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A non-advancing page stops before parsing discarded items."""
+    listing_id = 12345
+    page1 = [
+        make_reservation_response(id=item_id, listingMapId=listing_id)
+        for item_id in range(1, DEFAULT_PAGE_LIMIT + 1)
+    ]
+    page2 = [
+        make_reservation_response(
+            id=item_id,
+            listingMapId=listing_id,
+            nights=-1 if item_id == 1 else 4,
+        )
+        for item_id in range(1, DEFAULT_PAGE_LIMIT + 1)
+    ]
+    pages = iter([page1, page2])
+
+    async def fetch_page(_after_id: int | None, _limit: int) -> list[dict[str, Any]]:
+        """Return the next synthetic reservation page."""
+        return next(pages)
+
+    with caplog.at_level(
+        "WARNING", logger="custom_components.hostaway.api.reservations"
+    ):
+        reservations = await fetch_all_reservations(fetch_page, listing_id)
+
+    assert [reservation.id for reservation in reservations] == list(
+        range(1, DEFAULT_PAGE_LIMIT + 1)
+    )
+    assert "did not advance" in caplog.text
+    assert "Skipping malformed" not in caplog.text
+
+
+def test_parse_reservations_skips_malformed_item(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Malformed reservation items are skipped with a warning."""
+    listing_id = 12345
+    valid = make_reservation_response(id=1, listingMapId=listing_id)
+    malformed = make_reservation_response(id=2, listingMapId=listing_id, nights=-1)
+
+    with caplog.at_level(
+        "WARNING", logger="custom_components.hostaway.api.reservations"
+    ):
+        reservations = parse_reservations([valid, malformed], listing_id)
+
+    assert [reservation.id for reservation in reservations] == [1]
+    assert f"reservation 2 for listing {listing_id}" in caplog.text
+    assert "nights must be non-negative" in caplog.text
+
+
+def test_reservation_page_cursor_uses_last_valid_raw_id(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The cursor falls back to the last valid raw reservation ID."""
+    listing_id = 12345
+    items = [
+        make_reservation_response(id=1, listingMapId=listing_id),
+        make_reservation_response(id=2, listingMapId=listing_id),
+        make_reservation_response(id=True, listingMapId=listing_id),
+    ]
+
+    with caplog.at_level(
+        "WARNING", logger="custom_components.hostaway.api.reservations"
+    ):
+        cursor = reservation_page_cursor(items, listing_id)
+
+    assert cursor == 2
+    assert "Using reservation 2 as pagination cursor" in caplog.text
+    assert "invalid id True" in caplog.text
+
+
+def test_reservation_page_cursor_warns_for_bool_last_id(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A boolean final raw ID still emits the fallback warning."""
+    listing_id = 12345
+    items = [
+        make_reservation_response(id=1, listingMapId=listing_id),
+        make_reservation_response(id=True, listingMapId=listing_id),
+    ]
+
+    with caplog.at_level(
+        "WARNING", logger="custom_components.hostaway.api.reservations"
+    ):
+        cursor = reservation_page_cursor(items, listing_id)
+
+    assert cursor == 1
+    assert "Using reservation 1 as pagination cursor" in caplog.text
+    assert "invalid id True" in caplog.text
+
+
+def test_reservation_page_cursor_stops_on_empty_page(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The cursor returns None when a raw page is empty."""
+    listing_id = 12345
+
+    with caplog.at_level(
+        "WARNING", logger="custom_components.hostaway.api.reservations"
+    ):
+        cursor = reservation_page_cursor([], listing_id)
+
+    assert cursor is None
+    assert "raw reservation page is empty" in caplog.text
+
+
+def test_reservation_page_cursor_stops_without_valid_id(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The cursor returns None when a raw page has no valid IDs."""
+    listing_id = 12345
+    items = [
+        make_reservation_response(id=0, listingMapId=listing_id),
+        make_reservation_response(id="bad", listingMapId=listing_id),
+    ]
+
+    with caplog.at_level(
+        "WARNING", logger="custom_components.hostaway.api.reservations"
+    ):
+        cursor = reservation_page_cursor(items, listing_id)
+
+    assert cursor is None
+    assert "no valid cursor id" in caplog.text

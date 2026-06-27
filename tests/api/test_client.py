@@ -642,7 +642,9 @@ class TestPagination:
         tm = _make_mock_token_manager()
         client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
 
-        with caplog.at_level("WARNING", logger="custom_components.hostaway.api.client"):
+        with caplog.at_level(
+            "WARNING", logger="custom_components.hostaway.api.reservations"
+        ):
             reservations = await client.get_all_reservations(listing_id)
 
         ids = {reservation.id for reservation in reservations}
@@ -689,7 +691,9 @@ class TestPagination:
         tm = _make_mock_token_manager()
         client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
 
-        with caplog.at_level("WARNING", logger="custom_components.hostaway.api.client"):
+        with caplog.at_level(
+            "WARNING", logger="custom_components.hostaway.api.reservations"
+        ):
             reservations = await client.get_all_reservations(100)
 
         assert len(reservations) == DEFAULT_PAGE_LIMIT
@@ -718,7 +722,9 @@ class TestPagination:
         tm = _make_mock_token_manager()
         client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
 
-        with caplog.at_level("WARNING", logger="custom_components.hostaway.api.client"):
+        with caplog.at_level(
+            "WARNING", logger="custom_components.hostaway.api.reservations"
+        ):
             reservations = await client.get_all_reservations(100)
 
         assert len(reservations) == DEFAULT_PAGE_LIMIT

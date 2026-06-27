@@ -1,0 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Andrew Grimberg <tykeal@bardicgrove.org>
+# SPDX-License-Identifier: Apache-2.0
+---
+version: 1
+ci:
+  failBelow: 100
