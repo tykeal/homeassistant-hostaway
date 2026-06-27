@@ -4,13 +4,52 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
+from custom_components.hostaway.api.const import DEFAULT_PAGE_LIMIT
 from custom_components.hostaway.api.reservations import (
+    fetch_all_reservations,
     parse_reservations,
     reservation_page_cursor,
 )
 from tests.helpers import make_reservation_response
+
+
+async def test_fetch_all_reservations_does_not_parse_stale_page(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A non-advancing page stops before parsing discarded items."""
+    listing_id = 12345
+    page1 = [
+        make_reservation_response(id=item_id, listingMapId=listing_id)
+        for item_id in range(1, DEFAULT_PAGE_LIMIT + 1)
+    ]
+    page2 = [
+        make_reservation_response(
+            id=item_id,
+            listingMapId=listing_id,
+            nights=-1 if item_id == 1 else 4,
+        )
+        for item_id in range(1, DEFAULT_PAGE_LIMIT + 1)
+    ]
+    pages = iter([page1, page2])
+
+    async def fetch_page(_after_id: int | None, _limit: int) -> list[dict[str, Any]]:
+        """Return the next synthetic reservation page."""
+        return next(pages)
+
+    with caplog.at_level(
+        "WARNING", logger="custom_components.hostaway.api.reservations"
+    ):
+        reservations = await fetch_all_reservations(fetch_page, listing_id)
+
+    assert [reservation.id for reservation in reservations] == list(
+        range(1, DEFAULT_PAGE_LIMIT + 1)
+    )
+    assert "did not advance" in caplog.text
+    assert "Skipping malformed" not in caplog.text
 
 
 def test_parse_reservations_skips_malformed_item(
