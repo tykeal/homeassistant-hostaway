@@ -42,3 +42,6 @@ htmlcov/
 
 # Documentation build
 docs/_build/
+
+# aislop local score history (telemetry, not tracked)
+.aislop/history.jsonl
