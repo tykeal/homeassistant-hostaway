@@ -47,7 +47,7 @@ jobs:
       - name: "Gather repository metadata"
         id: repo-metadata
         # yamllint disable-line rule:line-length
-        uses: lfreleng-actions/repository-metadata-action@61e837ecf6a21ef991c14991b43560f592a50a24  # v0.2.3
+        uses: lfreleng-actions/repository-metadata-action@8d17362fe9a656744433f3dec7fc60f14b23f858  # v0.2.6
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           github_summary: 'true'
