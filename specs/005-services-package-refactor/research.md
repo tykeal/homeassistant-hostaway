@@ -33,8 +33,15 @@ class ServiceDefinition(NamedTuple):
 
 
 SERVICE_DEFINITIONS: list[ServiceDefinition] = [
-    ServiceDefinition("set_door_code", async_handle_set_door_code, SERVICE_SET_DOOR_CODE_SCHEMA, None),
-    ServiceDefinition("get_reservations", async_handle_get_reservations, SERVICE_GET_RESERVATIONS_SCHEMA, SupportsResponse.OPTIONAL),
+    ServiceDefinition(
+        "set_door_code", async_handle_set_door_code, SERVICE_SET_DOOR_CODE_SCHEMA, None
+    ),
+    ServiceDefinition(
+        "get_reservations",
+        async_handle_get_reservations,
+        SERVICE_GET_RESERVATIONS_SCHEMA,
+        SupportsResponse.OPTIONAL,
+    ),
     # ... etc
 ]
 
@@ -148,6 +155,7 @@ To:
 
 ```python
 from custom_components.hostaway.services import async_unregister_services
+
 async_unregister_services(hass)
 ```
 

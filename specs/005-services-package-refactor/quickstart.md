@@ -52,20 +52,24 @@ custom_components/hostaway/services/
 2. **Add the schema** in `schemas.py`:
 
    ```python
-   SERVICE_MY_SERVICE_SCHEMA = vol.Schema({
-       vol.Required("some_field"): _positive_int,
-   })
+   SERVICE_MY_SERVICE_SCHEMA = vol.Schema(
+       {
+           vol.Required("some_field"): _positive_int,
+       }
+   )
    ```
 
 3. **Add a single entry** to `SERVICE_DEFINITIONS` in `__init__.py`:
 
    ```python
-   ServiceDefinition(
-       "my_service",
-       async_handle_my_service,
-       SERVICE_MY_SERVICE_SCHEMA,
-       SupportsResponse.ONLY,
-   ),
+   (
+       ServiceDefinition(
+           "my_service",
+           async_handle_my_service,
+           SERVICE_MY_SERVICE_SCHEMA,
+           SupportsResponse.ONLY,
+       ),
+   )
    ```
 
 That's it — no closures, no duplicate registration code.
