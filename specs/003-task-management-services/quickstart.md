@@ -103,9 +103,7 @@ async def async_handle_create_task(
 ### Listing Name Resolution
 
 ```python
-def _resolve_listing_id(
-    hass: HomeAssistant, call_data: dict[str, Any]
-) -> int | None:
+def _resolve_listing_id(hass: HomeAssistant, call_data: dict[str, Any]) -> int | None:
     """Resolve listing_id from call data (listing_id or listing_name)."""
     if "listing_id" in call_data:
         return call_data["listing_id"]
