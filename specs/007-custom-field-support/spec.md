@@ -111,8 +111,8 @@ object with its id, `varName`, display name, type, and current value.
 
 As an automation author, I want a service that sets one or more custom variables
 on a listing or reservation, so that Home Assistant can push operational state
-back into Hostaway — and I need certainty that setting one variable does not
-erase the others or any unrelated listing data.
+back into Hostaway — and I need certainty that normal writes do not erase the
+other values read immediately before the write or any unrelated listing data.
 
 **Why this priority**: Write is the other half of the requested capability, and
 the clobber risk makes it the highest-stakes part of the feature: a careless
@@ -158,11 +158,11 @@ those stories remain functional with a single addressing mode.
 
 **Acceptance Scenarios**:
 
-1. **Given** a write or read request that names a field by `varName`, **When**
-   the service runs, **Then** the name is resolved to the correct
-   `customFieldId` and the correct field is affected.
-2. **Given** a request that names a field by `customFieldId`, **When** the
-   service runs, **Then** the id is used directly.
+1. **Given** a write request that names a field by `varName`, **When** the
+   service runs, **Then** the name is resolved to the correct `customFieldId`
+   and the correct field is affected.
+2. **Given** a write request that names a field by `customFieldId`, **When**
+   the service runs, **Then** the id is used directly.
 3. **Given** a request that supplies neither `varName` nor `customFieldId`, or
    supplies both with conflicting targets, **When** the service runs, **Then**
    it fails validation with a message explaining the correct usage.
@@ -228,7 +228,13 @@ field they operate on and cross-reference each other.
   custom fields. They MUST be ignored entirely by this feature.
 - **Partial-payload rejection**: Hostaway turns out to treat
   `PUT /v1/listings/{id}` as a full replacement and drops omitted custom values.
-  The write path must be built so this does not silently destroy data.
+  Listing writes MUST remain unavailable until they can be performed without
+  silently destroying data.
+- **Concurrent external edit**: a user changes the same Hostaway object in the
+  dashboard after Home Assistant reads current custom values but before the
+  write reaches Hostaway. This feature only guarantees preservation of values
+  visible to the write before it sends the update, unless Hostaway provides a
+  conflict-detection mechanism that can make concurrent edits detectable.
 - **Empty account**: an account with no custom fields defined at all. Reads
   return empty collections, writes fail cleanly, nothing errors on startup.
 - **Rate limiting**: Hostaway permits 200 requests per 10 seconds per account
@@ -285,9 +291,12 @@ field they operate on and cross-reference each other.
   unchanged and MUST NOT gain custom-variable attributes.
 - **FR-012**: Custom variables MUST be exposed as attributes on the existing
   reservation sensor, for the reservation that sensor currently represents.
+  Existing reservation attributes MUST remain unchanged except for adding the
+  custom-variable collection.
 - **FR-013**: Reads MUST include fields flagged hidden (`isPublic=0`).
-- **FR-014**: Exposed attributes MUST be keyed by `varName` where a definition
-  is available, with the human-readable field name also discoverable.
+- **FR-014**: Sensor attributes MUST expose one custom-variable collection. The
+  collection MUST be keyed by `varName` where a definition is available, with
+  the human-readable field name also discoverable.
 - **FR-015**: A value whose `customFieldId` has no matching definition MUST
   still be surfaced, under a stable key derived from the id, and MUST be clearly
   distinguishable from a resolved field.
@@ -301,9 +310,11 @@ field they operate on and cross-reference each other.
 
 - **FR-018**: The integration MUST provide a response-returning service that
   returns the custom variables for a specified listing or reservation.
-- **FR-019**: The read service response MUST include, per field:
+- **FR-019**: The read service response MUST include, per resolved field:
   `customFieldId`, `varName`, display name, type, possible values when the type
-  is `dropdown`, and the current value.
+  is `dropdown`, and the current value. Unresolved fields MUST remain in the
+  response with the numeric id, current value, and a clear unresolved indicator,
+  while unavailable definition metadata is omitted or empty.
 - **FR-020**: The read service MUST include defined fields that currently have
   no value, so automations can discover the available field set.
 - **FR-021**: The read service MUST return a clear, actionable error when the
@@ -321,15 +332,17 @@ field they operate on and cross-reference each other.
   or that identifies a field that cannot be resolved for the target object type,
   and MUST make no change when it does so.
 - **FR-026**: The write MUST preserve every custom variable the caller did not
-  name — setting one variable MUST NOT clear the others. The implementation
-  MUST achieve this by reading current values and submitting a merged set.
+  name — setting one variable MUST NOT clear the others. Writes MUST be based on
+  current values read before the update and submit a merged set.
 - **FR-027**: The write MUST NOT modify any built-in field of the target
   listing or reservation.
 - **FR-028**: Before the merge strategy is relied upon, it MUST be explicitly
   verified against a real Hostaway listing that a partial payload to
   `PUT /v1/listings/{id}` does not clear unrelated listing data. The existing
   `update_reservation` partial payload (`{"doorCode": ...}`) is supporting
-  evidence but is not verification for the listing endpoint.
+  evidence but is not verification for the listing endpoint. If that
+  verification fails, listing writes MUST remain unavailable until a safe
+  payload or endpoint is identified.
 - **FR-029**: The write service MUST validate submitted values against the
   field's declared type where practical: `number` fields accept numeric values;
   `dropdown` fields accept only values present in `possibleValues`.
@@ -396,8 +409,8 @@ field they operate on and cross-reference each other.
   unchanged, verified against a real listing carrying at least three populated
   custom variables.
 - **SC-003**: An automation author can read a named custom variable and act on
-  it using only the documented service and `varName`, without knowing any
-  numeric id.
+  it from the documented service response using only `varName`, without knowing
+  any numeric id.
 - **SC-004**: A malformed or unrecognised custom field record never prevents a
   listing or reservation refresh from completing; the remaining objects and
   fields are still delivered.
@@ -410,9 +423,10 @@ field they operate on and cross-reference each other.
 - **SC-007**: A user reading the integration documentation can correctly state
   whether `doorCode` is a built-in field or a custom variable, and which service
   writes it.
-- **SC-008**: All existing integration behaviour — including `set_door_code`,
-  existing sensor states, and existing attributes — is unchanged by this
-  feature.
+- **SC-008**: All existing integration behaviour — including `set_door_code`
+  and existing sensor states — is unchanged by this feature. Existing
+  attributes remain unchanged except for the new custom-variable collection on
+  the reservation sensor.
 
 ---
 
@@ -432,15 +446,14 @@ field they operate on and cross-reference each other.
   `update_reservation` behaviour — but this is treated as unverified for
   listings and FR-028 requires explicit verification before reliance.
 - A read-modify-write merge is performed immediately before each write rather
-  than relying on possibly stale coordinator data, so concurrent dashboard edits
-  are less likely to be overwritten.
-- Read and write services follow the integration's existing service conventions
-  (declarative registration, voluptuous schemas, `services.yaml` documentation,
-  response support where a payload is returned).
+  than relying on possibly stale coordinator data. Concurrent dashboard edits
+  made after that read are outside the no-clobber guarantee unless Hostaway
+  exposes a way to detect them.
+- Read and write services follow the integration's existing user-facing service
+  conventions, including clear documentation and response support where a
+  payload is returned.
 - Services operate on the account the config entry is authenticated against;
   multi-account support is unchanged by this feature.
 - Task-type custom fields, custom field definition management, and writable
   per-field entities are explicitly out of scope and may be revisited in a
   later feature.
-- New source files carry SPDX headers per `REUSE.toml`, and code is placed so
-  that no file exceeds the 400-line `maxFileLoc` quality gate.
