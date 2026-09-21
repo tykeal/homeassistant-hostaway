@@ -235,6 +235,10 @@ field they operate on and cross-reference each other.
   write reaches Hostaway. This feature only guarantees preservation of values
   visible to the write before it sends the update, unless Hostaway provides a
   conflict-detection mechanism that can make concurrent edits detectable.
+- **Concurrent Home Assistant writes**: two Home Assistant service calls update
+  different custom variables on the same object at the same time. Successful
+  calls MUST NOT clobber each other; each successful write must be based on a
+  current view that includes earlier successful Home Assistant writes.
 - **Empty account**: an account with no custom fields defined at all. Reads
   return empty collections, writes fail cleanly, nothing errors on startup.
 - **Rate limiting**: Hostaway permits 200 requests per 10 seconds per account
@@ -294,12 +298,16 @@ field they operate on and cross-reference each other.
   Existing reservation attributes MUST remain unchanged except for adding the
   custom-variable collection.
 - **FR-013**: Reads MUST include fields flagged hidden (`isPublic=0`).
-- **FR-014**: Sensor attributes MUST expose one custom-variable collection. The
-  collection MUST be keyed by `varName` where a definition is available, with
-  the human-readable field name also discoverable.
+- **FR-014**: Sensor attributes MUST expose one `custom_variables`
+  collection. The collection MUST be keyed by `varName` where a definition is
+  available. Each resolved entry MUST contain `customFieldId`, `varName`,
+  display name, type, possible values when the type is `dropdown`, current
+  value, and `resolved: true`. When no fields are present, the collection MUST
+  be empty.
 - **FR-015**: A value whose `customFieldId` has no matching definition MUST
-  still be surfaced, under a stable key derived from the id, and MUST be clearly
-  distinguishable from a resolved field.
+  still be surfaced under `custom_field_<customFieldId>`. The entry MUST
+  contain `customFieldId`, current value, `resolved: false`, and empty or absent
+  definition metadata so it is clearly distinguishable from a resolved field.
 - **FR-016**: The integration MUST NOT create a separate entity per custom
   field. Per-field dynamic entities are out of scope.
 - **FR-017**: Parsing of custom field values MUST NOT be able to fail a listing
@@ -313,8 +321,8 @@ field they operate on and cross-reference each other.
 - **FR-019**: The read service response MUST include, per resolved field:
   `customFieldId`, `varName`, display name, type, possible values when the type
   is `dropdown`, and the current value. Unresolved fields MUST remain in the
-  response with the numeric id, current value, and a clear unresolved indicator,
-  while unavailable definition metadata is omitted or empty.
+  response using the same `custom_field_<customFieldId>` key and unresolved
+  entry shape as sensor attributes.
 - **FR-020**: The read service MUST include defined fields that currently have
   no value, so automations can discover the available field set.
 - **FR-021**: The read service MUST return a clear, actionable error when the
@@ -334,48 +342,51 @@ field they operate on and cross-reference each other.
 - **FR-026**: The write MUST preserve every custom variable the caller did not
   name — setting one variable MUST NOT clear the others. Writes MUST be based on
   current values read before the update and submit a merged set.
-- **FR-027**: The write MUST NOT modify any built-in field of the target
+- **FR-027**: Concurrent Home Assistant writes to the same object MUST be
+  coordinated so one successful call cannot overwrite another successful call's
+  custom-variable changes.
+- **FR-028**: The write MUST NOT modify any built-in field of the target
   listing or reservation.
-- **FR-028**: Before the merge strategy is relied upon, it MUST be explicitly
+- **FR-029**: Before the merge strategy is relied upon, it MUST be explicitly
   verified against a real Hostaway listing that a partial payload to
   `PUT /v1/listings/{id}` does not clear unrelated listing data. The existing
   `update_reservation` partial payload (`{"doorCode": ...}`) is supporting
   evidence but is not verification for the listing endpoint. If that
   verification fails, listing writes MUST remain unavailable until a safe
   payload or endpoint is identified.
-- **FR-029**: The write service MUST validate submitted values against the
+- **FR-030**: The write service MUST validate submitted values against the
   field's declared type where practical: `number` fields accept numeric values;
   `dropdown` fields accept only values present in `possibleValues`.
-- **FR-030**: A validation failure MUST reject the whole call with an
+- **FR-031**: A validation failure MUST reject the whole call with an
   explanatory error and MUST NOT write any of the requested fields.
-- **FR-031**: The write service MUST support clearing a custom variable to an
+- **FR-032**: The write service MUST support clearing a custom variable to an
   empty value, distinguishably from omitting it.
-- **FR-032**: After a successful write, the affected sensor attributes MUST
+- **FR-033**: After a successful write, the affected sensor attributes MUST
   reflect the new value without waiting for the next scheduled poll.
-- **FR-033**: The write service MUST NOT create writable entities (text, number,
+- **FR-034**: The write service MUST NOT create writable entities (text, number,
   or select) for custom variables. Service-only is the write surface for this
   feature.
-- **FR-034**: Hostaway API errors during a write MUST surface as clear,
+- **FR-035**: Hostaway API errors during a write MUST surface as clear,
   actionable Home Assistant errors, consistent with existing services.
 
 #### Documentation
 
-- **FR-035**: User-facing service documentation MUST describe each new service,
+- **FR-036**: User-facing service documentation MUST describe each new service,
   its fields, and its response shape.
-- **FR-036**: Documentation MUST explicitly distinguish Hostaway **built-in**
+- **FR-037**: Documentation MUST explicitly distinguish Hostaway **built-in**
   fields (such as `doorCode`, written by `hostaway.set_door_code`) from
   **custom variables**, and cross-reference the two so they are not conflated.
-- **FR-037**: Documentation MUST state that hidden (`isPublic=0`) fields are
+- **FR-038**: Documentation MUST state that hidden (`isPublic=0`) fields are
   included in reads, and that task-type custom fields are unsupported.
 
 #### Operational constraints
 
-- **FR-038**: The added request volume (larger listing/reservation responses
+- **FR-039**: The added request volume (larger listing/reservation responses
   plus definition lookups) MUST stay within Hostaway's published limit of 200
   requests per 10 seconds per account and per IP under normal polling.
-- **FR-039**: Definition lookups MUST NOT be performed per listing, per
+- **FR-040**: Definition lookups MUST NOT be performed per listing, per
   reservation, or per field during a poll.
-- **FR-040**: Refresh-on-miss MUST NOT become an amplification vector. One
+- **FR-041**: Refresh-on-miss MUST NOT become an amplification vector. One
   definitions refresh MUST serve the whole refresh cycle instead of triggering
   repeated refreshes per object or per field.
 
@@ -406,8 +417,8 @@ field they operate on and cross-reference each other.
   interval of being set in the Hostaway dashboard.
 - **SC-002**: Setting a single custom variable via the write service leaves
   100% of that object's other custom variables and all of its built-in fields
-  unchanged, verified against a real listing carrying at least three populated
-  custom variables.
+  unchanged, verified for both listings and reservations. Listing verification
+  MUST use a real listing carrying at least three populated custom variables.
 - **SC-003**: An automation author can read a named custom variable and act on
   it from the documented service response using only `varName`, without knowing
   any numeric id.
@@ -442,9 +453,9 @@ field they operate on and cross-reference each other.
   and may change.
 - Values with no matching definition are keyed by their numeric id so that data
   is never silently dropped.
-- Hostaway's `PUT` endpoints honour partial payloads — supported by the existing
-  `update_reservation` behaviour — but this is treated as unverified for
-  listings and FR-028 requires explicit verification before reliance.
+- Hostaway's reservation update endpoint honours partial payloads, as supported
+  by the existing `update_reservation` behaviour. Listing update behaviour is
+  unverified, and FR-029 requires explicit verification before reliance.
 - A read-modify-write merge is performed immediately before each write rather
   than relying on possibly stale coordinator data. Concurrent dashboard edits
   made after that read are outside the no-clobber guarantee unless Hostaway

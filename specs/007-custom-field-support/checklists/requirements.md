@@ -7,7 +7,7 @@ proceeding to planning
 
 ## Content Quality
 
-- [x] No implementation details (languages, frameworks, APIs)
+- [x] No internal implementation details (languages, frameworks)
 - [x] Focused on user value and business needs
 - [x] Written for non-technical stakeholders
 - [x] All mandatory sections completed
@@ -38,8 +38,9 @@ proceeding to planning
   - **FR-011**: each listing gets one dedicated custom-variables sensor; the
     seven existing diagnostic listing sensors keep their current attribute
     surface.
-- Endpoint paths and payload shapes appear in the spec only where they are
-  the subject of a verification requirement (FR-028) or a
-  documentation-accuracy requirement (FR-036); they are drawn from issue
-  #195 and are not implementation prescriptions.
+- External API endpoint and payload details appear in the spec only where they
+  are the subject of a safety verification requirement (FR-029) or a
+  documentation-accuracy requirement (FR-037); they are drawn from issue #195
+  and define integration obligations rather than internal implementation
+  design.
 - No incomplete checklist items remain before `/speckit.plan`.
