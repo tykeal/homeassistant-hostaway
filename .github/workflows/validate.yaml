@@ -33,17 +33,17 @@ jobs:
     timeout-minutes: 5
     steps:
       # yamllint disable-line rule:line-length
-      - uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920  # v2.20.0
+      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c  # v2.21.0
         with:
           egress-policy: 'audit'
 
       - name: 'Checkout repository'
         # yamllint disable-line rule:line-length
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: 'Validate with hassfest'
         # yamllint disable-line rule:line-length
-        uses: home-assistant/actions/hassfest@f4ca6f671bd429efb108c0f2fa0ae8af0215986c  # master (no tags published)
+        uses: home-assistant/actions/hassfest@a7c616ce81ccda50150bf1595786c71b1883fabb  # master (no tags published)
 
   hacs:
     name: 'HACS'
@@ -53,13 +53,13 @@ jobs:
     timeout-minutes: 5
     steps:
       # yamllint disable-line rule:line-length
-      - uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920  # v2.20.0
+      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c  # v2.21.0
         with:
           egress-policy: 'audit'
 
       - name: 'Checkout repository'
         # yamllint disable-line rule:line-length
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: 'Validate with HACS'
         # yamllint disable-line rule:line-length
