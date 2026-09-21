@@ -121,6 +121,10 @@ repos:
       - id: ruff-check
         args: [--fix, --exit-non-zero-on-fix]
       - id: ruff-format
+        # ruff >=0.16 added `markdown` to this hook's default types, which
+        # reformats Python inside fenced code blocks at ruff's line-length
+        # (88) and then trips markdownlint MD013 (80). Keep ruff off Markdown.
+        types_or: [python, pyi, jupyter]
 
   - repo: https://github.com/fsfe/reuse-tool
     rev: 9fabf9eb815a57aac116b435e8346c200cdb8604  # frozen: v6.2.0
