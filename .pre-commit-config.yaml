@@ -69,7 +69,7 @@ repos:
       - id: trailing-whitespace
 
   - repo: https://github.com/igorshubovych/markdownlint-cli
-    rev: a4d5d37e66ebcd6b3705204a1d6dbb56dea66338  # frozen: v0.49.0
+    rev: 5b5dddc4fb0f83c3ea1fc5616fa63e115dce83e0  # frozen: v0.49.1
     hooks:
       - id: markdownlint
         args: ["--fix"]
@@ -82,7 +82,7 @@ repos:
         # args: ["-c body-max-line-length=120", "-c title-max-length=120"]
 
   - repo: https://github.com/openstack/bashate
-    rev: 5798d24d571676fc407e81df574c1ef57b520f23  # frozen: 2.1.1
+    rev: fbd7c2534c2701351c603ff700ddf08202430a31  # frozen: 2.1.1
     hooks:
       - id: bashate
         args: ["--ignore=E006,E011"]
@@ -93,14 +93,14 @@ repos:
           )
 
   - repo: https://github.com/shellcheck-py/shellcheck-py
-    rev: 745eface02aef23e168a8afb6b5737818efbea95  # frozen: v0.11.0.1
+    rev: a6564f5d57444e123433a5c9af733e3975c77229  # frozen: v0.11.0.1-1
     hooks:
       - id: shellcheck
         args: ["-x"] # Check external files
         exclude: ".specify/(extensions/git/|)scripts/*/*"
 
   - repo: https://github.com/Mateusz-Grzelinski/actionlint-py
-    rev: c04ed26e40637cab1aa9879c693832a9c120fb20  # frozen: v1.7.12.24
+    rev: 2f3dbd354aa118b539dee99d8eed05a83097a199  # frozen: v1.7.12.24
     hooks:
       - id: actionlint
 
@@ -116,14 +116,14 @@ repos:
           ]
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: 01a675ea018f2fb714478a5ffb83fcea8374bb06  # frozen: v0.15.21
+    rev: 2eeb5678de71a00c0902cbda7105d328432f72cb  # frozen: v0.16.8
     hooks:
       - id: ruff-check
         args: [--fix, --exit-non-zero-on-fix]
       - id: ruff-format
 
   - repo: https://github.com/fsfe/reuse-tool
-    rev: 9fabf9eb815a57aac116b435e8346c200cdb8604  # frozen: v6.2.0
+    rev: a1bb792acda6fd0724936b4ebbdbc8eceb9c0459  # frozen: v6.2.0
     hooks:
       - id: reuse
 
@@ -164,7 +164,7 @@ repos:
 
   # Check for misspellings in documentation files
   - repo: https://github.com/codespell-project/codespell
-    rev: 2ccb47ff45ad361a21071a7eedda4c37e6ae8c5a  # frozen: v2.4.2
+    rev: 57b21406f092110c18776e39b0bda50d37c945c8  # frozen: v2.4.3
     hooks:
       - id: codespell
         args: ["-L", "hass,checkin,astroid"]
@@ -178,7 +178,7 @@ repos:
   #       args: ['--py37-plus']
 
   - repo: https://github.com/econchick/interrogate
-    rev: a6268877efd41a21197445cc04cbf28f9c6facba  # frozen: 1.7.0
+    rev: 4894019dc8876092bc9b6d56878798c550fad998  # frozen: 1.7.0
     hooks:
       - id: interrogate
         args: [-vv, --fail-under=100]
@@ -186,7 +186,7 @@ repos:
           - setuptools
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: 41e691678310dfd3833f7ab4e180ddb014310356  # frozen: v2.3.0
+    rev: 7ff8d35ae36a7d2b968f2f90b4c723e292e594ee  # frozen: v2.3.1
     hooks:
       - id: mypy
         verbose: true
