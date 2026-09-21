@@ -230,8 +230,8 @@ field they operate on and cross-reference each other.
   custom fields. They MUST be ignored entirely by this feature.
 - **Partial-payload rejection**: Hostaway turns out to treat
   `PUT /v1/listings/{id}` as a full replacement and drops omitted custom values.
-  Listing writes MUST remain unavailable until they can be performed without
-  silently destroying data.
+  Listing writes MUST NOT ship until they can be performed without silently
+  destroying data.
 - **Concurrent external edit**: a user changes the same Hostaway object in the
   dashboard after Home Assistant reads current custom values but before the
   write reaches Hostaway. This feature only guarantees preservation of values
@@ -357,8 +357,8 @@ field they operate on and cross-reference each other.
   `PUT /v1/listings/{id}` does not clear unrelated listing data. The existing
   `update_reservation` partial payload (`{"doorCode": ...}`) is supporting
   evidence but is not verification for the listing endpoint. If that
-  verification fails, listing writes MUST remain unavailable until a safe
-  payload or endpoint is identified.
+  verification fails, listing write support MUST use a safe full payload or
+  another safe endpoint before it ships.
 - **FR-030**: The write service MUST validate submitted values against the
   field's declared type where practical: `number` fields accept numeric values;
   `dropdown` fields accept only values present in `possibleValues`.
@@ -372,7 +372,9 @@ field they operate on and cross-reference each other.
   or select) for custom variables. Service-only is the write surface for this
   feature.
 - **FR-035**: Hostaway API errors during a write MUST surface as clear,
-  actionable Home Assistant errors, consistent with existing services.
+  actionable Home Assistant errors, consistent with existing services. A
+  rejected custom-variable mutation MUST NOT be logged and then returned as
+  successful.
 
 #### Documentation
 
