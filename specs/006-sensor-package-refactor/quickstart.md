@@ -58,6 +58,7 @@ tests/sensor/
    ```python
    class HostawayNewSensor(HostawayEntity, SensorEntity):
        """New sensor entity for Hostaway."""
+
        # ... implementation
    ```
 
