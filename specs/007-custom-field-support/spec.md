@@ -288,8 +288,9 @@ field they operate on and cross-reference each other.
 
 #### Reading values
 
-- **FR-008**: Listing and reservation retrieval MUST request Hostaway's extra
-  resources so that `customFieldValues` is populated rather than returned empty.
+- **FR-008**: Listing and reservation retrieval MUST request Hostaway's
+  `includeResources=1` option on every relevant paginated request so that
+  `customFieldValues` is populated rather than returned empty.
 - **FR-009**: The listing model MUST carry parsed custom field values.
 - **FR-010**: The reservation model MUST carry parsed custom field values.
 - **FR-011**: Custom variables for each listing MUST be exposed as attributes
@@ -339,10 +340,13 @@ field they operate on and cross-reference each other.
 - **FR-023**: The write service MUST accept one or more field/value pairs in a
   single call.
 - **FR-024**: The write service MUST accept a field addressed by either
-  `varName` or `customFieldId`.
+  `varName` or `customFieldId`. Fields addressed by `customFieldId` MUST still
+  resolve to a definition for the target object type before any write is sent.
 - **FR-025**: The write service MUST reject a request that identifies no field,
   or that identifies a field that cannot be resolved for the target object type,
-  and MUST make no change when it does so.
+  and MUST make no change when it does so. Definition failures or unavailable
+  definitions MUST make writes fail rather than fall back to unchecked numeric
+  ids.
 - **FR-026**: The write MUST preserve every custom variable the caller did not
   name — setting one variable MUST NOT clear the others. Writes MUST be based on
   current values read before the update and submit a merged set, including
@@ -351,7 +355,9 @@ field they operate on and cross-reference each other.
   coordinated so one successful call cannot overwrite another successful call's
   custom-variable changes.
 - **FR-028**: The write MUST NOT modify any built-in field of the target
-  listing or reservation.
+  listing or reservation that is visible before the write is sent. If a safe
+  listing payload strategy cannot preserve or detect concurrent built-in field
+  edits, the write MUST fail rather than risk overwriting them.
 - **FR-029**: Before the merge strategy is relied upon, it MUST be explicitly
   verified against a real Hostaway listing that a partial payload to
   `PUT /v1/listings/{id}` does not clear unrelated listing data. The existing
