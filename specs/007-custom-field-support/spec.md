@@ -204,7 +204,9 @@ field they operate on and cross-reference each other.
   deleted after caching). The value MUST still be surfaced, under a stable
   synthetic key derived from the id, and MUST NOT cause the refresh to fail.
 - **Definition with no value**: a field is defined for the object type but the
-  object carries no value. Reads surface the field with an unset value.
+  object carries no value. The read service includes the field with an unset
+  value so automations can discover it; sensor collections remain empty unless
+  the object carries a value.
 - **Stale cached definitions**: a field created in the dashboard after the
   definitions were cached. Definitions refresh after a fixed one-hour cache
   lifetime and once when a value or requested field cannot be resolved from the
@@ -269,7 +271,9 @@ field they operate on and cross-reference each other.
   definitions. Definition management remains dashboard-only.
 - **FR-005**: The integration MUST cache definitions rather than refetching them
   for every read or write operation, to limit API call volume against the rate
-  limit.
+  limit. Definition caches MUST be isolated per authenticated Hostaway account
+  or config entry so one account's definitions never label, validate, or expose
+  another account's data.
 - **FR-006**: The cached definitions MUST be refreshable without restarting
   Home Assistant so that fields created in the dashboard become usable.
   Definitions MUST refresh after a fixed one-hour cache lifetime and on a cache
@@ -341,7 +345,8 @@ field they operate on and cross-reference each other.
   and MUST make no change when it does so.
 - **FR-026**: The write MUST preserve every custom variable the caller did not
   name — setting one variable MUST NOT clear the others. Writes MUST be based on
-  current values read before the update and submit a merged set.
+  current values read before the update and submit a merged set, including
+  unresolved values whose definitions are unavailable.
 - **FR-027**: Concurrent Home Assistant writes to the same object MUST be
   coordinated so one successful call cannot overwrite another successful call's
   custom-variable changes.
