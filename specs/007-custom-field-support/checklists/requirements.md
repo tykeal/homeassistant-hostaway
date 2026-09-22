@@ -36,13 +36,13 @@ proceeding to planning
 
 - Clarifications are resolved:
   - **FR-006**: definitions use a dedicated coordinator with a configurable
-    polling interval that defaults to 15 minutes and enforces a one-minute
-    minimum, with no user-invokable refresh service or refresh-on-miss
-    requirement.
+    `custom_field_definitions_scan_interval` option that defaults to 15
+    minutes and enforces a one-minute minimum, with no user-invokable refresh
+    service or refresh-on-miss requirement.
   - **FR-011**: each listing custom-variable value gets its own dynamic
-    diagnostic sensor keyed from `custom_` plus slugified `varName`, while the
-    seven existing diagnostic listing sensors keep their current attribute
-    surface.
+    diagnostic sensor keyed from `custom_` plus slugified `varName`, with
+    numeric-id disambiguation for collisions, while the seven existing
+    diagnostic listing sensors keep their current attribute surface.
 - External API endpoint and payload details appear in the spec only where they
   are the subject of a safety verification requirement (FR-035); they are
   drawn from issue #195 and define integration obligations rather than internal

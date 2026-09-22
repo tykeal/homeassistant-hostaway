@@ -73,7 +73,7 @@ matching the Hostaway dashboard.
 1. **Given** a listing with populated custom variables, **When** the listings
    poll completes, **Then** each variable is exposed as a diagnostic sensor for
    that listing, with a stable key derived from `custom_` plus the slugified
-   `varName`.
+   `varName`, disambiguated by numeric id when that key would collide.
 2. **Given** a reservation with populated custom variables, **When** the
    reservations poll completes, **Then** those variables are exposed as
    attributes on that listing's reservation sensor for the selected
@@ -319,11 +319,14 @@ field they operate on and cross-reference each other.
   Hostaway account or config entry so one account's definitions never label,
   validate, or expose another account's data.
 - **FR-006**: The custom field definitions coordinator MUST poll on a
-  user-configurable interval that defaults to 15 minutes, matching the existing
-  listing coordinator default. The interval MUST enforce the integration's
-  existing positive minimum of one minute. Fields created in the dashboard
-  become usable after the next scheduled definitions refresh; this feature MUST
-  NOT add a user-invokable definitions refresh service.
+  user-configurable interval persisted as
+  `custom_field_definitions_scan_interval` in the existing options flow. The
+  user-facing option MUST use a required integer number selector in minutes,
+  be labeled as the custom field definitions polling interval, default to 15
+  minutes, and enforce the integration's existing positive minimum of one
+  minute. Fields created in the dashboard become usable after the next
+  scheduled definitions refresh; this feature MUST NOT add a user-invokable
+  definitions refresh service.
 - **FR-007**: A failure to retrieve definitions MUST NOT prevent listing or
   reservation data from loading; the integration degrades to surfacing values
   by numeric id under stable fallback keys.
@@ -341,11 +344,17 @@ field they operate on and cross-reference each other.
 - **FR-011**: Each listing custom variable value MUST be exposed as its own
   diagnostic sensor for that listing. The entity key MUST be stable and derived
   from `custom_` plus the slugified `varName` when a definition is available
-  before that value is first observed; unresolved values MUST use a stable key
-  derived from the numeric id. If a later definitions refresh resolves a value
-  that already created a fallback-key sensor, the existing sensor MUST retain
-  its fallback entity key and update its metadata rather than creating a second
-  entity or renaming the entity id.
+  before that value is first observed. If the listing custom-field definition
+  set contains multiple `listing` definitions that would produce the same
+  `custom_<slugified varName>` key, including same-object-type duplicate
+  `varName` definitions or distinct `varName` values that slugify identically,
+  every resolved value for those definitions MUST use the deterministic key
+  `custom_<slugified varName>_<customFieldId>` from first observation.
+  Unresolved values MUST use a stable key derived from the numeric id. If a
+  later definitions refresh resolves a value that already created a
+  fallback-key sensor, the existing sensor MUST retain its fallback entity key
+  and update its metadata rather than creating a second entity or renaming the
+  entity id.
 - **FR-012**: Newly appearing listing custom variables MUST be discovered at
   runtime and added as new sensors without requiring a Home Assistant restart.
 - **FR-013**: The existing diagnostic listing sensors (`listing_id`,
@@ -516,13 +525,14 @@ field they operate on and cross-reference each other.
   reservation. Identified by the definition's numeric id plus the owning object.
   Meaningful to a user only when joined to its definition.
 - **Custom Field Definitions Coordinator**: A per-config-entry coordinator that
-  fetches and caches definitions on a user-configurable interval defaulting to
-  15 minutes, matching the listing coordinator default, and enforcing the
-  integration's one-minute minimum interval.
+  fetches and caches definitions on the
+  `custom_field_definitions_scan_interval` option, defaulting to 15 minutes
+  and enforcing the integration's one-minute minimum interval.
 - **Listing Custom-Field Sensor**: A dynamic per-listing, per-field diagnostic
   sensor whose state is one listing custom variable value. The stable entity
   key is based on `custom_` plus slugified `varName` when the definition is
-  known before first observation, with a numeric-id fallback for unresolved
+  known before first observation, appending `_<customFieldId>` when needed to
+  disambiguate key collisions, with a numeric-id fallback for unresolved
   values. Fallback-key sensors keep that entity key if a later definitions
   refresh resolves their metadata.
 - **Reservation**: Existing entity, extended to carry a collection of custom
@@ -586,7 +596,8 @@ field they operate on and cross-reference each other.
   diagnostic listing sensors keep their current state and attribute surfaces.
 - Where a definition is available, `varName` is used for listing custom-field
   sensor keys because it is the stable machine identifier; display names may
-  contain spaces and may change.
+  contain spaces and may change. Numeric ids are appended only when multiple
+  listing definitions would otherwise claim the same key.
 - Values with no matching definition are keyed by their numeric id so that data
   is never silently dropped.
 - Hostaway's reservation update endpoint honours partial payloads, as supported
