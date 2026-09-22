@@ -282,7 +282,10 @@ field they operate on and cross-reference each other.
   and per IP. Larger responses and definition lookups must not push the
   integration toward that ceiling.
 - **Value clearing**: a user wants to set a custom variable to empty. Clearing
-  must be expressible and distinguishable from "leave unchanged".
+  uses `value: null` so it is distinguishable from omitting the field and from
+  writing an empty string. Existing listing custom-field sensors for a cleared
+  value remain present with an empty state after a successful clear; no new
+  sensor is created for a field that was already absent.
 
 ---
 
@@ -425,10 +428,13 @@ field they operate on and cross-reference each other.
 - **FR-038**: A validation failure MUST reject the whole call with an
   explanatory error and MUST NOT write the requested field.
 - **FR-039**: The write service MUST support clearing a custom variable to an
-  empty value, distinguishably from omitting it.
+  empty value by accepting `value: null`. Null means clear the selected field
+  and bypasses local type validation; an empty string remains a literal value
+  for string-compatible Hostaway types.
 - **FR-040**: After a successful write, the affected sensor or reservation
   attribute MUST reflect the new value without waiting for the next scheduled
-  poll.
+  poll. After a successful clear, an existing listing custom-field sensor MUST
+  remain present with an empty state rather than disappearing immediately.
 - **FR-041**: The write service MUST NOT create writable entities (text,
   number, or select) for custom variables. Service-only is the write surface
   for this feature.
