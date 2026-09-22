@@ -20,7 +20,7 @@ SPDX-License-Identifier: Apache-2.0
   uv sync --all-extras --group dev
   ```
 
-- A Hostaway test account for manual verification of FR-035 before listing
+- A Hostaway test account for manual FR-035 and SC-003 verification before
   writes are enabled.
 
 ## Development order
@@ -31,13 +31,14 @@ SPDX-License-Identifier: Apache-2.0
 4. Listing custom-field key allocator and sensors.
 5. Reservation `custom_fields` attributes.
 6. Read services.
-7. FR-035 listing partial-PUT verification.
+7. FR-035 listing partial-PUT and SC-003 reservation no-clobber verification.
 8. Write service and no-clobber merge.
 9. Documentation and final validation.
 
-The FR-035 verification step is intentionally before listing write support.
-If listing partial PUT is destructive, keep listing writes disabled and fail
-closed while continuing with reads and reservation writes.
+The FR-035 and SC-003 verification steps are intentionally before write
+support. Listing and reservation writes each have a default-off executable
+gate. If a verification has not passed, `hostaway.set_custom_field` must fail
+closed for that target type while continuing to allow reads.
 
 ## Targeted test commands
 

@@ -226,6 +226,12 @@ Content-Type: application/json
 - Raw malformed entries are included unchanged.
 - If partial PUT verification fails, this endpoint cannot be used for listing
   writes until a safe full-payload strategy is proven.
+- The executable gate is
+  `custom_field_write_safety.listing_partial_put_verified`, stored per config
+  entry under `hass.data[DOMAIN][entry.entry_id]` and defaulting to false.
+  While false, `hostaway.set_custom_field` rejects listing writes with
+  `listing custom-field writes are disabled until FR-035 partial-PUT
+  verification passes` before reading the target or sending any mutation.
 
 ### PUT /v1/reservations/{id}
 
@@ -251,12 +257,19 @@ Content-Type: application/json
 
 **Safety contract**:
 
-- Existing `update_reservation` already sends partial reservation payloads for
-  built-in fields.
+- Reservation custom-field writes are disabled until SC-003 verifies a live
+  merged reservation write leaves every unrelated custom field and visible
+  built-in field unchanged.
 - Custom-field writes still read current reservation values first and submit a
   merged `customFieldValues` collection.
 - Built-in fields visible before the write, including `doorCode`, must remain
   unchanged.
+- The executable gate is
+  `custom_field_write_safety.reservation_no_clobber_verified`, stored per
+  config entry under `hass.data[DOMAIN][entry.entry_id]` and defaulting to
+  false. While false, `hostaway.set_custom_field` rejects reservation writes
+  with `reservation custom-field writes are disabled until SC-003 no-clobber
+  verification passes` before reading the target or sending any mutation.
 
 ## Home Assistant services
 
@@ -383,15 +396,21 @@ Exactly one of `customFieldId` or `varName` is required.
 - Boolean supplied for `number`.
 - Non-string supplied for `text` or `textarea`.
 - Missing `config_entry_id` when multiple entries are loaded.
+- Latest definitions refresh failed; stale definitions are read-only until the
+  next successful refresh.
 
 **Write errors**:
 
 - Target listing or reservation not found or inaccessible.
 - Definitions unavailable for write resolution.
 - Current object cannot be read for merge.
+- Current object's `customFieldValues` collection is missing, null, or a
+  non-list value. A present empty list is valid; any other non-list or absent
+  shape is rejected so writes cannot clear unknown existing values.
 - Malformed raw entries cannot be preserved.
 - Hostaway rejects the update.
 - Listing write attempted before FR-035 verification passes.
+- Reservation write attempted before SC-003 verification passes.
 
 ## Rate limits
 

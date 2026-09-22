@@ -32,10 +32,11 @@ collection, preserve unresolved and malformed raw entries, and submit the
 merged collection through the existing whole-object `PUT` endpoint. The merge
 must distinguish an empty list from missing, null, or non-list
 `customFieldValues`; malformed collections abort before any `PUT` so existing
-values are not silently cleared. Listing write support is gated by an early
-empirical verification task proving that a partial `PUT /v1/listings/{id}`
-preserves omitted built-in fields; if that verification fails, listing writes
-fail closed until a safe full-payload strategy is implemented.
+values are not silently cleared. Listing and reservation write support are
+gated by default-off executable safety flags. Listing writes require the FR-035
+partial-PUT verification, and reservation writes require the SC-003 live
+no-clobber verification. Until the matching flag is enabled by a verification
+commit, the service rejects that target type before any read, merge, or `PUT`.
 
 ## Technical Context
 
@@ -173,6 +174,14 @@ table-driven.
 - Treat this task as blocking for listing writes. It must prove omitted
   built-in fields and unrelated custom values remain unchanged before any
   listing write path can be enabled.
+- Keep the listing write safety gate off by default. The implementation state
+  is `listing_partial_put_verified = False` in the
+  `CustomFieldWriteSafetyGates` object stored at
+  `hass.data[DOMAIN][entry.entry_id]["custom_field_write_safety"]`. Listing
+  writes reject with `listing custom-field writes are disabled until FR-035
+  partial-PUT verification passes` while it remains false. It may be flipped
+  on only by an implementation change that records the successful live FR-035
+  verification.
 - If partial listing PUT is destructive, keep listing writes disabled for this
   feature and return a fail-closed actionable error. Do not attempt a full
   listing rollback/write payload in this feature unless a separate verified
@@ -185,6 +194,12 @@ table-driven.
 - Treat this task as blocking for reservation writes. It must prove the target
   custom field changed while every unrelated reservation custom field and each
   visible built-in reservation field remain unchanged.
+- Keep the reservation write safety gate off by default. The implementation
+  state is `reservation_no_clobber_verified = False` in the same
+  `CustomFieldWriteSafetyGates` object. Reservation writes reject with
+  `reservation custom-field writes are disabled until SC-003 no-clobber
+  verification passes` while it remains false. It may be flipped on only by an
+  implementation change that records the successful live SC-003 verification.
 
 ### Phase 1: API models, parsing, and includeResources reads
 
@@ -212,10 +227,19 @@ table-driven.
 - Create a per-config-entry `HostawayCustomFieldsCoordinator` that fetches and
   caches definitions without blocking listing or reservation coordinator
   refreshes when definitions fail.
+- Track the latest definitions refresh result independently from cached data.
+  The coordinator starts with `last_refresh_succeeded = False`, sets it true
+  only after a successful refresh, and sets it false with `last_refresh_error`
+  on any later failed refresh while retaining the prior cache for reads.
 - Do not let the definitions coordinator's initial refresh abort config entry
   setup. Run a non-blocking initial refresh or catch `UpdateFailed`, retain an
   empty/stale definitions cache, and allow listing/reservation data to load
   with fallback numeric keys as required by FR-007.
+- Read surfaces may continue using retained stale definitions after a failed
+  refresh so entity names and attributes do not churn. Write services must
+  reject all mutations whenever `last_refresh_succeeded` is false, even if the
+  retained cache is non-empty, with `custom field definitions refresh failed;
+  writes are disabled until the next successful refresh`.
 - Store the coordinator under a new dedicated key inside the existing
   `hass.data[DOMAIN][entry.entry_id]` runtime mapping. `__init__.py` already
   stores `token_manager`, `api_client`, `listings_coordinator`, and
@@ -252,8 +276,23 @@ table-driven.
 ### Phase 5: Write service and no-clobber merge
 
 - Register `hostaway.set_custom_field` with `SupportsResponse.OPTIONAL`.
+- Load `CustomFieldWriteSafetyGates` from
+  `hass.data[DOMAIN][entry.entry_id]["custom_field_write_safety"]` before any
+  target read or merge. The gates are seeded from default-false implementation
+  constants for `listing_partial_put_verified` and
+  `reservation_no_clobber_verified`; tests must assert both target types reject
+  while their gates are off.
+- Reject `target_type: listing` with `listing custom-field writes are disabled
+  until FR-035 partial-PUT verification passes` when
+  `listing_partial_put_verified` is false.
+- Reject `target_type: reservation` with `reservation custom-field writes are
+  disabled until SC-003 no-clobber verification passes` when
+  `reservation_no_clobber_verified` is false.
 - Validate exactly one of `customFieldId` or `varName`; require definitions for
-  all writes; fail ambiguous same-object-type `varName` resolutions.
+  all writes; fail ambiguous same-object-type `varName` resolutions. Also
+  require `definitions_coordinator.last_refresh_succeeded` to be true. A stale
+  cache retained after a failed refresh is available for reads only and must
+  not be used for write resolution.
 - Serialize concurrent Home Assistant writes through per-entry, per-target
   `asyncio.Lock` instances.
 - Add a shared per-target write generation registry. Coordinators capture the
@@ -266,9 +305,12 @@ table-driven.
   entries, and submit the safe payload.
 - Treat a present empty `customFieldValues: []` list as genuinely empty, but
   fail closed when the current object omits `customFieldValues`, returns it as
-  `null`, or returns any non-list value. In those cases the service must raise
-  a clear error and send no `PUT`, because treating the malformed collection as
-  empty would clear every existing custom value on the Hostaway object.
+  `null`, or returns any non-list value. The parsed
+  `HostawayCustomFieldCollection.state` must retain those distinctions as
+  `present`, `missing`, `null`, or `invalid`; only `present` may enter the
+  write merge. In all other states the service must raise a clear error and
+  send no `PUT`, because treating the malformed collection as empty would
+  clear every existing custom value on the Hostaway object.
 - Before merging, scan the raw `customFieldValues` collection for every entry
   that carries the addressed `customFieldId`, including malformed entries that
   have an id but no `value`. If more than one raw entry targets that id, fail
@@ -362,6 +404,9 @@ reconstruction from entity-registry unique IDs.
 
 ## Complexity Tracking
 
-No constitution violations are planned. The only elevated risk is Hostaway's
-whole-object listing update endpoint. That risk is addressed by the explicit
-blocking FR-035 verification and the fail-closed fallback for listing writes.
+No constitution violations are planned. The elevated risks are Hostaway's
+whole-object listing update endpoint and the reservation endpoint's
+custom-field no-clobber behavior. Those risks are addressed by explicit,
+default-off executable gates for FR-035 and SC-003. Writes remain disabled per
+target type until the corresponding live verification is recorded and its gate
+is enabled.

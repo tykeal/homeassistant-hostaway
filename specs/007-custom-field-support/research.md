@@ -114,10 +114,11 @@ fields.
 - Drop malformed custom-field entries: rejected by FR-019 and FR-032 because
   it violates the no-clobber guarantee.
 
-## R-005: Listing partial-PUT verification gate
+## R-005: Write safety verification gates
 
-**Decision**: Make real-listing partial-PUT verification an early blocking
-implementation task before relying on listing writes.
+**Decision**: Make live no-clobber verification an early blocking
+implementation task for each writable target type before relying on that
+target's writes.
 
 **Rationale**: The existing `update_reservation` service successfully sends
 partial reservation payloads, but that is not evidence for listing update
@@ -125,7 +126,7 @@ semantics. Hostaway may treat listing updates as full replacements. The
 feature cannot risk erasing listing fields while trying to set one custom
 variable.
 
-**Required verification**:
+**Listing verification**:
 
 1. Select a real listing with at least three populated custom fields and
    representative built-in fields. Prefer a disposable test listing.
@@ -144,6 +145,26 @@ actionable error while reads and reservation writes continue. Listing writes
 must remain disabled for this feature unless a separate safe endpoint or full
 payload strategy is specified, tested against live data, and shown to preserve
 every visible built-in field.
+
+**Reservation verification**:
+
+1. Select a real reservation with at least three populated custom fields and
+   at least one visible built-in field such as `doorCode`.
+2. Read it with `includeResources=1` and store a complete private rollback
+   snapshot. Only redacted summaries may be logged or committed.
+3. Send a merged `PUT /v1/reservations/{id}` payload containing one harmless
+   custom-field value change.
+4. Re-read with `includeResources=1`.
+5. Assert the target value changed and every unrelated custom field and
+   visible built-in field stayed byte-for-byte equivalent.
+6. Roll back using the complete private snapshot if any unexpected mutation is
+   detected; otherwise restore the harmless target value if necessary.
+
+**Executable gates**: The implementation must carry default-false
+`listing_partial_put_verified` and `reservation_no_clobber_verified` flags in
+per-entry `CustomFieldWriteSafetyGates`. Each target type rejects before
+reading or mutating while its flag is false. A flag may become true only in an
+implementation change that records the corresponding successful verification.
 
 ## R-006: Definition coordinator behavior
 
@@ -167,8 +188,12 @@ when definitions temporarily fail.
   `UpdateFailed` during config entry setup. A temporary definitions outage must
   not abort setup because FR-007 requires listing and reservation data to load
   with fallback numeric keys.
-- Writes require resolved definitions and fail closed when definitions are
-  unavailable.
+- Track `last_refresh_succeeded` and `last_refresh_error` separately from the
+  cached definitions. Reads may keep using stale definitions after a refresh
+  failure so entity presentation remains stable, but writes must fail closed
+  whenever the latest definitions refresh failed, even when the stale cache is
+  non-empty. This satisfies FR-031 by preventing writes from resolving fields
+  against definitions that are no longer known-current.
 
 ## R-007: Entity key allocation and restart stability
 

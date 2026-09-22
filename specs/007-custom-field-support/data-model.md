@@ -70,13 +70,25 @@ Parsed custom field values for one listing or reservation.
 
 | Field | Type | Description |
 |-------|------|-------------|
+| `state` | `Literal["present", "missing", "null", "invalid"]` | Raw collection presence and validity. |
 | `values` | `dict[int, HostawayCustomFieldValue]` | Presentation-safe values keyed by id. |
 | `raw_entries` | `list[Any]` | Original API entries in Hostaway order. |
 | `malformed_entries` | `list[Any]` | Raw entries skipped from presentation. |
+| `invalid_raw` | `Any \| None` | Original invalid collection value when `state == "invalid"`. |
 
 **Invariants**:
 
-- Every raw entry from Hostaway appears in `raw_entries`.
+- `state == "present"` means Hostaway supplied `customFieldValues` as a list.
+  A present empty list is represented as `state == "present"` with
+  `raw_entries == []`.
+- `state == "missing"` means the object omitted `customFieldValues`.
+- `state == "null"` means the object supplied `customFieldValues: null`.
+- `state == "invalid"` means the object supplied a non-list collection, with
+  the original value retained in `invalid_raw` for diagnostics.
+- Only `state == "present"` is valid for write merges. Missing, null, and
+  invalid collections are read/presentation states only and must make
+  `hostaway.set_custom_field` fail closed before any `PUT`.
+- Every raw entry from a present Hostaway list appears in `raw_entries`.
 - Malformed entries are excluded from `values` but remain in
   `malformed_entries` and `raw_entries`.
 - A write merge must fail closed if a raw malformed entry cannot be carried
@@ -153,6 +165,8 @@ Per-config-entry definitions coordinator.
 | `data` | `list[HostawayCustomFieldDefinition]` | Cached definitions. |
 | `by_id` | `dict[int, HostawayCustomFieldDefinition]` | Lookup cache. |
 | `by_object_type` | `dict[str, list[HostawayCustomFieldDefinition]]` | Listing/reservation filters. |
+| `last_refresh_succeeded` | `bool` | Whether the most recent definitions refresh succeeded. |
+| `last_refresh_error` | `Exception \| None` | Most recent refresh failure for diagnostics. |
 
 **Refresh interval**:
 `custom_field_definitions_scan_interval`, default 15 minutes, minimum one
@@ -164,6 +178,29 @@ minute.
 - `get_definitions_for_object_type(object_type)`.
 - `resolve_var_name(var_name, object_type)`; raises ambiguous or unknown
   errors for write services.
+
+**Write invariant**: Read surfaces may use stale `data` when
+`last_refresh_succeeded` is false so entity labels do not churn. Write
+services must reject all mutations while this flag is false, even when `data`
+is non-empty, because FR-031 requires current definition resolution.
+
+### CustomFieldWriteSafetyGates
+
+Per-config-entry executable gates for live no-clobber verification.
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `listing_partial_put_verified` | `bool` | `False` | FR-035 listing partial-PUT verification passed. |
+| `reservation_no_clobber_verified` | `bool` | `False` | SC-003 reservation no-clobber verification passed. |
+
+**Storage**: The gate object lives under
+`hass.data[DOMAIN][entry.entry_id]["custom_field_write_safety"]` and is seeded
+from implementation constants that default to `False` for each target type.
+
+**Enablement rule**: A target type's flag may be changed to `True` only in an
+implementation change that records the matching live verification result. Until
+then, `hostaway.set_custom_field` rejects that target type before reading,
+merging, or sending a mutating request.
 
 ### CustomFieldWriteLockRegistry
 
