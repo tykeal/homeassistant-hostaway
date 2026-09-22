@@ -252,10 +252,13 @@ field they operate on and cross-reference each other.
   of causing an immediate extra definitions fetch.
 - **Malformed value record**: an entry in `customFieldValues` missing
   `customFieldId`, or with a non-integer id, or otherwise unparsable. The entry
-  is skipped with a warning; the rest of the object parses normally and the
-  coordinator refresh completes. This mirrors the existing
-  `parse_reservations` behaviour introduced after a single malformed record
-  crashed an entire refresh.
+  is skipped with a warning for sensor and attribute presentation; the rest of
+  the object parses normally and the coordinator refresh completes. The
+  original raw malformed entry is still preserved for read-modify-write merges
+  so a later write can resubmit it unchanged rather than erase it. This mirrors
+  the existing `parse_reservations` behaviour introduced after a single
+  malformed record crashed an entire refresh, while extending the write path's
+  no-clobber guarantee to malformed data.
 - **Malformed definition record**: an entry in the definitions response that
   cannot be parsed is skipped with a warning; remaining definitions are usable.
 - **Dropdown value not in `possibleValues`**: a write requests a value the
@@ -406,7 +409,9 @@ field they operate on and cross-reference each other.
   unresolved entries.
 - **FR-019**: Parsing of custom field values MUST NOT be able to fail a listing
   or reservation coordinator refresh. Malformed entries are skipped with a
-  logged warning and the remainder of the object is used.
+  logged warning for presentation and entity population only, and the remainder
+  of the object is used. Skipping a malformed entry MUST NOT discard the
+  original raw entry needed by FR-032's write merge.
 
 #### Read services
 
@@ -461,10 +466,10 @@ field they operate on and cross-reference each other.
   another entry. Computing a key for a listing entry with `value: null` MUST
   NOT create or reserve a listing sensor entity outside that service response.
   For reservation targets, mapping keys MUST match the reservation
-  `custom_field_<customFieldId>` key contract from FR-015. Each resolved entry
-  MUST contain exactly these keys: `customFieldId`, `varName`, `name` (the
-  human-readable display name), `type`, `possibleValues`, `value`, and
-  `resolved`; `resolved` MUST be `true`.
+  `custom_field_<customFieldId>` key contract from FR-015. For both listing and
+  reservation targets, each resolved entry MUST contain exactly these keys:
+  `customFieldId`, `varName`, `name` (the human-readable display name), `type`,
+  `possibleValues`, `value`, and `resolved`; `resolved` MUST be `true`.
   `possibleValues` MUST be a list containing allowed values for `dropdown`
   definitions and an empty list for other types. A defined field with no value
   MUST include `value: null`; omitting `value` is invalid, and an empty string
@@ -521,7 +526,11 @@ field they operate on and cross-reference each other.
 - **FR-032**: The write MUST preserve every custom variable the caller did not
   name — setting one variable MUST NOT clear the others. Writes MUST be based on
   current values read before the update and submit a merged set, including
-  unresolved values whose definitions are unavailable.
+  unresolved values whose definitions are unavailable and original raw malformed
+  value entries skipped from presentation under FR-019. Malformed entries MUST
+  be passed through unmodified in the merged Hostaway payload. If the raw form
+  of a skipped malformed entry cannot be preserved, the write MUST fail closed
+  instead of silently discarding that entry.
 - **FR-033**: Concurrent Home Assistant writes to the same object MUST be
   coordinated so one successful call cannot overwrite another successful call's
   custom-variable changes. Coordinator refresh results for the affected object
@@ -551,14 +560,19 @@ field they operate on and cross-reference each other.
   the selected field and bypasses local type validation; omitting `value` is
   invalid, and an empty string remains a literal value for string-compatible
   Hostaway types.
-- **FR-040**: After a successful write, the affected sensor or reservation
-  attribute MUST reflect the new value without waiting for the next scheduled
-  poll. An in-flight coordinator refresh that read older data before the write
-  MUST NOT publish that older value over the immediate post-write state. After
-  a successful clear, an existing listing custom-field sensor MUST remain
-  present with native value `None` (rendered by Home Assistant as `unknown`)
-  and `value: null` in its custom field metadata rather than disappearing
-  immediately.
+- **FR-040**: After a successful write targeting an object represented by a
+  Home Assistant entity, the affected sensor or reservation attribute MUST
+  reflect the new value without waiting for the next scheduled poll. An
+  in-flight coordinator refresh that read older data before the write MUST NOT
+  publish that older value over the immediate post-write state. After a
+  successful clear, an existing listing custom-field sensor MUST remain present
+  with native value `None` (rendered by Home Assistant as `unknown`) and
+  `value: null` in its custom field metadata rather than disappearing
+  immediately. When the write targets an unselected listing or a reservation
+  that is not the current reservation represented by the reservation sensor,
+  the service still succeeds and returns its normal response, but no immediate
+  entity update is required and the absence of an entity MUST NOT be treated as
+  an error.
 - **FR-041**: The write service MUST NOT create writable entities (text,
   number, or select) for custom variables. Service-only is the write surface
   for this feature.
@@ -620,9 +634,14 @@ field they operate on and cross-reference each other.
 
 ### Measurable Outcomes
 
-- **SC-001**: 100% of a listing's or reservation's non-task custom variables —
-  hidden fields included — are visible in Home Assistant within one poll
-  interval of being set in the Hostaway dashboard.
+- **SC-001**: 100% of non-task custom variables — hidden fields included —
+  for listings represented by listing entities and for the reservation
+  currently represented by the reservation sensor are visible on the specified
+  Home Assistant entity surfaces within one poll interval of being set in the
+  Hostaway dashboard. Custom fields for listings or reservations not
+  represented by an entity are available through
+  `hostaway.get_custom_field_values` according to FR-024 and FR-025, but are
+  not required to create or update an entity.
 - **SC-002**: A newly appearing listing custom variable is added as a new
   per-field sensor under either its resolved key or its unresolved fallback key
   within one listing poll after its value is present. When the sensor is first
