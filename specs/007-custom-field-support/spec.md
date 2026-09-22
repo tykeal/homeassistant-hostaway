@@ -135,7 +135,8 @@ cached definition set.
    called without `config_entry_id`, **Then** the service uses that account.
 6. **Given** multiple Hostaway accounts are configured, **When** either read
    service is called without `config_entry_id`, **Then** the service fails
-   closed with a clear error before performing any read.
+   closed with `config_entry_id required when multiple entries exist` before
+   performing any read.
 
 ---
 
@@ -174,8 +175,8 @@ fields — are untouched.
    presented as successful.
 6. **Given** multiple Hostaway accounts are configured, **When**
    `hostaway.set_custom_field` is called without `config_entry_id`, **Then**
-   the service fails closed with a clear error before resolving the field or
-   sending any write.
+   the service fails closed with `config_entry_id required when multiple
+   entries exist` before resolving the field or sending any write.
 
 ---
 
