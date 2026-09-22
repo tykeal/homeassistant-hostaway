@@ -29,11 +29,13 @@ Hostaway does not expose scoped custom-field write endpoints. Writes therefore
 must read the current listing or reservation with `includeResources=1`, merge
 exactly one addressed custom value into the raw current `customFieldValues`
 collection, preserve unresolved and malformed raw entries, and submit the
-merged collection through the existing whole-object `PUT` endpoint. Listing
-write support is gated by an early empirical verification task proving that a
-partial `PUT /v1/listings/{id}` preserves omitted built-in fields; if that
-verification fails, listing writes fail closed until a safe full-payload
-strategy is implemented.
+merged collection through the existing whole-object `PUT` endpoint. The merge
+must distinguish an empty list from missing, null, or non-list
+`customFieldValues`; malformed collections abort before any `PUT` so existing
+values are not silently cleared. Listing write support is gated by an early
+empirical verification task proving that a partial `PUT /v1/listings/{id}`
+preserves omitted built-in fields; if that verification fails, listing writes
+fail closed until a safe full-payload strategy is implemented.
 
 ## Technical Context
 
@@ -214,8 +216,16 @@ table-driven.
   setup. Run a non-blocking initial refresh or catch `UpdateFailed`, retain an
   empty/stale definitions cache, and allow listing/reservation data to load
   with fallback numeric keys as required by FR-007.
-- Store the coordinator in `hass.data[DOMAIN][entry.entry_id]` and shut it
-  down during unload.
+- Store the coordinator under a new dedicated key inside the existing
+  `hass.data[DOMAIN][entry.entry_id]` runtime mapping. `__init__.py` already
+  stores `token_manager`, `api_client`, `listings_coordinator`, and
+  `reservations_coordinator` in that dict; the custom-field definitions
+  coordinator must be added alongside those keys without replacing or
+  reassigning the mapping.
+- Do not add a separate teardown path for the definitions coordinator. Extend
+  the existing unload path that pops `hass.data[DOMAIN][entry.entry_id]` in
+  `__init__.py` and shuts down the listing and reservation coordinators, so the
+  new coordinator is torn down with the same per-entry runtime data.
 - Add user-facing labels and descriptions for the new options-flow field in
   `strings.json` and `translations/en.json`.
 
@@ -254,6 +264,11 @@ table-driven.
 - Read the current object with `includeResources=1`, merge only the addressed
   value into the raw `customFieldValues`, preserve unresolved and raw malformed
   entries, and submit the safe payload.
+- Treat a present empty `customFieldValues: []` list as genuinely empty, but
+  fail closed when the current object omits `customFieldValues`, returns it as
+  `null`, or returns any non-list value. In those cases the service must raise
+  a clear error and send no `PUT`, because treating the malformed collection as
+  empty would clear every existing custom value on the Hostaway object.
 - Before merging, scan the raw `customFieldValues` collection for every entry
   that carries the addressed `customFieldId`, including malformed entries that
   have an id but no `value`. If more than one raw entry targets that id, fail
