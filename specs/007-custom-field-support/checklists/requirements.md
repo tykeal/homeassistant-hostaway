@@ -17,9 +17,9 @@ proceeding to planning
 - [x] No clarification markers remain
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
-- [x] Success criteria are technology-agnostic except SC-007, which
-  intentionally cites Hostaway request counts and published rate limits because
-  API-volume safety is the measurable outcome
+- [ ] Success criteria are technology-agnostic (not met: the user-facing
+  outcomes intentionally name Home Assistant, Hostaway services, Hostaway
+  fields, and Hostaway rate limits where those are the measurable outcomes)
 - [x] All acceptance scenarios are defined
 - [x] Edge cases are identified
 - [x] Scope is clearly bounded
@@ -47,4 +47,7 @@ proceeding to planning
   are the subject of a safety verification requirement (FR-035); they are
   drawn from issue #195 and define integration obligations rather than internal
   implementation design.
-- No incomplete checklist items remain before `/speckit.plan`.
+- One checklist item remains intentionally unchecked: success criteria are not
+  fully technology-agnostic because this feature's measurable outcomes must
+  name Home Assistant visibility, Hostaway service behaviour, and Hostaway API
+  rate limits.
