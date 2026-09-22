@@ -70,6 +70,10 @@ wc -l \
 
 ## Manual FR-035 verification
 
+Do not run live, mutating verification until CI is green for the
+implementation branch. The repository constitution prohibits manual or
+exploratory testing before automated CI has passed.
+
 Use a disposable real listing with at least three custom fields populated.
 If a disposable listing is not available, capture a complete private rollback
 snapshot before sending any mutation. Only redacted summaries may be logged or

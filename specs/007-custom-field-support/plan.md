@@ -210,6 +210,10 @@ table-driven.
 - Create a per-config-entry `HostawayCustomFieldsCoordinator` that fetches and
   caches definitions without blocking listing or reservation coordinator
   refreshes when definitions fail.
+- Do not let the definitions coordinator's initial refresh abort config entry
+  setup. Run a non-blocking initial refresh or catch `UpdateFailed`, retain an
+  empty/stale definitions cache, and allow listing/reservation data to load
+  with fallback numeric keys as required by FR-007.
 - Store the coordinator in `hass.data[DOMAIN][entry.entry_id]` and shut it
   down during unload.
 - Add user-facing labels and descriptions for the new options-flow field in
@@ -250,6 +254,12 @@ table-driven.
 - Read the current object with `includeResources=1`, merge only the addressed
   value into the raw `customFieldValues`, preserve unresolved and raw malformed
   entries, and submit the safe payload.
+- Before merging, scan the raw `customFieldValues` collection for every entry
+  that carries the addressed `customFieldId`, including malformed entries that
+  have an id but no `value`. If more than one raw entry targets that id, fail
+  closed before `PUT`; do not append another duplicate and do not drop any raw
+  entry. A deterministic replacement policy may be added only with explicit
+  tests and evidence that Hostaway handles duplicates predictably.
 - Refresh or patch affected local coordinator data after success so entities
   reflect the new value before the next scheduled poll.
 

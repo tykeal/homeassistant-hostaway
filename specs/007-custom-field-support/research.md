@@ -163,6 +163,10 @@ when definitions temporarily fail.
 - Definitions failures raise `UpdateFailed` for the definitions coordinator
   only; listing and reservation coordinators continue using values and fallback
   numeric keys.
+- The initial definitions refresh must be non-blocking or catch
+  `UpdateFailed` during config entry setup. A temporary definitions outage must
+  not abort setup because FR-007 requires listing and reservation data to load
+  with fallback numeric keys.
 - Writes require resolved definitions and fail closed when definitions are
   unavailable.
 

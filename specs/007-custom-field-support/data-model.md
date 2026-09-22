@@ -81,6 +81,10 @@ Parsed custom field values for one listing or reservation.
   `malformed_entries` and `raw_entries`.
 - A write merge must fail closed if a raw malformed entry cannot be carried
   into the outgoing payload unchanged.
+- A write merge must fail closed if more than one raw entry carries the
+  addressed `customFieldId`, including malformed entries with an id but no
+  `value`, because the integration cannot safely choose one duplicate without
+  risking a clobber.
 
 ### ListingCustomFieldKeyAllocation
 
@@ -287,6 +291,7 @@ service call
   -> acquire target lock
   -> increment or mark target write generation
   -> read target by id with includeResources=1
+  -> reject duplicate raw entries for the addressed customFieldId
   -> merge raw customFieldValues
   -> PUT target
   -> update local coordinator data
