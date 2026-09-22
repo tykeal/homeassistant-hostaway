@@ -17,7 +17,9 @@ proceeding to planning
 - [x] No clarification markers remain
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
-- [x] Success criteria are technology-agnostic (no implementation details)
+- [x] Success criteria are technology-agnostic except SC-007, which
+  intentionally cites Hostaway request counts and published rate limits because
+  API-volume safety is the measurable outcome
 - [x] All acceptance scenarios are defined
 - [x] Edge cases are identified
 - [x] Scope is clearly bounded
@@ -34,8 +36,9 @@ proceeding to planning
 
 - Clarifications are resolved:
   - **FR-006**: definitions use a dedicated coordinator with a configurable
-    polling interval that defaults to 15 minutes, with no user-invokable
-    refresh service or refresh-on-miss requirement.
+    polling interval that defaults to 15 minutes and enforces a one-minute
+    minimum, with no user-invokable refresh service or refresh-on-miss
+    requirement.
   - **FR-011**: each listing custom-variable value gets its own dynamic
     diagnostic sensor keyed from `custom_` plus slugified `varName`, while the
     seven existing diagnostic listing sensors keep their current attribute

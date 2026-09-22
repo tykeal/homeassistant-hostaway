@@ -202,8 +202,9 @@ those stories remain functional with a single addressing mode.
    `hostaway.set_custom_field` runs, **Then** the id is used after validating
    that it is defined for the requested target object type.
 3. **Given** a request that supplies neither `varName` nor `customFieldId`, or
-   supplies both with conflicting targets, **When** the service runs, **Then**
-   it fails validation with a message explaining the correct usage.
+   supplies both identifiers even if they resolve to the same definition,
+   **When** the service runs, **Then** it fails validation with a message
+   explaining that exactly one field identifier is required.
 4. **Given** a `varName` that matches no definition for the object type,
    **When** the service runs, **Then** it fails with an error naming the
    unknown field and it does not write anything.
@@ -318,24 +319,32 @@ field they operate on and cross-reference each other.
   validate, or expose another account's data.
 - **FR-006**: The custom field definitions coordinator MUST poll on a
   user-configurable interval that defaults to 15 minutes, matching the existing
-  listing coordinator default. Fields created in the dashboard become usable
-  after the next scheduled definitions refresh; this feature MUST NOT add a
-  user-invokable definitions refresh service.
+  listing coordinator default. The interval MUST enforce the integration's
+  existing positive minimum of one minute. Fields created in the dashboard
+  become usable after the next scheduled definitions refresh; this feature MUST
+  NOT add a user-invokable definitions refresh service.
 - **FR-007**: A failure to retrieve definitions MUST NOT prevent listing or
   reservation data from loading; the integration degrades to surfacing values
   by numeric id under stable fallback keys.
 
 #### Reading values
 
-- **FR-008**: Listing and reservation retrieval MUST request Hostaway's
-  `includeResources=1` option on every relevant paginated request so that
-  `customFieldValues` is populated rather than returned empty.
+- **FR-008**: Every listing or reservation retrieval that may supply custom
+  field values MUST request Hostaway's `includeResources=1` option so that
+  `customFieldValues` is populated rather than returned empty. This applies to
+  each page of paginated coordinator reads and to direct object reads performed
+  by services such as `hostaway.get_custom_field_values` and
+  `hostaway.set_custom_field`.
 - **FR-009**: The listing model MUST carry parsed custom field values.
 - **FR-010**: The reservation model MUST carry parsed custom field values.
 - **FR-011**: Each listing custom variable value MUST be exposed as its own
   diagnostic sensor for that listing. The entity key MUST be stable and derived
-  from `custom_` plus the slugified `varName` when a definition is available;
-  unresolved values MUST use a stable key derived from the numeric id.
+  from `custom_` plus the slugified `varName` when a definition is available
+  before that value is first observed; unresolved values MUST use a stable key
+  derived from the numeric id. If a later definitions refresh resolves a value
+  that already created a fallback-key sensor, the existing sensor MUST retain
+  its fallback entity key and update its metadata rather than creating a second
+  entity or renaming the entity id.
 - **FR-012**: Newly appearing listing custom variables MUST be discovered at
   runtime and added as new sensors without requiring a Home Assistant restart.
 - **FR-013**: The existing diagnostic listing sensors (`listing_id`,
@@ -418,15 +427,15 @@ field they operate on and cross-reference each other.
   the caller supplies `varName`, `customFieldId` MUST contain the resolved
   numeric id. When the caller supplies `customFieldId`, `varName` MUST contain
   the resolved machine name from the validated definition.
-- **FR-030**: `hostaway.set_custom_field` MUST accept a field addressed by
-  either numeric `customFieldId` or `varName`. Fields addressed by
-  `customFieldId` MUST still resolve to a definition for the target object type
-  before any write is sent.
+- **FR-030**: `hostaway.set_custom_field` MUST accept exactly one field
+  identifier: either numeric `customFieldId` or `varName`, but not both. Fields
+  addressed by `customFieldId` MUST still resolve to a definition for the
+  target object type before any write is sent.
 - **FR-031**: The write service MUST reject a request that identifies no field,
-  or that identifies a field that cannot be resolved for the target object type,
-  and MUST make no change when it does so. Definition failures or unavailable
-  definitions MUST make writes fail rather than fall back to unchecked numeric
-  ids.
+  identifies more than one field, or identifies a field that cannot be resolved
+  for the target object type, and MUST make no change when it does so.
+  Definition failures or unavailable definitions MUST make writes fail rather
+  than fall back to unchecked numeric ids.
 - **FR-032**: The write MUST preserve every custom variable the caller did not
   name — setting one variable MUST NOT clear the others. Writes MUST be based on
   current values read before the update and submit a merged set, including
@@ -500,11 +509,14 @@ field they operate on and cross-reference each other.
   Meaningful to a user only when joined to its definition.
 - **Custom Field Definitions Coordinator**: A per-config-entry coordinator that
   fetches and caches definitions on a user-configurable interval defaulting to
-  15 minutes, matching the listing coordinator default.
+  15 minutes, matching the listing coordinator default, and enforcing the
+  integration's one-minute minimum interval.
 - **Listing Custom-Field Sensor**: A dynamic per-listing, per-field diagnostic
   sensor whose state is one listing custom variable value. The stable entity
-  key is based on `custom_` plus slugified `varName` when resolved, with a
-  numeric-id fallback for unresolved values.
+  key is based on `custom_` plus slugified `varName` when the definition is
+  known before first observation, with a numeric-id fallback for unresolved
+  values. Fallback-key sensors keep that entity key if a later definitions
+  refresh resolves their metadata.
 - **Reservation**: Existing entity, extended to carry a collection of custom
   field values for the selected reservation.
 
@@ -535,12 +547,14 @@ field they operate on and cross-reference each other.
 - **SC-007**: Per Hostaway account, this feature adds zero extra API requests
   to each listing or reservation refresh cycle beyond the existing poll
   requests with `includeResources=1`. It adds one custom-field definitions
-  coordinator cycle per configured interval, defaulting to 15 minutes; each
-  definitions cycle makes exactly `ceil(definition_count / 500)` paginated
-  `GET /v1/customFields` requests by using Hostaway's maximum page size. These
-  requests MUST remain subject to the integration's rate limiting so counted
-  requests never exceed Hostaway's 200 requests per 10 seconds per account and
-  per IP limit.
+  coordinator cycle per configured interval, defaulting to 15 minutes and never
+  lower than one minute. Each definitions cycle uses Hostaway's maximum page
+  size and makes at least one request and no more than
+  `max(1, floor(definition_count / 500) + 1)` paginated
+  `GET /v1/customFields` requests, stopping earlier when the API pagination
+  response indicates that no next page exists. These requests MUST remain
+  subject to the integration's rate limiting so counted requests never exceed
+  Hostaway's 200 requests per 10 seconds per account and per IP limit.
 - **SC-008**: A user reading the integration documentation can correctly state
   whether `doorCode` is a built-in field or a custom variable, and which service
   writes it.
