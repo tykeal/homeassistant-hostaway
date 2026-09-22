@@ -75,10 +75,10 @@ matching the Hostaway dashboard.
    that listing, with a stable key derived from `custom_` plus the slugified
    `varName`, disambiguated by numeric id when that key would collide.
 2. **Given** a reservation with populated custom variables, **When** the
-   reservations poll completes, **Then** those variables are exposed as
-   attributes on that listing's reservation sensor for the selected
-   reservation, resolved to human-readable names when definitions are
-   available.
+   reservations poll completes, **Then** those variables are exposed under the
+   reservation sensor's `custom_fields` attribute using
+   `custom_field_<customFieldId>` keys, with human-readable names included as
+   entry metadata when definitions are available.
 3. **Given** a custom field defined with `isPublic=0` (hidden), **When** the
    poll completes, **Then** its value is still exposed — hidden fields are
    included in reads.
@@ -346,28 +346,35 @@ field they operate on and cross-reference each other.
   from `custom_` plus the slugified `varName` when a definition is available
   before that value is first observed. If the listing custom-field definition
   set contains multiple `listing` definitions that would produce the same
-  `custom_<slugified varName>` key, including same-object-type duplicate
-  `varName` definitions or distinct `varName` values that slugify identically,
-  every resolved value for those definitions MUST use the deterministic key
-  `custom_<slugified varName>_<customFieldId>` from first observation.
-  Unresolved values MUST use a stable key derived from the numeric id. If a
-  later definitions refresh resolves a value that already created a
-  fallback-key sensor, the existing sensor MUST retain its fallback entity key
-  and update its metadata rather than creating a second entity or renaming the
-  entity id.
+  `custom_<slugified varName>` key before any affected value is observed, every
+  resolved value for those definitions MUST use the deterministic key
+  `custom_<slugified varName>_<customFieldId>` from first observation. This
+  includes same-object-type duplicate `varName` definitions and distinct
+  `varName` values that slugify identically. If a later definitions refresh
+  introduces a collision after an affected sensor already exists under
+  `custom_<slugified varName>`, the existing sensor MUST retain that entity key
+  and any additional colliding resolved values MUST use
+  `custom_<slugified varName>_<customFieldId>` instead of overwriting or
+  renaming the existing sensor. Unresolved values MUST use a stable key derived
+  from the numeric id. If a later definitions refresh resolves a value that
+  already created a fallback-key sensor, the existing sensor MUST retain its
+  fallback entity key and update its metadata rather than creating a second
+  entity or renaming the entity id.
 - **FR-012**: Newly appearing listing custom variables MUST be discovered at
   runtime and added as new sensors without requiring a Home Assistant restart.
 - **FR-013**: The existing diagnostic listing sensors (`listing_id`,
   `external_name`, `status`, `base_price`, `bedrooms`, `bathrooms`, and
   `max_guests`) MUST remain unchanged and MUST NOT gain custom-variable
   attributes.
-- **FR-014**: Custom variables MUST be exposed as attributes on the existing
-  reservation sensor, for the reservation that sensor currently represents.
-  Existing reservation attributes MUST remain unchanged except for adding the
-  custom-variable collection.
-- **FR-015**: Reservation custom-variable attributes MUST resolve field ids to
-  human-readable names when definitions are available, while preserving a
-  stable fallback key for unresolvable ids.
+- **FR-014**: Custom variables MUST be exposed on the existing reservation
+  sensor, for the reservation that sensor currently represents, under one new
+  `custom_fields` attribute. Existing reservation attributes MUST remain
+  unchanged except for adding that collection.
+- **FR-015**: The reservation `custom_fields` attribute MUST be a mapping keyed
+  by `custom_field_<customFieldId>` for every resolved and unresolved field.
+  Resolved entries MUST include the human-readable display name as metadata so
+  duplicate display names cannot overwrite each other. Unresolvable ids MUST
+  use the same key and include the unresolved entry shape from FR-018.
 - **FR-016**: Reads MUST include fields flagged hidden (`isPublic=0`).
 - **FR-017**: Listing custom-field sensors and reservation attributes MUST
   include enough metadata to identify resolved fields: `customFieldId`,
@@ -404,11 +411,14 @@ field they operate on and cross-reference each other.
   When multiple entries are loaded, omitting `config_entry_id` MUST fail closed
   with `config_entry_id required when multiple entries exist` before resolving
   the target id or performing any read.
-- **FR-024**: The value read service response MUST include, per resolved field:
-  `customFieldId`, `varName`, display name, type, possible values when the type
-  is `dropdown`, and the current value. Unresolved fields MUST remain in the
-  response using the same `custom_field_<customFieldId>` key and unresolved
-  entry shape as sensor attributes.
+- **FR-024**: The value read service response MUST include one `custom_fields`
+  mapping. For listing targets, keys MUST match the listing sensor key contract
+  from FR-011. For reservation targets, keys MUST match the reservation
+  `custom_field_<customFieldId>` key contract from FR-015. Each resolved entry
+  MUST include `customFieldId`, `varName`, display name, type, possible values
+  when the type is `dropdown`, and the current value. Unresolved fields MUST
+  remain in the response using the same `custom_field_<customFieldId>` key and
+  unresolved entry shape as sensor attributes.
 - **FR-025**: The value read service MUST include defined fields that currently
   have no value, so automations can discover the available field set.
 - **FR-026**: The value read service MUST return a clear, actionable error when
@@ -536,7 +546,8 @@ field they operate on and cross-reference each other.
   values. Fallback-key sensors keep that entity key if a later definitions
   refresh resolves their metadata.
 - **Reservation**: Existing entity, extended to carry a collection of custom
-  field values for the selected reservation.
+  field values for the selected reservation under a `custom_fields` mapping
+  keyed by numeric-id-derived `custom_field_<customFieldId>` entries.
 
 ---
 
