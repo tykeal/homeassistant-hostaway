@@ -130,10 +130,12 @@ cached definition set.
 4. **Given** an id that does not exist or is not accessible, **When**
    `hostaway.get_custom_field_values` is called, **Then** the call fails with a
    clear, actionable error naming the object and id.
-5. **Given** one or more Hostaway accounts are configured, **When**
-   `hostaway.get_custom_fields` is called with an optional `config_entry_id`,
-   **Then** it returns the cached definitions for that selected account, or
-   fails clearly if the account cannot be selected unambiguously.
+5. **Given** exactly one Hostaway account is configured, **When**
+   `hostaway.get_custom_fields` or `hostaway.get_custom_field_values` is
+   called without `config_entry_id`, **Then** the service uses that account.
+6. **Given** multiple Hostaway accounts are configured, **When** either read
+   service is called without `config_entry_id`, **Then** the service fails
+   closed with a clear error before performing any read.
 
 ---
 
@@ -170,6 +172,10 @@ fields — are untouched.
 5. **Given** the write request fails at the Hostaway API, **When** the service
    returns, **Then** it raises a clear error and no partial local state is
    presented as successful.
+6. **Given** multiple Hostaway accounts are configured, **When**
+   `hostaway.set_custom_field` is called without `config_entry_id`, **Then**
+   the service fails closed with a clear error before resolving the field or
+   sending any write.
 
 ---
 
@@ -360,14 +366,22 @@ field they operate on and cross-reference each other.
 - **FR-020**: The integration MUST provide `hostaway.get_custom_fields`, a
   response-returning service that returns cached custom field definitions.
 - **FR-021**: `hostaway.get_custom_fields` MUST accept an optional
-  `config_entry_id` selector so users can target a specific Hostaway account in
-  multi-account setups.
+  `config_entry_id` selector so users can target a specific Hostaway account.
+  When exactly one Hostaway config entry is loaded, omitting
+  `config_entry_id` MUST select that entry. When multiple entries are loaded,
+  omitting `config_entry_id` MUST fail closed with
+  `config_entry_id required when multiple entries exist` before any read is
+  performed.
 - **FR-022**: The integration MUST provide
   `hostaway.get_custom_field_values`, a response-returning service that returns
   the custom variables for a specified listing or reservation.
 - **FR-023**: `hostaway.get_custom_field_values` MUST accept `target_type`,
   `target_id`, and optional `config_entry_id` fields. `target_type` MUST be a
-  selector limited to `listing` and `reservation`.
+  selector limited to `listing` and `reservation`. When exactly one Hostaway
+  config entry is loaded, omitting `config_entry_id` MUST select that entry.
+  When multiple entries are loaded, omitting `config_entry_id` MUST fail closed
+  with `config_entry_id required when multiple entries exist` before resolving
+  the target id or performing any read.
 - **FR-024**: The value read service response MUST include, per resolved field:
   `customFieldId`, `varName`, display name, type, possible values when the type
   is `dropdown`, and the current value. Unresolved fields MUST remain in the
@@ -386,12 +400,23 @@ field they operate on and cross-reference each other.
 - **FR-028**: `hostaway.set_custom_field` MUST accept `target_type`,
   `target_id`, a field identifier, `value`, and optional `config_entry_id`.
   `target_type` MUST be a selector limited to `listing` and `reservation`.
-  When multiple Hostaway accounts are configured and the target account cannot
-  be selected unambiguously, the service MUST fail clearly before resolving the
+  When exactly one Hostaway config entry is loaded, omitting
+  `config_entry_id` MUST select that entry. When multiple entries are loaded,
+  omitting `config_entry_id` MUST fail closed with
+  `config_entry_id required when multiple entries exist` before resolving the
   field identifier or sending any write.
 - **FR-029**: `hostaway.set_custom_field` MUST support Home Assistant
   `SupportsResponse.OPTIONAL`, returning a structured result when a caller asks
-  for a response while preserving fire-and-forget automation compatibility.
+  for a response while preserving fire-and-forget automation compatibility. On
+  success, the response MUST contain exactly these required top-level keys:
+  `target_type` (string enum: `listing` or `reservation`), `target_id`
+  (integer Hostaway object id), `customFieldId` (integer resolved custom field
+  definition id), `varName` (string resolved machine name from the definition),
+  `addressed_by` (string enum: `customFieldId` or `varName`, naming which
+  identifier the caller supplied), and `result` (string value `success`). When
+  the caller supplies `varName`, `customFieldId` MUST contain the resolved
+  numeric id. When the caller supplies `customFieldId`, `varName` MUST contain
+  the resolved machine name from the validated definition.
 - **FR-030**: `hostaway.set_custom_field` MUST accept a field addressed by
   either numeric `customFieldId` or `varName`. Fields addressed by
   `customFieldId` MUST still resolve to a definition for the target object type
@@ -446,7 +471,8 @@ field they operate on and cross-reference each other.
 #### Documentation
 
 - **FR-043**: User-facing service documentation MUST describe each new service,
-  its fields, selector behaviour, and response shape.
+  its fields, selector behaviour, and the exact `hostaway.set_custom_field`
+  success response schema defined by FR-029.
 - **FR-044**: Documentation MUST explicitly distinguish Hostaway **built-in**
   fields (such as `doorCode`, written by `hostaway.set_door_code`) from
   **custom variables**, and cross-reference the two so they are not conflated.
@@ -505,10 +531,15 @@ field they operate on and cross-reference each other.
 - **SC-006**: A write with an invalid value for a `dropdown` or `number` field
   is rejected before any request that would change data is sent, and boolean
   values are not accepted as numbers.
-- **SC-007**: Normal operation adds no more than a negligible fraction of
-  Hostaway's 200-requests-per-10-seconds budget: definitions are fetched by one
-  dedicated coordinator per account on its configured interval, not once per
-  object or per field.
+- **SC-007**: Per Hostaway account, this feature adds zero extra API requests
+  to each listing or reservation refresh cycle beyond the existing poll
+  requests with `includeResources=1`. It adds one custom-field definitions
+  coordinator cycle per configured interval, defaulting to 15 minutes; each
+  definitions cycle makes exactly `ceil(definition_count / 500)` paginated
+  `GET /v1/customFields` requests by using Hostaway's maximum page size. These
+  requests MUST remain subject to the integration's rate limiting so counted
+  requests never exceed Hostaway's 200 requests per 10 seconds per account and
+  per IP limit.
 - **SC-008**: A user reading the integration documentation can correctly state
   whether `doorCode` is a built-in field or a custom variable, and which service
   writes it.
