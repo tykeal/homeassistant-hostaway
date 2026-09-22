@@ -359,7 +359,12 @@ field they operate on and cross-reference each other.
   from the numeric id. If a later definitions refresh resolves a value that
   already created a fallback-key sensor, the existing sensor MUST retain its
   fallback entity key and update its metadata rather than creating a second
-  entity or renaming the entity id.
+  entity or renaming the entity id. All listing custom-field sensor keys,
+  resolved and fallback alike, MUST be allocated from one shared namespace per
+  listing on a first-come-first-served basis. Any newly allocated key that
+  would collide with an existing resolved or fallback key MUST use the
+  `customFieldId` suffix disambiguation rule instead of overwriting or renaming
+  an existing entity.
 - **FR-012**: Newly appearing listing custom variables MUST be discovered at
   runtime and added as new sensors without requiring a Home Assistant restart.
 - **FR-013**: The existing diagnostic listing sensors (`listing_id`,
@@ -392,7 +397,14 @@ field they operate on and cross-reference each other.
 
 - **FR-020**: The integration MUST provide `hostaway.get_custom_fields`, a
   response-returning service registered with Home Assistant
-  `SupportsResponse.ONLY` that returns cached custom field definitions.
+  `SupportsResponse.ONLY` that returns cached custom field definitions. The
+  response MUST contain exactly one required top-level key, `custom_fields`,
+  whose value is a list. Each definition entry MUST include `customFieldId`,
+  `varName`, `name` (the human-readable display name), `type`, `objectType`,
+  and `possibleValues`; `possibleValues` MUST be a list containing allowed
+  values for `dropdown` definitions and an empty list for other types. When the
+  definitions cache is empty, the service MUST return `{"custom_fields": []}`
+  rather than omitting the key or raising an error.
 - **FR-021**: `hostaway.get_custom_fields` MUST accept an optional
   `config_entry_id` selector so users can target a specific Hostaway account.
   When exactly one Hostaway config entry is loaded, omitting
@@ -412,13 +424,20 @@ field they operate on and cross-reference each other.
   with `config_entry_id required when multiple entries exist` before resolving
   the target id or performing any read.
 - **FR-024**: The value read service response MUST include one `custom_fields`
-  mapping. For listing targets, keys MUST match the listing sensor key contract
-  from FR-011. For reservation targets, keys MUST match the reservation
+  mapping under the required top-level key `custom_fields`. For listing
+  targets, mapping keys MUST match the listing sensor key contract from FR-011.
+  For reservation targets, mapping keys MUST match the reservation
   `custom_field_<customFieldId>` key contract from FR-015. Each resolved entry
-  MUST include `customFieldId`, `varName`, display name, type, possible values
-  when the type is `dropdown`, and the current value. Unresolved fields MUST
-  remain in the response using the same `custom_field_<customFieldId>` key and
-  unresolved entry shape as sensor attributes.
+  MUST include `customFieldId`, `varName`, `name` (the human-readable display
+  name), `type`, `possibleValues`, `value`, and `resolved: true`;
+  `possibleValues` MUST be a list containing allowed values for `dropdown`
+  definitions and an empty list for other types. Unresolved fields MUST remain
+  in the response using the unresolved key required by the target type:
+  FR-011's shared-namespace fallback key for listing targets, or
+  `custom_field_<customFieldId>` for reservation targets. Each unresolved entry
+  MUST include `customFieldId`, `value`, `resolved: false`, and empty or absent
+  definition metadata. Empty results MUST return `{"custom_fields": {}}` rather
+  than omitting the key or raising an error.
 - **FR-025**: The value read service MUST include defined fields that currently
   have no value, so automations can discover the available field set.
 - **FR-026**: The value read service MUST return a clear, actionable error when
@@ -508,8 +527,8 @@ field they operate on and cross-reference each other.
 #### Documentation
 
 - **FR-043**: User-facing service documentation MUST describe each new service,
-  its fields, selector behaviour, and the exact `hostaway.set_custom_field`
-  success response schema defined by FR-029.
+  its fields, selector behaviour, and the exact response schemas defined by
+  FR-020, FR-024, and FR-029.
 - **FR-044**: Documentation MUST explicitly distinguish Hostaway **built-in**
   fields (such as `doorCode`, written by `hostaway.set_door_code`) from
   **custom variables**, and cross-reference the two so they are not conflated.
