@@ -265,10 +265,11 @@ field they operate on and cross-reference each other.
 - **Unknown future field type**: Hostaway introduces a type the integration
   does not know. The service passes values for that field through to Hostaway
   for server-side validation rather than hard-rejecting them locally.
-- **Duplicate `varName`**: two definitions share a `varName` across different
+- **Duplicate `varName`**: two definitions share a `varName`. Across different
   object types (for example one listing field and one reservation field with
-  the same name). Resolution MUST be scoped by object type so the correct field
-  is chosen.
+  the same name), resolution MUST be scoped by object type so the correct field
+  is chosen. Within the same object type, `varName` addressing MUST fail as
+  ambiguous and require numeric `customFieldId` addressing instead.
 - **Task-type definitions present**: the account defines `objectType: task`
   custom fields. They MUST be ignored entirely by this feature.
 - **Partial-payload rejection**: Hostaway turns out to treat
@@ -374,7 +375,8 @@ field they operate on and cross-reference each other.
 #### Read services
 
 - **FR-020**: The integration MUST provide `hostaway.get_custom_fields`, a
-  response-returning service that returns cached custom field definitions.
+  response-returning service registered with Home Assistant
+  `SupportsResponse.ONLY` that returns cached custom field definitions.
 - **FR-021**: `hostaway.get_custom_fields` MUST accept an optional
   `config_entry_id` selector so users can target a specific Hostaway account.
   When exactly one Hostaway config entry is loaded, omitting
@@ -383,8 +385,9 @@ field they operate on and cross-reference each other.
   `config_entry_id required when multiple entries exist` before any read is
   performed.
 - **FR-022**: The integration MUST provide
-  `hostaway.get_custom_field_values`, a response-returning service that returns
-  the custom variables for a specified listing or reservation.
+  `hostaway.get_custom_field_values`, a response-returning service registered
+  with Home Assistant `SupportsResponse.ONLY` that returns the custom variables
+  for a specified listing or reservation.
 - **FR-023**: `hostaway.get_custom_field_values` MUST accept `target_type`,
   `target_id`, and optional `config_entry_id` fields. `target_type` MUST be a
   selector limited to `listing` and `reservation`. When exactly one Hostaway
@@ -408,8 +411,10 @@ field they operate on and cross-reference each other.
   service that sets one custom variable value on a specified listing or
   reservation.
 - **FR-028**: `hostaway.set_custom_field` MUST accept `target_type`,
-  `target_id`, a field identifier, `value`, and optional `config_entry_id`.
-  `target_type` MUST be a selector limited to `listing` and `reservation`.
+  `target_id`, a field identifier, a required `value` key, and optional
+  `config_entry_id`. `target_type` MUST be a selector limited to `listing` and
+  `reservation`. Omitting the `value` key MUST fail validation rather than being
+  treated as a clear request.
   When exactly one Hostaway config entry is loaded, omitting
   `config_entry_id` MUST select that entry. When multiple entries are loaded,
   omitting `config_entry_id` MUST fail closed with
@@ -430,7 +435,9 @@ field they operate on and cross-reference each other.
 - **FR-030**: `hostaway.set_custom_field` MUST accept exactly one field
   identifier: either numeric `customFieldId` or `varName`, but not both. Fields
   addressed by `customFieldId` MUST still resolve to a definition for the
-  target object type before any write is sent.
+  target object type before any write is sent. Fields addressed by `varName`
+  MUST fail as ambiguous without writing if more than one definition for the
+  target object type has that `varName`.
 - **FR-031**: The write service MUST reject a request that identifies no field,
   identifies more than one field, or identifies a field that cannot be resolved
   for the target object type, and MUST make no change when it does so.
@@ -463,9 +470,10 @@ field they operate on and cross-reference each other.
 - **FR-038**: A validation failure MUST reject the whole call with an
   explanatory error and MUST NOT write the requested field.
 - **FR-039**: The write service MUST support clearing a custom variable to an
-  empty value by accepting `value: null`. Null means clear the selected field
-  and bypasses local type validation; an empty string remains a literal value
-  for string-compatible Hostaway types.
+  empty value by accepting an explicitly present `value: null`. Null means clear
+  the selected field and bypasses local type validation; omitting `value` is
+  invalid, and an empty string remains a literal value for string-compatible
+  Hostaway types.
 - **FR-040**: After a successful write, the affected sensor or reservation
   attribute MUST reflect the new value without waiting for the next scheduled
   poll. After a successful clear, an existing listing custom-field sensor MUST
