@@ -125,8 +125,8 @@ cached definition set.
    that reservation's custom variables in the same shape.
 3. **Given** a defined custom field that has no value set on the object,
    **When** `hostaway.get_custom_field_values` is called, **Then** the field is
-   still present in the response with an empty or unset value, so automations
-   can see the field exists.
+   still present in the response with `value: null`, so automations can see the
+   field exists and can distinguish an unset value from an empty string.
 4. **Given** an id that does not exist or is not accessible, **When**
    `hostaway.get_custom_field_values` is called, **Then** the call fails with a
    clear, actionable error naming the object and id.
@@ -244,8 +244,8 @@ field they operate on and cross-reference each other.
   synthetic key derived from the id, and MUST NOT cause the refresh to fail.
 - **Definition with no value**: a field is defined for the object type but the
   object carries no value. The read service includes the field with an unset
-  value so automations can discover it; listing custom-field sensors are
-  created only for values that are present on a listing.
+  `value: null` so automations can discover it; listing custom-field sensors
+  are created only for values that are present on a listing.
 - **Stale cached definitions**: a field created in the dashboard after the last
   definitions refresh becomes available after the next definitions coordinator
   refresh. An unresolvable id is surfaced under a stable fallback key instead
@@ -293,8 +293,9 @@ field they operate on and cross-reference each other.
 - **Value clearing**: a user wants to set a custom variable to empty. Clearing
   uses `value: null` so it is distinguishable from omitting the field and from
   writing an empty string. Existing listing custom-field sensors for a cleared
-  value remain present with an empty state after a successful clear; no new
-  sensor is created for a field that was already absent.
+  value remain present after a successful clear with native value `None`
+  (rendered by Home Assistant as `unknown`) and `value: null` in their custom
+  field metadata; no new sensor is created for a field that was already absent.
 
 ---
 
@@ -339,8 +340,12 @@ field they operate on and cross-reference each other.
   each page of paginated coordinator reads and to direct object reads performed
   by services such as `hostaway.get_custom_field_values` and
   `hostaway.set_custom_field`.
-- **FR-009**: The listing model MUST carry parsed custom field values.
-- **FR-010**: The reservation model MUST carry parsed custom field values.
+- **FR-009**: Listing custom field values returned by Hostaway MUST be
+  available through the listing custom-field sensor and service contracts
+  defined by FR-011, FR-017, FR-024, and FR-040.
+- **FR-010**: Reservation custom field values returned by Hostaway MUST be
+  available through the reservation attribute and service contracts defined by
+  FR-014, FR-017, FR-024, and FR-040.
 - **FR-011**: Each listing custom variable value MUST be exposed as its own
   diagnostic sensor for that listing. The entity key MUST be stable and derived
   from `custom_` plus the slugified `varName` when a definition is available
@@ -355,16 +360,16 @@ field they operate on and cross-reference each other.
   `custom_<slugified varName>`, the existing sensor MUST retain that entity key
   and any additional colliding resolved values MUST use
   `custom_<slugified varName>_<customFieldId>` instead of overwriting or
-  renaming the existing sensor. Unresolved values MUST use a stable key derived
-  from the numeric id. If a later definitions refresh resolves a value that
-  already created a fallback-key sensor, the existing sensor MUST retain its
-  fallback entity key and update its metadata rather than creating a second
-  entity or renaming the entity id. All listing custom-field sensor keys,
-  resolved and fallback alike, MUST be allocated from one shared namespace per
-  listing on a first-come-first-served basis. Any newly allocated key that
-  would collide with an existing resolved or fallback key MUST use the
-  `customFieldId` suffix disambiguation rule instead of overwriting or renaming
-  an existing entity.
+  renaming the existing sensor. Unresolved listing values MUST use
+  `custom_field_<customFieldId>` as their fallback key. If a later definitions
+  refresh resolves a value that already created a fallback-key sensor, the
+  existing sensor MUST retain its fallback entity key and update its metadata
+  rather than creating a second entity or renaming the entity id. All listing
+  custom-field sensor keys, resolved and fallback alike, MUST be allocated from
+  one shared namespace per listing on a first-come-first-served basis. Any
+  newly allocated key that would collide with an existing resolved or fallback
+  key MUST append `_<customFieldId>` to the candidate key instead of
+  overwriting or renaming an existing entity.
 - **FR-012**: Newly appearing listing custom variables MUST be discovered at
   runtime and added as new sensors without requiring a Home Assistant restart.
 - **FR-013**: The existing diagnostic listing sensors (`listing_id`,
@@ -376,19 +381,29 @@ field they operate on and cross-reference each other.
   `custom_fields` attribute. Existing reservation attributes MUST remain
   unchanged except for adding that collection.
 - **FR-015**: The reservation `custom_fields` attribute MUST be a mapping keyed
-  by `custom_field_<customFieldId>` for every resolved and unresolved field.
-  Resolved entries MUST include the human-readable display name as metadata so
-  duplicate display names cannot overwrite each other. Unresolvable ids MUST
-  use the same key and include the unresolved entry shape from FR-018.
+  by `custom_field_<customFieldId>` for every custom field value present on the
+  reservation, whether or not its definition is resolved. Resolved value
+  entries MUST include the human-readable display name as metadata so duplicate
+  display names cannot overwrite each other. Unresolvable value ids MUST use
+  the same key and include the unresolved entry shape from FR-018. Defined
+  reservation fields that have no value MUST NOT be included in the reservation
+  sensor attribute; those fields are exposed by the value read service per
+  FR-025. A reservation with no custom field values MUST expose
+  `custom_fields: {}`.
 - **FR-016**: Reads MUST include fields flagged hidden (`isPublic=0`).
-- **FR-017**: Listing custom-field sensors and reservation attributes MUST
-  include enough metadata to identify resolved fields: `customFieldId`,
-  `varName`, display name, type, possible values when the type is `dropdown`,
-  current value, and `resolved: true`.
+- **FR-017**: Listing custom-field sensors and reservation `custom_fields`
+  attribute entries for resolved fields MUST expose the same required metadata
+  keys used by the value read service: `customFieldId`, `varName`, `name`,
+  `type`, `possibleValues`, `value`, and `resolved: true`. `possibleValues`
+  MUST be a list containing allowed values for `dropdown` definitions and an
+  empty list for other types.
 - **FR-018**: A value whose `customFieldId` has no matching definition MUST
-  still be surfaced under `custom_field_<customFieldId>`. The entry MUST
-  contain `customFieldId`, current value, `resolved: false`, and empty or absent
-  definition metadata so it is clearly distinguishable from a resolved field.
+  still be surfaced. Listing unresolved values MUST use FR-011's exact
+  fallback-key contract, while reservation unresolved values MUST use
+  `custom_field_<customFieldId>`. Each unresolved entry MUST include
+  `customFieldId`, `value`, and `resolved: false`; definition metadata keys
+  (`varName`, `name`, `type`, and `possibleValues`) MUST be omitted for
+  unresolved entries.
 - **FR-019**: Parsing of custom field values MUST NOT be able to fail a listing
   or reservation coordinator refresh. Malformed entries are skipped with a
   logged warning and the remainder of the object is used.
@@ -399,12 +414,13 @@ field they operate on and cross-reference each other.
   response-returning service registered with Home Assistant
   `SupportsResponse.ONLY` that returns cached custom field definitions. The
   response MUST contain exactly one required top-level key, `custom_fields`,
-  whose value is a list. Each definition entry MUST include `customFieldId`,
-  `varName`, `name` (the human-readable display name), `type`, `objectType`,
-  and `possibleValues`; `possibleValues` MUST be a list containing allowed
-  values for `dropdown` definitions and an empty list for other types. When the
-  definitions cache is empty, the service MUST return `{"custom_fields": []}`
-  rather than omitting the key or raising an error.
+  whose value is a list. Each definition entry MUST contain exactly these keys:
+  `customFieldId`, `varName`, `name` (the human-readable display name), `type`,
+  `objectType`, `possibleValues`, `isPublic`, and `sortOrder`;
+  `possibleValues` MUST be a list containing allowed values for `dropdown`
+  definitions and an empty list for other types. When the definitions cache is
+  empty, the service MUST return `{"custom_fields": []}` rather than omitting
+  the key or raising an error.
 - **FR-021**: `hostaway.get_custom_fields` MUST accept an optional
   `config_entry_id` selector so users can target a specific Hostaway account.
   When exactly one Hostaway config entry is loaded, omitting
@@ -418,28 +434,47 @@ field they operate on and cross-reference each other.
   for a specified listing or reservation.
 - **FR-023**: `hostaway.get_custom_field_values` MUST accept `target_type`,
   `target_id`, and optional `config_entry_id` fields. `target_type` MUST be a
-  selector limited to `listing` and `reservation`. When exactly one Hostaway
-  config entry is loaded, omitting `config_entry_id` MUST select that entry.
-  When multiple entries are loaded, omitting `config_entry_id` MUST fail closed
-  with `config_entry_id required when multiple entries exist` before resolving
-  the target id or performing any read.
-- **FR-024**: The value read service response MUST include one `custom_fields`
-  mapping under the required top-level key `custom_fields`. For listing
-  targets, mapping keys MUST match the listing sensor key contract from FR-011.
+  selector limited to `listing` and `reservation`. `target_id` MUST be the
+  integer Hostaway object id for the selected target type; missing or
+  non-integer `target_id` values MUST fail validation before any read is
+  performed. When exactly one Hostaway config entry is loaded, omitting
+  `config_entry_id` MUST select that entry. When multiple entries are loaded,
+  omitting `config_entry_id` MUST fail closed with
+  `config_entry_id required when multiple entries exist` before resolving the
+  target id or performing any read.
+- **FR-024**: The value read service response MUST contain exactly one
+  top-level key, `custom_fields`, whose value is a mapping. For listing
+  targets, mapping keys MUST be allocated with the same shared-namespace rules
+  as FR-011 across every entry returned in that response: resolved valued
+  fields, resolved fields with `value: null`, unresolved values, and any
+  existing persisted listing custom-field sensor keys for that listing. An
+  existing persisted listing custom-field sensor key for the same
+  `customFieldId` MUST be reused as that entry's response key. Persisted keys
+  for other `customFieldId`s reserve the namespace and can cause suffixing. The
+  candidate key for a resolved listing entry with no persisted key for the same
+  `customFieldId` is `custom_<slugified varName>`, using
+  `custom_<slugified varName>_<customFieldId>` when the listing definition set
+  contains duplicate or slug-colliding definitions. The candidate key for an
+  unresolved listing entry is `custom_field_<customFieldId>`. Any response key
+  candidate that collides with an already allocated resolved, unresolved, or
+  persisted listing key MUST append `_<customFieldId>` instead of overwriting
+  another entry. Computing a key for a listing entry with `value: null` MUST
+  NOT create or reserve a listing sensor entity outside that service response.
   For reservation targets, mapping keys MUST match the reservation
   `custom_field_<customFieldId>` key contract from FR-015. Each resolved entry
-  MUST include `customFieldId`, `varName`, `name` (the human-readable display
-  name), `type`, `possibleValues`, `value`, and `resolved: true`;
+  MUST contain exactly these keys: `customFieldId`, `varName`, `name` (the
+  human-readable display name), `type`, `possibleValues`, `value`, and
+  `resolved`; `resolved` MUST be `true`.
   `possibleValues` MUST be a list containing allowed values for `dropdown`
-  definitions and an empty list for other types. Unresolved fields MUST remain
-  in the response using the unresolved key required by the target type:
-  FR-011's shared-namespace fallback key for listing targets, or
-  `custom_field_<customFieldId>` for reservation targets. Each unresolved entry
-  MUST include `customFieldId`, `value`, `resolved: false`, and empty or absent
-  definition metadata. Empty results MUST return `{"custom_fields": {}}` rather
-  than omitting the key or raising an error.
+  definitions and an empty list for other types. A defined field with no value
+  MUST include `value: null`; omitting `value` is invalid, and an empty string
+  remains a literal value. Each unresolved entry MUST contain exactly these
+  keys: `customFieldId`, `value`, and `resolved`; `resolved` MUST be `false`.
+  Empty results MUST return exactly `{"custom_fields": {}}` rather than
+  omitting the key or raising an error.
 - **FR-025**: The value read service MUST include defined fields that currently
-  have no value, so automations can discover the available field set.
+  have no value, so automations can discover the available field set. These
+  entries MUST use `value: null` in the response.
 - **FR-026**: The value read service MUST return a clear, actionable error when
   the referenced listing or reservation does not exist or is inaccessible.
 
@@ -449,10 +484,12 @@ field they operate on and cross-reference each other.
   service that sets one custom variable value on a specified listing or
   reservation.
 - **FR-028**: `hostaway.set_custom_field` MUST accept `target_type`,
-  `target_id`, a field identifier, a required `value` key, and optional
-  `config_entry_id`. `target_type` MUST be a selector limited to `listing` and
-  `reservation`. Omitting the `value` key MUST fail validation rather than being
-  treated as a clear request.
+  `target_id`, exactly one field identifier, a required `value` key, and
+  optional `config_entry_id`. `target_type` MUST be a selector limited to
+  `listing` and `reservation`. `target_id` MUST be the integer Hostaway object
+  id for the selected target type. The field identifier MUST be either numeric
+  `customFieldId` or string `varName`, as constrained by FR-030. Omitting the
+  `value` key MUST fail validation rather than being treated as a clear request.
   When exactly one Hostaway config entry is loaded, omitting
   `config_entry_id` MUST select that entry. When multiple entries are loaded,
   omitting `config_entry_id` MUST fail closed with
@@ -487,7 +524,9 @@ field they operate on and cross-reference each other.
   unresolved values whose definitions are unavailable.
 - **FR-033**: Concurrent Home Assistant writes to the same object MUST be
   coordinated so one successful call cannot overwrite another successful call's
-  custom-variable changes.
+  custom-variable changes. Coordinator refresh results for the affected object
+  that were read before a successful write MUST NOT overwrite the post-write
+  local value.
 - **FR-034**: The write MUST NOT modify any built-in field of the target
   listing or reservation that is visible before the write is sent. If a safe
   listing payload strategy cannot preserve or detect concurrent built-in field
@@ -514,15 +553,22 @@ field they operate on and cross-reference each other.
   Hostaway types.
 - **FR-040**: After a successful write, the affected sensor or reservation
   attribute MUST reflect the new value without waiting for the next scheduled
-  poll. After a successful clear, an existing listing custom-field sensor MUST
-  remain present with an empty state rather than disappearing immediately.
+  poll. An in-flight coordinator refresh that read older data before the write
+  MUST NOT publish that older value over the immediate post-write state. After
+  a successful clear, an existing listing custom-field sensor MUST remain
+  present with native value `None` (rendered by Home Assistant as `unknown`)
+  and `value: null` in its custom field metadata rather than disappearing
+  immediately.
 - **FR-041**: The write service MUST NOT create writable entities (text,
   number, or select) for custom variables. Service-only is the write surface
   for this feature.
 - **FR-042**: Hostaway API errors during a write MUST surface as clear,
-  actionable Home Assistant errors, consistent with existing services. A
-  rejected custom-variable mutation MUST NOT be logged and then returned as
-  successful.
+  actionable Home Assistant errors, consistent with existing services. If the
+  referenced listing or reservation does not exist, is inaccessible, or cannot
+  be read for the required pre-write merge, the service MUST fail with a clear
+  error naming the target type and id and MUST NOT present local state as
+  updated. A rejected custom-variable mutation MUST NOT be logged and then
+  returned as successful.
 
 #### Documentation
 
@@ -561,9 +607,9 @@ field they operate on and cross-reference each other.
   sensor whose state is one listing custom variable value. The stable entity
   key is based on `custom_` plus slugified `varName` when the definition is
   known before first observation, appending `_<customFieldId>` when needed to
-  disambiguate key collisions, with a numeric-id fallback for unresolved
-  values. Fallback-key sensors keep that entity key if a later definitions
-  refresh resolves their metadata.
+  disambiguate key collisions, with `custom_field_<customFieldId>` as the
+  fallback key for unresolved values. Fallback-key sensors keep that entity key
+  if a later definitions refresh resolves their metadata.
 - **Reservation**: Existing entity, extended to carry a collection of custom
   field values for the selected reservation under a `custom_fields` mapping
   keyed by numeric-id-derived `custom_field_<customFieldId>` entries.
@@ -578,14 +624,22 @@ field they operate on and cross-reference each other.
   hidden fields included — are visible in Home Assistant within one poll
   interval of being set in the Hostaway dashboard.
 - **SC-002**: A newly appearing listing custom variable is added as a new
-  per-field sensor at runtime, without requiring a Home Assistant restart.
+  per-field sensor under either its resolved key or its unresolved fallback key
+  within one listing poll after its value is present. When the sensor is first
+  added under an unresolved fallback key because its definition was not already
+  cached, the same sensor retains that key and updates its resolved metadata
+  within one listing poll after the next successful definitions coordinator
+  refresh, without requiring a Home Assistant restart.
 - **SC-003**: Setting a single custom variable via `hostaway.set_custom_field`
   leaves 100% of that object's other custom variables and all of its built-in
   fields unchanged, verified for both listings and reservations. Listing
   verification MUST use a real listing carrying at least three populated custom
-  variables.
-- **SC-004**: An automation author can read or write a named custom variable
-  using `varName`, without knowing any numeric id.
+  variables. Reservation verification MUST use a real reservation carrying at
+  least three populated reservation custom variables and at least one built-in
+  reservation field such as `doorCode`.
+- **SC-004**: An automation author can write a custom variable using `varName`,
+  without knowing any numeric id, when the `varName` is unique for the target
+  object type; ambiguous same-object-type `varName`s require `customFieldId`.
 - **SC-005**: A malformed or unrecognised custom field record never prevents a
   listing or reservation refresh from completing; the remaining objects and
   fields are still delivered.
@@ -603,13 +657,16 @@ field they operate on and cross-reference each other.
   response indicates that no next page exists. These requests MUST remain
   subject to the integration's rate limiting so counted requests never exceed
   Hostaway's 200 requests per 10 seconds per account and per IP limit.
-- **SC-008**: A user reading the integration documentation can correctly state
-  whether `doorCode` is a built-in field or a custom variable, and which service
-  writes it.
-- **SC-009**: All existing integration behaviour — including `set_door_code`
-  and existing sensor states — is unchanged by this feature. Existing
-  attributes remain unchanged except for the new custom-variable collection on
-  the reservation sensor.
+- **SC-008**: The user-facing documentation includes one explicit statement in
+  the custom-variable service documentation and one explicit statement in the
+  `set_door_code` documentation that `doorCode` is a built-in field, not a
+  custom variable, and that `hostaway.set_door_code` is the service that writes
+  it.
+- **SC-009**: The existing integration regression test suite passes unchanged
+  after this feature is added, including the existing `set_door_code` service
+  tests and existing listing/reservation sensor-state tests. Existing entity
+  states and attributes asserted by those tests MUST remain unchanged except
+  for the new `custom_fields` collection on the reservation sensor.
 
 ---
 
