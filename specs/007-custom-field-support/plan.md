@@ -105,8 +105,9 @@ specs/007-custom-field-support/
 ├── quickstart.md
 ├── contracts/
 │   └── hostaway-custom-fields-api.md
-└── checklists/
-    └── requirements.md
+├── checklists/
+│   └── requirements.md
+└── tasks.md                     # Phase 2 output from /speckit.tasks
 ```
 
 ### Source Code (repository root)
@@ -117,6 +118,9 @@ custom_components/hostaway/
 ├── config_flow.py                 # Add definitions scan interval option
 ├── config_options.py              # New options-flow helpers if needed for cap
 ├── const.py                       # Add custom-field option/service constants
+├── strings.json                   # Add options/service translations
+├── translations/
+│   └── en.json                    # Add options/service translations
 ├── coordinator.py                 # Add HostawayCustomFieldsCoordinator
 ├── api/
 │   ├── client.py                  # Add thin delegates only if line budget allows
@@ -167,9 +171,10 @@ table-driven.
 - Treat this task as blocking for listing writes. It must prove omitted
   built-in fields and unrelated custom values remain unchanged before any
   listing write path can be enabled.
-- If partial listing PUT is destructive, implement reservation writes and read
-  support, but make listing writes fail closed until a safe full payload can be
-  built from the current listing snapshot and proven no-clobber.
+- If partial listing PUT is destructive, keep listing writes disabled for this
+  feature and return a fail-closed actionable error. Do not attempt a full
+  listing rollback/write payload in this feature unless a separate verified
+  endpoint or complete-payload strategy is specified and proven safe.
 - Write a real-account verification task for reservation writes that reads a
   reservation with at least three populated reservation custom fields and at
   least one built-in field such as `doorCode`, sends a merged
@@ -191,6 +196,9 @@ table-driven.
   `GET /v1/reservations/{id}?includeResources=1` so services can satisfy
   `target_id`-only read and write contracts without requiring `listing_id` or
   scanning account-wide collections.
+- Add a validated single-object response helper or delegate for direct target
+  reads; existing `_request_results` accepts only list-valued `result` payloads
+  and must not be reused for single listing/reservation responses.
 - Mirror `parse_reservations` by skipping malformed presentation records with
   warnings while preserving their raw entries for write merges.
 
@@ -204,6 +212,8 @@ table-driven.
   refreshes when definitions fail.
 - Store the coordinator in `hass.data[DOMAIN][entry.entry_id]` and shut it
   down during unload.
+- Add user-facing labels and descriptions for the new options-flow field in
+  `strings.json` and `translations/en.json`.
 
 ### Phase 3: Entity surfaces and deterministic key allocation
 
@@ -232,6 +242,11 @@ table-driven.
   all writes; fail ambiguous same-object-type `varName` resolutions.
 - Serialize concurrent Home Assistant writes through per-entry, per-target
   `asyncio.Lock` instances.
+- Add a shared per-target write generation registry. Coordinators capture the
+  generation before refresh and, before publishing, must not overwrite a target
+  whose generation advanced during the refresh. They either merge the
+  post-write custom-field override into the refreshed object or keep the
+  previous post-write target until a later fresh refresh.
 - Read the current object with `includeResources=1`, merge only the addressed
   value into the raw `customFieldValues`, preserve unresolved and raw malformed
   entries, and submit the safe payload.

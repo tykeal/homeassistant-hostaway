@@ -173,6 +173,20 @@ Per-entry registry of `asyncio.Lock` instances for write serialization.
 Each successful write reads current values after any earlier successful write
 has completed.
 
+### CustomFieldWriteGenerationRegistry
+
+Per-entry generation counters that coordinators and write services share.
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `(target_type, target_id)` | `tuple[str, int]` | Object generation. |
+
+**Invariant**: A coordinator refresh that started before a successful write
+cannot publish stale custom-field data over the post-write value. Coordinators
+capture generations at refresh start and compare them before publishing. If a
+target generation advanced, the coordinator preserves or merges the post-write
+custom-field value until a later refresh that started after the write.
+
 ## Service Response Shapes
 
 ### `hostaway.get_custom_fields`
@@ -271,10 +285,12 @@ service call
   -> field definition resolution
   -> local value validation
   -> acquire target lock
+  -> increment or mark target write generation
   -> read target by id with includeResources=1
   -> merge raw customFieldValues
   -> PUT target
   -> update local coordinator data
+  -> advance target generation and post-write override
   -> release lock
   -> optional response
 ```

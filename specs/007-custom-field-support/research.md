@@ -128,19 +128,22 @@ variable.
 **Required verification**:
 
 1. Select a real listing with at least three populated custom fields and
-   representative built-in fields.
-2. Read it with `includeResources=1` and store a redacted before snapshot.
+   representative built-in fields. Prefer a disposable test listing.
+2. Read it with `includeResources=1` and store a complete private rollback
+   snapshot. Only redacted summaries may be logged or committed.
 3. Send a partial `PUT /v1/listings/{id}` payload containing only the merged
    `customFieldValues` for a harmless value change.
 4. Re-read with `includeResources=1`.
 5. Assert the target value changed and every unrelated custom field and
    visible built-in field stayed byte-for-byte equivalent.
-6. Revert the harmless target value if necessary.
+6. Roll back using the complete private snapshot if any unexpected mutation is
+   detected; otherwise restore the harmless target value if necessary.
 
 **Fallback if verification fails**: Listing writes must fail closed with an
 actionable error while reads and reservation writes continue. Listing writes
-may only be enabled after a safe full-payload strategy is designed, tested
-against live data, and shown to preserve every visible built-in field.
+must remain disabled for this feature unless a separate safe endpoint or full
+payload strategy is specified, tested against live data, and shown to preserve
+every visible built-in field.
 
 ## R-006: Definition coordinator behavior
 

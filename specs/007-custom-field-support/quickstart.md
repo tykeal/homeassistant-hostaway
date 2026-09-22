@@ -70,11 +70,14 @@ wc -l \
 
 ## Manual FR-035 verification
 
-Use a real listing with at least three custom fields populated.
+Use a disposable real listing with at least three custom fields populated.
+If a disposable listing is not available, capture a complete private rollback
+snapshot before sending any mutation. Only redacted summaries may be logged or
+committed.
 
 1. Read the listing with `includeResources=1`.
-2. Record a redacted before snapshot of built-in fields and all
-   `customFieldValues`.
+2. Record a complete private before snapshot of built-in fields and all
+   `customFieldValues`, plus a redacted summary for review notes.
 3. Send a partial `PUT /v1/listings/{id}` payload that changes one harmless
    custom field through the planned merged `customFieldValues` shape.
 4. Re-read the listing with `includeResources=1`.
@@ -84,7 +87,8 @@ Use a real listing with at least three custom fields populated.
    - built-in fields such as name, pricing, occupancy, and door-code-related
      fields are unchanged;
    - hidden custom fields remain present.
-6. Restore the original target value if needed.
+6. Roll back from the complete private snapshot if any unexpected mutation is
+   detected; otherwise restore the original target value if needed.
 
 Do not enable listing writes unless this verification passes. If it fails,
 the implementation must make `hostaway.set_custom_field` fail closed for
@@ -92,12 +96,15 @@ the implementation must make `hostaway.set_custom_field` fail closed for
 
 ## Manual reservation no-clobber verification
 
-Use a real reservation with at least three populated reservation custom fields
-and at least one built-in reservation field such as `doorCode`.
+Use a disposable real reservation with at least three populated reservation
+custom fields and at least one built-in reservation field such as `doorCode`.
+If a disposable reservation is not available, capture a complete private
+rollback snapshot before sending any mutation. Only redacted summaries may be
+logged or committed.
 
 1. Read the reservation with `includeResources=1`.
-2. Record a redacted before snapshot of built-in fields and all
-   `customFieldValues`.
+2. Record a complete private before snapshot of built-in fields and all
+   `customFieldValues`, plus a redacted summary for review notes.
 3. Send a merged `PUT /v1/reservations/{id}` payload that changes one harmless
    custom field.
 4. Re-read the reservation with `includeResources=1`.
@@ -107,7 +114,8 @@ and at least one built-in reservation field such as `doorCode`.
    - built-in fields such as `doorCode`, `doorCodeVendor`, and
      `doorCodeInstruction` are unchanged;
    - hidden custom fields remain present.
-6. Restore the original target value if needed.
+6. Roll back from the complete private snapshot if any unexpected mutation is
+   detected; otherwise restore the original target value if needed.
 
 Do not enable reservation writes unless this verification passes. If it fails,
 the implementation must make `hostaway.set_custom_field` fail closed for
