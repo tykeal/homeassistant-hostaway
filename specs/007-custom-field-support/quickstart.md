@@ -129,7 +129,9 @@ Record the residual gap honestly: this evidence does not prove reservation
 variables in the owner's account today, the current clobber surface is limited
 to built-in fields, which the door-code evidence covers. If reservation custom
 variables become available later, run the same no-op, sentinel, and restore
-protocol used for listings.
+protocol used for listings. Until that round-trip evidence exists,
+reservation custom-field writes must fail closed when the pre-write reservation
+already has existing `customFieldValues`.
 
 ## Key implementation patterns
 
@@ -206,6 +208,9 @@ target type may use a partial payload only when recorded evidence supports that
 strategy; a full-object payload must be reconstructable from the pre-write
 snapshot before any live mutation uses it. A verified full-object strategy
 must not be represented by a flag that claims partial `PUT` was verified.
+If partial listing verification fails and a full-object listing strategy is
+selected, repeat the no-op, sentinel, and restore steps with the reconstructed
+full-object payload before enabling listing writes.
 
 ## User-facing behavior to verify
 

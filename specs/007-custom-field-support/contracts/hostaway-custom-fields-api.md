@@ -289,11 +289,15 @@ Content-Type: application/json
   `HostawayApiClient.update_reservation`. Its production history since v0.4.0
   with no reported reservation data loss demonstrates top-level merge
   semantics for built-in fields, but not `customFieldValues` round-tripping.
+- Until reservation `customFieldValues` round-tripping is verified,
+  reservation custom-field writes fail closed when the pre-write reservation
+  already has existing `customFieldValues`.
 - The executable gate is
   `custom_field_write_safety.reservation_no_clobber_verified`, stored per
-  config entry under `hass.data[DOMAIN][entry.entry_id]` and defaulting to
-  false. While false, `hostaway.set_custom_field` rejects reservation writes
-  with `reservation custom-field writes are disabled until safety evidence is
+  config entry under `hass.data[DOMAIN][entry.entry_id]`, plus a non-`None`
+  `reservation_payload_strategy`, and defaults to disabled. While missing,
+  `hostaway.set_custom_field` rejects reservation writes with
+  `reservation custom-field writes are disabled until safety evidence is
   recorded` before reading the target or sending any mutation.
 - The API layer provides both partial and full-object payload builders. The
   partial `PUT` body contains exactly one top-level key,

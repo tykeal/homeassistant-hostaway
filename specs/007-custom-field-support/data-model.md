@@ -218,8 +218,11 @@ strictly tied to partial-PUT evidence. If the selected listing strategy is
 of setting `listing_partial_put_verified` to true. Reservation evidence may be
 the documented production `doorCode` partial-`PUT` behavior accepted under
 FR-055, while noting that reservation `customFieldValues` round-tripping
-remains unproven. Until then, `hostaway.set_custom_field` rejects that target
-type before reading, merging, or sending a mutating request.
+remains unproven. Both target types also require a non-`None` payload strategy
+before dispatch. Until then, `hostaway.set_custom_field` rejects that target
+type before reading, merging, or sending a mutating request. Until reservation
+`customFieldValues` round-tripping is verified, reservation writes also fail
+closed when the pre-write reservation already has existing `customFieldValues`.
 
 ### CustomFieldWriteLockRegistry
 

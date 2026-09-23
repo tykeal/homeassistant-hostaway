@@ -272,7 +272,9 @@ table-driven.
 - If partial listing PUT is destructive, keep listing writes disabled or switch
   to a verified full-object payload strategy for this feature. Restore on
   failure must be attempted automatically, but the evidence must document that
-  restoration depends on cleared built-in fields being writable.
+  restoration depends on cleared built-in fields being writable. A selected
+  full-object strategy must repeat the no-op, sentinel, and restore live steps
+  with the reconstructed full-object payload before listing writes are enabled.
 - Record production reservation evidence from the existing `set_door_code`
   service before enabling reservation writes. The handler sends a partial
   `PUT /v1/reservations/{id}` with only `doorCode` plus optional
@@ -282,7 +284,10 @@ table-driven.
   semantics for the reservation endpoint. It does not prove
   `customFieldValues` round-tripping; with zero reservation custom variables in
   the owner's account today, the current clobber surface is limited to
-  built-in fields covered by the door-code evidence.
+  built-in fields covered by the door-code evidence. Until reservation
+  `customFieldValues` round-tripping is verified, reservation custom-field
+  writes must fail closed when the pre-write reservation already has existing
+  `customFieldValues`.
 - Treat documented reservation production evidence as sufficient to enable the
   reservation gate when recorded in `live-verification.md`, while recording
   the accepted residual risk that reservation `customFieldValues` round-trip

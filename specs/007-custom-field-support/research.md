@@ -171,7 +171,10 @@ value or built-in field deviation is a failure.
 actionable error while reads and reservation writes continue. Listing writes
 must remain disabled for this feature unless a separate safe endpoint or full
 payload strategy is specified, tested against live data, and shown to preserve
-every visible built-in field.
+every visible built-in field. If full-object listing payloads are selected
+after partial verification fails, the no-op, sentinel, and restore steps must
+be repeated with the reconstructed full-object payload before listing writes
+are enabled.
 
 **Reservation verification**:
 
@@ -186,16 +189,22 @@ object. The evidence must record the residual gap: it does not prove that
 reservation `customFieldValues` specifically round-trips. With zero
 reservation custom variables in the owner's account today, the current clobber
 surface is limited to built-in fields, which the door-code evidence covers.
+Until reservation `customFieldValues` round-tripping is verified, reservation
+custom-field writes must fail closed when the pre-write reservation already has
+existing `customFieldValues`.
 
 If reservation custom variables become available later, the same no-op,
 sentinel, and restore protocol can be run for reservation `customFieldValues`.
 
 **Executable gates**: The implementation must carry default-false
-`listing_partial_put_verified` and `reservation_no_clobber_verified` flags in
-per-entry `CustomFieldWriteSafetyGates`. Each target type rejects before
-reading or mutating while its flag is false. A flag may become true only in an
-implementation change that records the corresponding successful evidence in
-`specs/007-custom-field-support/live-verification.md`.
+`listing_partial_put_verified` and `reservation_no_clobber_verified` flags
+plus explicit per-target payload strategy state in per-entry
+`CustomFieldWriteSafetyGates`. Each target type rejects before reading or
+mutating while its required evidence or payload strategy is missing. A flag or
+strategy may become active only in an implementation change that records the
+corresponding successful evidence in
+`specs/007-custom-field-support/live-verification.md`. The partial listing
+flag is required only when the selected listing strategy is `partial`.
 
 ## R-006: Definition coordinator behavior
 

@@ -558,8 +558,11 @@ field they operate on and cross-reference each other.
   than assumed. The executable state MUST record the selected payload strategy
   separately from whether partial `PUT` semantics were verified; a full-object
   listing strategy MUST NOT be represented by setting
-  `listing_partial_put_verified` to true. The existing
-  `update_reservation` partial payload
+  `listing_partial_put_verified` to true. If partial listing verification
+  fails and a full-object listing strategy is selected, the no-op, sentinel,
+  and restore steps MUST be repeated with the reconstructed full-object payload
+  before listing writes are enabled. The existing `update_reservation` partial
+  payload
   (`{"doorCode": ...}`) is supporting evidence for reservation top-level merge
   semantics, but it is not verification for the listing endpoint. If listing
   partial verification fails, listing write support MUST use a verified
@@ -659,7 +662,9 @@ field they operate on and cross-reference each other.
   attempted automatically during live verification. The verifier and evidence
   MUST document the residual risk: if listing partial `PUT` clears built-in
   fields, restoration depends on those built-in fields being writable through
-  the chosen restore payload.
+  the chosen restore payload. If partial listing verification fails and a
+  full-object strategy is selected, Step 4 and Step 5 MUST be repeated with the
+  reconstructed full-object payload before listing writes are enabled.
 - **FR-054**: Verification evidence for each completed ladder step MUST be
   recorded in `specs/007-custom-field-support/live-verification.md` with
   redacted values before any write-safety gate is enabled. Steps 0 through 3
@@ -678,11 +683,10 @@ field they operate on and cross-reference each other.
   reservation custom variables in the owner's account today, the gate enables
   the implementation to proceed only on the accepted residual risk that the
   current reservation clobber surface is limited to built-in fields, which the
-  `doorCode` production evidence covers. If reservation custom variables later
-  become available, the evidence file MUST record that their
-  `customFieldValues` round-trip behavior still needs the no-op, sentinel, and
-  restore protocol before relying on preservation of existing reservation
-  custom values.
+  `doorCode` production evidence covers. Until reservation `customFieldValues`
+  round-trip behavior is verified, reservation custom-field writes MUST fail
+  closed when the pre-write reservation already has existing
+  `customFieldValues`.
 
 ### Key Entities
 
