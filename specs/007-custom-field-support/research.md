@@ -157,13 +157,18 @@ variable.
 - Step 2: Inspect the generated dry-run payload; the verification script
   defaults to dry-run.
 - Step 3: Run a disposable task canary first: create a throwaway Hostaway task,
-  send partial `PUT /v1/tasks/{id}`, verify unrelated task fields survive, and
-  delete the task. This is indicative, not conclusive, for listing semantics
-  because task and listing endpoints may use different controllers.
-- Step 4: With a disposable listing or the allowlisted restore path from Step 1,
-  plus a separate explicit owner decision, self-write one populated listing
-  custom variable's current value and re-read with `includeResources=1`. Assert
-  the canonicalized whole-object diff is empty.
+  snapshot it, send partial `PUT /v1/tasks/{id}`, verify unrelated task fields
+  survive, apply the allowlisted restore payload built by the same production
+  restore-path code used by Steps 4 and 5, verify the task matches its
+  pre-mutation snapshot, and delete the task. This proves server-accepted
+  restore for the disposable task path, but remains indicative, not
+  conclusive, for listing semantics because task and listing endpoints may use
+  different controllers.
+- Step 4: With a disposable listing or the allowlisted restore path from Step 1
+  plus Step 3 server-accepted restore evidence, and a separate explicit owner
+  decision, self-write one populated listing custom variable's current value
+  and re-read with `includeResources=1`. Assert the canonicalized whole-object
+  diff is empty.
 - Step 5: Under the same restore precondition and owner decision, write a
   distinct sentinel value, re-read, assert exactly one field changed, restore
   the original value, and assert the object matches the pre-write snapshot

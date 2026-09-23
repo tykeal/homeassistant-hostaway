@@ -99,13 +99,16 @@ Authorized now:
   response.
 - Step 2: Inspect the generated dry-run payload. The verification script must
   default to dry-run, so this step sends no mutation.
-- Step 3: Run a disposable task canary: create a throwaway Hostaway task, send
-  partial `PUT /v1/tasks/{id}`, verify unrelated task fields survive, and
-  delete the task. Treat the result as indicative, not conclusive, for
-  listings.
+- Step 3: Run a disposable task canary: create a throwaway Hostaway task,
+  snapshot it, send partial `PUT /v1/tasks/{id}`, verify unrelated task fields
+  survive, apply the allowlisted restore payload built by the same production
+  restore-path code that listing Steps 4 and 5 would use, re-read, confirm the
+  task matches its pre-mutation snapshot, and delete the task. Treat the
+  server-accepted task restore as indicative, not conclusive, for listings.
 
-Requires a disposable listing or the allowlisted restore path from Step 1, plus
-a separate explicit owner decision:
+Requires a disposable listing or the allowlisted restore path from Step 1 plus
+the server-accepted restore demonstrated by Step 3, and a separate explicit
+owner decision:
 
 - Step 4: Send a listing no-op self-write of the populated custom variable's
   current value through the production payload strategy, re-read the listing

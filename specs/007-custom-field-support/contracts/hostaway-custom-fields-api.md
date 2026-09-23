@@ -221,6 +221,12 @@ Content-Type: application/json
 - Listing writes are disabled until the FR-035 verification ladder records
   evidence for the selected payload strategy. Partial payloads remain untrusted
   for listings until the no-op, sentinel, and restore steps pass.
+- Listing mutation steps require a separate explicit owner decision and either
+  a disposable listing or an allowlisted restore path plus task-canary evidence
+  that the live API accepted and persisted a reconstructed restore payload
+  built by the same production restore-path code. Task restore evidence remains
+  indicative, not conclusive, for listing semantics because task and listing
+  endpoints may use different controllers.
 - The executable safety state records payload strategy separately from partial
   `PUT` verification. A full-object listing strategy must not set
   `listing_partial_put_verified` to true.

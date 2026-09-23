@@ -664,25 +664,34 @@ field they operate on and cross-reference each other.
   the comparison can be used as evidence. Step 2 inspects the generated
   dry-run payload and sends no mutation.
 - **FR-052**: Step 3 MUST run a disposable task canary before listing
-  mutation: create a throwaway Hostaway task, send a partial
-  `PUT /v1/tasks/{id}`, verify unrelated task fields survive, and delete the
-  task. Tasks are disposable, do not sync to sales channels, and
-  `HostawayApiClient.update_task` already targets `PUT /v1/tasks/{id}`. A
-  task canary result is indicative, not conclusive, for listing semantics
-  because Hostaway may implement task and listing updates in different
-  controllers.
+  mutation: create a throwaway Hostaway task, capture a canonicalized complete
+  pre-mutation task snapshot, send a partial `PUT /v1/tasks/{id}`, re-read the
+  task and compare canonicalized complete snapshots to verify unrelated task
+  fields survive, then apply the allowlisted restore payload built by the same
+  production restore-path code that Steps 4 and 5 would use, re-read again,
+  confirm the task matches its pre-mutation snapshot, and delete the task.
+  Tasks are disposable, do not sync to sales channels, and
+  `HostawayApiClient.update_task` already targets `PUT /v1/tasks/{id}`. The
+  canary MUST exercise the real restore code path end-to-end against the live
+  API rather than a bespoke restore path. A successful task canary restore is
+  indicative evidence that the account's write path accepts reconstructed
+  payloads, not conclusive proof for listing semantics, because Hostaway may
+  implement task and listing updates in different controllers.
 - **FR-053**: Steps 4 and 5 are listing mutations and MUST NOT run without a
   separate explicit owner decision and either a disposable listing or the
-  allowlisted restore path from FR-051. Step 4 performs the no-op self-write
-  and expects an empty whole-object diff. Step 5 writes the sentinel value,
-  verifies exactly one field changed, restores the original value, and verifies
-  the target matches the pre-write snapshot exactly. Restore-on-failure MUST be
-  attempted automatically using the allowlisted restore payload. If no
-  allowlisted restore path exists for the target, the ladder MUST stop at
-  Step 3 and listing writes MUST remain disabled. Step 4 and Step 5 MUST use
-  the selected listing payload strategy. If a full-object strategy is selected
-  for any reason, Step 4 and Step 5 MUST run with the reconstructed
-  full-object payload before listing writes are enabled.
+  allowlisted restore path from FR-051 plus the server-accepted restore
+  demonstrated by the task canary in FR-052. Step 4 performs the no-op
+  self-write and expects an empty whole-object diff. Step 5 writes the
+  sentinel value, verifies exactly one field changed, restores the original
+  value, and verifies the target matches the pre-write snapshot exactly.
+  Restore-on-failure MUST be attempted automatically using the allowlisted
+  restore payload. If no allowlisted restore path exists for the target, or if
+  the task canary has not demonstrated that the live API accepts and persists
+  the reconstructed restore payload, the ladder MUST stop at Step 3 and
+  listing writes MUST remain disabled. Step 4 and Step 5 MUST use the selected
+  listing payload strategy. If a full-object strategy is selected for any
+  reason, Step 4 and Step 5 MUST run with the reconstructed full-object payload
+  before listing writes are enabled.
 - **FR-054**: Verification evidence for each completed ladder step MUST be
   recorded in `specs/007-custom-field-support/live-verification.md` with
   redacted values before any write-safety gate is enabled. Steps 0 through 3
