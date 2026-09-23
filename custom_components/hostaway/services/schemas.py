@@ -56,6 +56,13 @@ def _positive_int(value: Any) -> int:
     return result
 
 
+def _strict_positive_int(value: Any) -> int:
+    """Validate a positive integer without coercion."""
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise vol.Invalid("must be a positive integer")
+    return value
+
+
 def _non_empty_string(value: Any) -> str:
     """Validate a non-empty string, stripping whitespace.
 
@@ -232,6 +239,32 @@ SERVICE_GET_USERS_SCHEMA = vol.Schema(
 
 SERVICE_GET_GROUPS_SCHEMA = vol.Schema(
     {
+        vol.Optional("config_entry_id"): _strict_string,
+    }
+)
+
+
+SERVICE_GET_CUSTOM_FIELDS_SCHEMA = vol.Schema(
+    {
+        vol.Optional("config_entry_id"): _strict_string,
+    }
+)
+
+SERVICE_GET_CUSTOM_FIELD_VALUES_SCHEMA = vol.Schema(
+    {
+        vol.Required("target_type"): vol.In(("listing", "reservation")),
+        vol.Required("target_id"): _strict_positive_int,
+        vol.Optional("config_entry_id"): _strict_string,
+    }
+)
+
+SERVICE_SET_CUSTOM_FIELD_SCHEMA = vol.Schema(
+    {
+        vol.Required("target_type"): vol.In(("listing", "reservation")),
+        vol.Required("target_id"): _strict_positive_int,
+        vol.Optional("customFieldId"): _strict_positive_int,
+        vol.Optional("varName"): _non_empty_string,
+        vol.Required("value"): object,
         vol.Optional("config_entry_id"): _strict_string,
     }
 )

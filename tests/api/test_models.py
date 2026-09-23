@@ -456,3 +456,37 @@ class TestHostawayReservationFromApiResponse:
         del data["status"]
         with pytest.raises(ValueError, match="status"):
             HostawayReservation.from_api_response(data)
+
+
+class TestCustomFieldModelMapping:
+    """Tests custom-field mapping on listing and reservation models."""
+
+    def test_listing_preserves_custom_field_collection(self) -> None:
+        """Listing models carry parsed and raw custom-field values."""
+        listing = HostawayListing.from_api_response(
+            make_listing_response(
+                customFieldValues=[
+                    {"customFieldId": 1, "value": "A"},
+                    {"customFieldId": 2},
+                ]
+            )
+        )
+
+        assert listing.custom_fields == {1: "A"}
+        assert listing.custom_field_collection is not None
+        assert listing.custom_field_collection.raw_entries == [
+            {"customFieldId": 1, "value": "A"},
+            {"customFieldId": 2},
+        ]
+
+    def test_reservation_preserves_custom_field_collection(self) -> None:
+        """Reservation models carry parsed and raw custom-field values."""
+        reservation = HostawayReservation.from_api_response(
+            make_reservation_response(
+                customFieldValues=[{"customFieldId": 3, "value": None}]
+            )
+        )
+
+        assert reservation.custom_fields == {3: None}
+        assert reservation.custom_field_collection is not None
+        assert reservation.custom_field_collection.state == "present"

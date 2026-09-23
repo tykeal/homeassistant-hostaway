@@ -39,7 +39,11 @@ async def fetch_reservation_items(
     limit: int = DEFAULT_PAGE_LIMIT,
 ) -> list[dict[str, Any]]:
     """Return one raw page of reservation payloads for a listing."""
-    params: dict[str, Any] = {"listingId": listing_id, "limit": limit}
+    params: dict[str, Any] = {
+        "listingId": listing_id,
+        "limit": limit,
+        "includeResources": 1,
+    }
     if after_id is not None:
         params["afterId"] = after_id
     return await request_results("/v1/reservations", params=params)

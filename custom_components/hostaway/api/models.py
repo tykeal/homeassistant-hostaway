@@ -3,14 +3,18 @@
 """Data transfer objects for the Hostaway API client."""
 
 # aislop-ignore-file ai-slop/hallucinated-import -- in-repo component imports
+# aislop-ignore-file complexity/file-too-large -- existing module exceeds 400 lines
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from custom_components.hostaway.api.const import TOKEN_READY_DELAY
+from custom_components.hostaway.api.custom_fields import (
+    HostawayCustomFieldCollection,
+)
 
 
 def _validate_non_negative(
@@ -215,6 +219,8 @@ class HostawayListing:
     check_in_time_end: str | None = None
     check_out_time: str | None = None
     is_listed: bool | None = None
+    custom_fields: dict[int, Any] = field(default_factory=dict)
+    custom_field_collection: HostawayCustomFieldCollection | None = None
 
     @classmethod
     def from_api_response(cls, data: dict[str, Any]) -> HostawayListing:
@@ -281,6 +287,8 @@ class HostawayListing:
         base_price = data.get("price")
         _validate_non_negative(base_price, "base_price", types=(int, float))
 
+        custom_field_collection = HostawayCustomFieldCollection.from_object(data)
+
         return cls(
             id=data["id"],
             name=data["name"],
@@ -299,6 +307,11 @@ class HostawayListing:
             check_in_time_end=data.get("checkInTimeEnd"),
             check_out_time=data.get("checkOutTime"),
             is_listed=is_listed,
+            custom_fields={
+                key: value.value
+                for key, value in custom_field_collection.values.items()
+            },
+            custom_field_collection=custom_field_collection,
         )
 
 
@@ -339,6 +352,8 @@ class HostawayReservation:
     door_code_instruction: str | None = None
     confirmation_code: str | None = None
     nights: int | None = None
+    custom_fields: dict[int, Any] = field(default_factory=dict)
+    custom_field_collection: HostawayCustomFieldCollection | None = None
 
     @classmethod
     def from_api_response(cls, data: dict[str, Any]) -> HostawayReservation:
@@ -402,6 +417,8 @@ class HostawayReservation:
         nights = data.get("nights")
         _validate_non_negative(nights, "nights")
 
+        custom_field_collection = HostawayCustomFieldCollection.from_object(data)
+
         return cls(
             id=data["id"],
             listing_id=data["listingMapId"],
@@ -418,4 +435,9 @@ class HostawayReservation:
             door_code_instruction=data.get("doorCodeInstruction"),
             confirmation_code=data.get("confirmationCode"),
             nights=nights,
+            custom_fields={
+                key: value.value
+                for key, value in custom_field_collection.values.items()
+            },
+            custom_field_collection=custom_field_collection,
         )

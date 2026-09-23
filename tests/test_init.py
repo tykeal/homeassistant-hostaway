@@ -215,3 +215,56 @@ class TestAsyncUnloadEntry:
         await hass.async_block_till_done()
 
         assert entry.entry_id not in hass.data.get(DOMAIN, {})
+
+
+class TestCustomFieldRuntimeData:
+    """Tests for custom-field runtime data wiring."""
+
+    @patch(
+        "custom_components.hostaway.HostawayApiClient.get_all_reservations",
+        new_callable=AsyncMock,
+        return_value=[],
+    )
+    @patch(
+        "custom_components.hostaway.HostawayApiClient.get_all_listings",
+        new_callable=AsyncMock,
+        return_value=[],
+    )
+    @patch(
+        "custom_components.hostaway.HostawayApiClient.test_connection",
+        new_callable=AsyncMock,
+        return_value=True,
+    )
+    async def test_setup_adds_custom_field_keys(
+        self,
+        mock_test: AsyncMock,
+        mock_listings: AsyncMock,
+        mock_reservations: AsyncMock,
+        hass: HomeAssistant,
+    ) -> None:
+        """Setup nests custom-field runtime state in existing entry data."""
+        from custom_components.hostaway.api.custom_fields import (
+            CustomFieldWriteSafetyGates,
+        )
+
+        entry = _make_entry()
+        entry.add_to_hass(hass)
+
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+        data = hass.data[DOMAIN][entry.entry_id]
+        assert "token_manager" in data
+        assert "custom_fields_coordinator" in data
+        assert callable(data["custom_fields_update_unsub"])
+        assert callable(data["custom_fields_initial_refresh_unsub"])
+        assert isinstance(
+            data["custom_field_write_safety"],
+            CustomFieldWriteSafetyGates,
+        )
+        assert data["custom_field_write_safety"].listing_partial_put_verified is False
+        assert (
+            data["custom_field_write_safety"].reservation_no_clobber_verified is False
+        )
+        assert "custom_field_write_locks" in data
+        assert "custom_field_write_generations" in data
