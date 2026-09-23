@@ -3,6 +3,7 @@
 """Config flow for the Hostaway integration."""
 
 # aislop-ignore-file ai-slop/hallucinated-import -- HA runtime provides these packages
+# aislop-ignore-file complexity/file-too-large -- existing module exceeds 400 lines
 
 from __future__ import annotations
 
@@ -36,10 +37,12 @@ from custom_components.hostaway.const import (
     CONF_CACHED_TOKEN,
     CONF_CLIENT_ID,
     CONF_CLIENT_SECRET,
+    CONF_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL,
     CONF_FILTER_CANCELLED,
     CONF_RESERVATION_SCAN_INTERVAL,
     CONF_SCAN_INTERVAL,
     CONF_SELECTED_LISTINGS,
+    DEFAULT_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL,
     DEFAULT_FILTER_CANCELLED,
     DEFAULT_RESERVATION_SCAN_INTERVAL,
     DEFAULT_SCAN_INTERVAL,
@@ -370,12 +373,20 @@ class HostawayOptionsFlow(OptionsFlow):
                 CONF_RESERVATION_SCAN_INTERVAL,
                 DEFAULT_RESERVATION_SCAN_INTERVAL,
             )
+            custom_field_scan = user_input.get(
+                CONF_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL,
+                DEFAULT_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL,
+            )
             filter_cancelled = user_input.get(
                 CONF_FILTER_CANCELLED,
                 DEFAULT_FILTER_CANCELLED,
             )
 
-            if scan < MIN_SCAN_INTERVAL or res_scan < MIN_SCAN_INTERVAL:
+            if (
+                scan < MIN_SCAN_INTERVAL
+                or res_scan < MIN_SCAN_INTERVAL
+                or custom_field_scan < MIN_SCAN_INTERVAL
+            ):
                 errors["base"] = "invalid_scan_interval"
             else:
                 return self.async_create_entry(
@@ -383,6 +394,7 @@ class HostawayOptionsFlow(OptionsFlow):
                     data={
                         CONF_SCAN_INTERVAL: scan,
                         CONF_RESERVATION_SCAN_INTERVAL: res_scan,
+                        CONF_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL: custom_field_scan,
                         CONF_FILTER_CANCELLED: filter_cancelled,
                     },
                 )
@@ -394,6 +406,10 @@ class HostawayOptionsFlow(OptionsFlow):
         current_res_scan = self._config_entry.options.get(
             CONF_RESERVATION_SCAN_INTERVAL,
             DEFAULT_RESERVATION_SCAN_INTERVAL,
+        )
+        current_custom_field_scan = self._config_entry.options.get(
+            CONF_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL,
+            DEFAULT_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL,
         )
         current_filter = self._config_entry.options.get(
             CONF_FILTER_CANCELLED,
@@ -409,6 +425,10 @@ class HostawayOptionsFlow(OptionsFlow):
                 vol.Required(
                     CONF_RESERVATION_SCAN_INTERVAL,
                     default=current_res_scan,
+                ): vol.Coerce(int),
+                vol.Required(
+                    CONF_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL,
+                    default=current_custom_field_scan,
                 ): vol.Coerce(int),
                 vol.Optional(
                     CONF_FILTER_CANCELLED,

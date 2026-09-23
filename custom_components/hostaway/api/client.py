@@ -24,6 +24,10 @@ from custom_components.hostaway.api.const import (
     MAX_BACKOFF,
     MAX_RETRIES,
 )
+from custom_components.hostaway.api.custom_fields import (
+    read_listing_with_custom_fields,
+    read_reservation_with_custom_fields,
+)
 from custom_components.hostaway.api.exceptions import (
     HostawayAuthError,
     HostawayConnectionError,
@@ -66,13 +70,16 @@ class HostawayApiClient:
     ) -> list[HostawayListing]:
         """Return one page of listings."""
         items = await self._request_results(
-            "/v1/listings", params={"offset": offset, "limit": limit}
+            "/v1/listings",
+            params={"offset": offset, "limit": limit, "includeResources": 1},
         )
         return [HostawayListing.from_api_response(item) for item in items]
 
     async def get_all_listings(self) -> list[HostawayListing]:
         """Return all listings."""
-        items = await self._paginate_offset("/v1/listings")
+        items = await self._paginate_offset(
+            "/v1/listings", params={"includeResources": 1}
+        )
         return [HostawayListing.from_api_response(item) for item in items]
 
     async def get_reservations_page(
@@ -95,6 +102,16 @@ class HostawayApiClient:
             ),
             listing_id,
         )
+
+    async def get_listing(self, listing_id: int) -> HostawayListing:
+        """Return one listing with custom-field resources included."""
+        data = await read_listing_with_custom_fields(self._request, listing_id)
+        return HostawayListing.from_api_response(data)
+
+    async def get_reservation(self, reservation_id: int) -> HostawayReservation:
+        """Return one reservation with custom-field resources included."""
+        data = await read_reservation_with_custom_fields(self._request, reservation_id)
+        return HostawayReservation.from_api_response(data)
 
     async def create_task(self, data: dict[str, Any]) -> dict[str, Any]:
         """Create a task."""

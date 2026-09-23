@@ -333,3 +333,59 @@ class TestHostawayReservationsCoordinator:
         await coordinator.async_refresh()
 
         assert len(coordinator.data[100]) == 3
+
+
+class TestHostawayCustomFieldsCoordinator:
+    """Tests for custom-field definitions coordinator foundation."""
+
+    async def test_refresh_state_and_stale_retention(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Coordinator tracks refresh success and retains stale data."""
+        from custom_components.hostaway.api.exceptions import HostawayApiError
+        from custom_components.hostaway.coordinator import (
+            HostawayCustomFieldsCoordinator,
+        )
+
+        entry = _make_entry()
+        entry.add_to_hass(hass)
+        api_client = AsyncMock()
+        api_client._request = AsyncMock(
+            return_value=__import__("httpx").Response(
+                200,
+                json={
+                    "status": "success",
+                    "result": [
+                        {
+                            "id": 1,
+                            "accountId": 2,
+                            "name": "Field",
+                            "varName": "field",
+                            "possibleValues": None,
+                            "type": "text",
+                            "objectType": "listing",
+                            "isPublic": 1,
+                            "sortOrder": 1,
+                        }
+                    ],
+                    "limit": 500,
+                    "page": 1,
+                    "totalPages": 1,
+                },
+            )
+        )
+        coordinator = HostawayCustomFieldsCoordinator(hass, entry, api_client)
+        assert coordinator.last_refresh_succeeded is False
+
+        await coordinator.async_refresh_retaining_stale()
+
+        assert coordinator.last_refresh_succeeded is True
+        assert len(coordinator.data) == 1
+        stale = coordinator.data
+        api_client._request = AsyncMock(side_effect=HostawayApiError("down"))
+        await coordinator.async_refresh_retaining_stale()
+
+        assert coordinator.last_refresh_succeeded is False
+        assert coordinator.last_refresh_error is not None
+        assert coordinator.data == stale

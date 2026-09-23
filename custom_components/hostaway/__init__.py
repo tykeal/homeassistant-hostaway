@@ -20,6 +20,11 @@ from homeassistant.helpers.httpx_client import get_async_client
 
 from custom_components.hostaway.api.auth import HostawayTokenManager
 from custom_components.hostaway.api.client import HostawayApiClient
+from custom_components.hostaway.api.custom_fields import (
+    CustomFieldWriteGenerationRegistry,
+    CustomFieldWriteLockRegistry,
+    CustomFieldWriteSafetyGates,
+)
 from custom_components.hostaway.api.exceptions import (
     HostawayApiError,
     HostawayAuthError,
@@ -35,6 +40,7 @@ from custom_components.hostaway.const import (
     PLATFORMS,
 )
 from custom_components.hostaway.coordinator import (
+    HostawayCustomFieldsCoordinator,
     HostawayListingsCoordinator,
     HostawayReservationsCoordinator,
 )
@@ -101,17 +107,29 @@ async def async_setup_entry(
 
     listings_coordinator = HostawayListingsCoordinator(hass, entry, api_client)
     reservations_coordinator = HostawayReservationsCoordinator(hass, entry, api_client)
+    custom_fields_coordinator = HostawayCustomFieldsCoordinator(hass, entry, api_client)
+
+    def _custom_fields_listener() -> None:
+        """Keep the definitions coordinator interval scheduled."""
+
+    custom_fields_update_unsub = custom_fields_coordinator.async_add_listener(
+        _custom_fields_listener,
+    )
 
     # Perform initial data fetch
     await listings_coordinator.async_config_entry_first_refresh()
     await reservations_coordinator.async_config_entry_first_refresh()
-
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {
         "token_manager": token_manager,
         "api_client": api_client,
         "listings_coordinator": listings_coordinator,
         "reservations_coordinator": reservations_coordinator,
+        "custom_fields_coordinator": custom_fields_coordinator,
+        "custom_fields_update_unsub": custom_fields_update_unsub,
+        "custom_field_write_safety": CustomFieldWriteSafetyGates(),
+        "custom_field_write_locks": CustomFieldWriteLockRegistry(),
+        "custom_field_write_generations": CustomFieldWriteGenerationRegistry(),
     }
 
     # Register services (idempotent, safe for multi-entry)
@@ -144,8 +162,12 @@ async def async_unload_entry(
     if unload_ok and DOMAIN in hass.data:
         data = hass.data[DOMAIN].pop(entry.entry_id, None)
         if data:
+            custom_fields_update_unsub = data.get("custom_fields_update_unsub")
+            if callable(custom_fields_update_unsub):
+                custom_fields_update_unsub()
             await data["listings_coordinator"].async_shutdown()
             await data["reservations_coordinator"].async_shutdown()
+            await data["custom_fields_coordinator"].async_shutdown()
 
         # Remove services when no entries remain
         if not hass.data.get(DOMAIN):

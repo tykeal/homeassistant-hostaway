@@ -235,3 +235,29 @@ SERVICE_GET_GROUPS_SCHEMA = vol.Schema(
         vol.Optional("config_entry_id"): _strict_string,
     }
 )
+
+
+SERVICE_GET_CUSTOM_FIELDS_SCHEMA = vol.Schema(
+    {
+        vol.Optional("config_entry_id"): _strict_string,
+    }
+)
+
+SERVICE_GET_CUSTOM_FIELD_VALUES_SCHEMA = vol.Schema(
+    {
+        vol.Required("target_type"): vol.In(("listing", "reservation")),
+        vol.Required("target_id"): _positive_int,
+        vol.Optional("config_entry_id"): _strict_string,
+    }
+)
+
+SERVICE_SET_CUSTOM_FIELD_SCHEMA = vol.Schema(
+    {
+        vol.Required("target_type"): vol.In(("listing", "reservation")),
+        vol.Required("target_id"): _positive_int,
+        vol.Optional("customFieldId"): _positive_int,
+        vol.Optional("varName"): _non_empty_string,
+        vol.Required("value"): object,
+        vol.Optional("config_entry_id"): _strict_string,
+    }
+)

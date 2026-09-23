@@ -519,3 +519,46 @@ class TestOptionsFlow:
 
         assert result["type"] is FlowResultType.FORM
         assert result["errors"] == {"base": "invalid_scan_interval"}
+
+
+async def test_custom_field_definitions_options_flow(
+    hass: HomeAssistant,
+) -> None:
+    """Options flow exposes the custom field definitions scan interval."""
+    from custom_components.hostaway.const import (
+        CONF_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL,
+        DEFAULT_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL,
+    )
+
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert result["data_schema"] is not None
+    schema = result["data_schema"].schema
+    assert any(
+        getattr(key, "schema", None) == CONF_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL
+        for key in schema
+    )
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={
+            CONF_SCAN_INTERVAL: 5,
+            CONF_RESERVATION_SCAN_INTERVAL: 2,
+            CONF_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL: 0,
+        },
+    )
+    assert result["errors"] == {"base": "invalid_scan_interval"}
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={
+            CONF_SCAN_INTERVAL: 5,
+            CONF_RESERVATION_SCAN_INTERVAL: 2,
+            CONF_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL: (
+                DEFAULT_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL
+            ),
+        },
+    )
+    assert result["data"][CONF_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL] == 15
