@@ -181,9 +181,10 @@ payload is prohibited.
 
 **Reservation verification**:
 
-Reservation writes may be enabled for the verified Hostaway account/config
-entry from documented production evidence instead of a live custom-variable
-mutation. The existing `set_door_code` handler sends a partial
+Production `doorCode` evidence may be recorded for the verified Hostaway
+account/config entry as top-level merge evidence, but it does not enable
+reservation custom-field writes. The existing `set_door_code` handler sends a
+partial
 `PUT /v1/reservations/{id}` with only `doorCode` plus optional
 `doorCodeVendor` and `doorCodeInstruction`, via
 `HostawayApiClient.update_reservation`. That behavior has shipped since
@@ -193,10 +194,10 @@ object. The evidence must record the residual gap: it does not prove that
 reservation `customFieldValues` specifically round-trips. With zero
 reservation custom variables in the owner's account today, the current clobber
 surface is limited to built-in fields, which the door-code evidence covers.
-Until reservation `customFieldValues` round-tripping is verified, reservation
-custom-field writes must fail closed when the pre-write reservation already has
-existing `customFieldValues`. Other accounts remain disabled until their own
-evidence is recorded or they explicitly opt in to the same accepted-risk basis.
+Reservation custom-field writes remain disabled until reservation
+`customFieldValues` no-op/sentinel/restore evidence or an authoritative
+Hostaway contract covers that payload. Other accounts remain disabled until
+their own account-bound evidence is recorded.
 
 If reservation custom variables become available later, the same no-op,
 sentinel, and restore protocol can be run for reservation `customFieldValues`.

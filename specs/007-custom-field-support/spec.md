@@ -649,8 +649,10 @@ field they operate on and cross-reference each other.
   fields and normalization rules. A raw `deepcopy` of a `GET` response is not a
   valid restore payload. All later object comparisons MUST compare
   canonicalized complete snapshots, not only unrelated fields or addressed
-  custom-field values. Step 2 inspects the generated dry-run payload and sends
-  no mutation.
+  custom-field values. The canonicalizer MUST define and test normalization or
+  exclusion for server-managed volatile fields such as update timestamps before
+  the comparison can be used as evidence. Step 2 inspects the generated
+  dry-run payload and sends no mutation.
 - **FR-052**: Step 3 MUST run a disposable task canary before listing
   mutation: create a throwaway Hostaway task, send a partial
   `PUT /v1/tasks/{id}`, verify unrelated task fields survive, and delete the
@@ -676,9 +678,9 @@ field they operate on and cross-reference each other.
   redacted values before any write-safety gate is enabled. Steps 0 through 3
   are authorized now; Steps 4 and 5 require the separate explicit owner
   decision required by FR-053.
-- **FR-055**: The reservation no-clobber gate MAY be enabled for the verified
-  Hostaway account/config entry from documented production evidence instead of
-  a live reservation custom-variable write. The
+- **FR-055**: The production reservation `doorCode` evidence MAY be recorded
+  for the verified Hostaway account/config entry as top-level merge evidence,
+  but it MUST NOT by itself enable reservation custom-field writes. The
   existing `hostaway.set_door_code` handler sends a partial
   `PUT /v1/reservations/{id}` containing only `doorCode` plus optional
   `doorCodeVendor` and `doorCodeInstruction`, through
@@ -687,15 +689,13 @@ field they operate on and cross-reference each other.
   reservation endpoint merges top-level keys rather than replacing the whole
   object. The residual gap MUST be recorded honestly: this does not prove that
   reservation `customFieldValues` specifically round-trips. With zero
-  reservation custom variables in the owner's account today, the gate enables
-  the implementation to proceed only on the accepted residual risk that the
-  current reservation clobber surface is limited to built-in fields, which the
-  `doorCode` production evidence covers. Until reservation `customFieldValues`
-  round-trip behavior is verified, reservation custom-field writes MUST fail
-  closed when the pre-write reservation already has existing
-  `customFieldValues`. Other Hostaway accounts/config entries MUST remain
-  disabled until their own evidence is recorded or they explicitly opt in to
-  the same accepted-risk basis.
+  reservation custom variables in the owner's account today, the evidence
+  documents only the residual gap for top-level built-in fields.
+  Reservation `customFieldValues` no-op, sentinel, and restore evidence, or an
+  authoritative Hostaway contract covering `customFieldValues`, MUST be
+  recorded for the account before `reservation_no_clobber_verified` is enabled.
+  Other Hostaway accounts/config entries MUST remain disabled until their own
+  account-bound evidence is recorded.
 
 ### Key Entities
 
@@ -808,10 +808,10 @@ field they operate on and cross-reference each other.
   is never silently dropped.
 - Hostaway's reservation update endpoint honours top-level partial payloads,
   as supported by the existing `update_reservation` door-code behaviour in
-  production since v0.4.0. This supports enabling the reservation write gate on
-  documented production evidence under FR-055, while acknowledging that
-  `customFieldValues` round-tripping remains unproven until a reservation with
-  custom variables is available.
+  production since v0.4.0. This provides top-level merge evidence only; it does
+  not enable reservation custom-field writes. FR-055 requires reservation
+  `customFieldValues` no-op/sentinel/restore evidence or an authoritative
+  Hostaway contract before the reservation write gate can be enabled.
 - Listing update behaviour is unverified. FR-035 requires the verification
   ladder to pass before relying on a listing partial payload, and the
   implementation must also carry a full-object payload strategy so listing

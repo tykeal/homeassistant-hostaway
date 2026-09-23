@@ -43,8 +43,8 @@ flags plus an explicit payload strategy recorded per target type. Listing
 writes require recorded evidence for the selected listing payload strategy;
 `listing_partial_put_verified` remains strict proof that partial `PUT` passed
 and must not be used to represent a full-object fallback. Reservation writes
-may use documented production `doorCode` evidence for top-level merge
-semantics until reservation custom variables exist. Until the matching evidence
+require reservation `customFieldValues` no-op/sentinel/restore evidence or an
+authoritative Hostaway contract for that payload. Until the matching evidence
 and strategy are enabled by a verification commit, the service rejects that
 target type before any read, merge, or `PUT`.
 
@@ -288,24 +288,23 @@ table-driven.
   `HostawayApiClient.update_reservation`, and that behavior has shipped since
   v0.4.0 with no reported reservation data loss. This supports top-level merge
   semantics for the reservation endpoint. It does not prove
-  `customFieldValues` round-tripping; with zero reservation custom variables in
-  the owner's account today, the current clobber surface is limited to
-  built-in fields covered by the door-code evidence. Until reservation
-  `customFieldValues` round-tripping is verified, reservation custom-field
-  writes must fail closed when the pre-write reservation already has existing
-  `customFieldValues`. Other accounts remain disabled until their own evidence
-  is recorded or they explicitly opt in to the same accepted-risk basis.
-- Treat documented reservation production evidence as sufficient to enable the
-  reservation gate when recorded in `live-verification.md`, while recording
-  the accepted residual risk that reservation `customFieldValues` round-trip
-  behavior is still unproven until reservation custom variables exist.
+  `customFieldValues` round-tripping. Until reservation `customFieldValues`
+  no-op/sentinel/restore evidence or an authoritative Hostaway contract is
+  recorded, reservation custom-field writes must fail closed. Other accounts
+  remain disabled until their own
+  account-bound evidence is recorded.
+- Treat documented reservation production evidence as top-level merge evidence
+  only when recorded in `live-verification.md`. Do not enable the reservation
+  custom-field write gate until reservation `customFieldValues`
+  no-op/sentinel/restore evidence or an authoritative Hostaway contract covers
+  that payload.
 - Keep the reservation write safety gate off by default. The implementation
   state is `reservation_no_clobber_verified = False` in the same
   `CustomFieldWriteSafetyGates` object. Reservation writes reject with a
   user-facing message that reservation custom-field writes are disabled until
-  accepted production or live evidence is recorded while it remains false. It
-  may be flipped on only by an implementation change that records the
-  successful FR-055 evidence.
+  reservation `customFieldValues` evidence or an authoritative contract is
+  recorded while it remains false. It may be flipped on only by an
+  implementation change that records the successful FR-055 evidence.
 
 ### Phase 5: Entity surfaces and deterministic key allocation
 
@@ -356,8 +355,9 @@ table-driven.
   passing evidence for the selected payload strategy. Require
   `listing_partial_put_verified` only when that strategy is `partial`.
 - Reject `target_type: reservation` with a clear user-facing message that
-  reservation custom-field writes are disabled until accepted production or
-  live evidence is recorded when `reservation_no_clobber_verified` is false.
+  reservation custom-field writes are disabled until reservation
+  `customFieldValues` evidence or an authoritative contract is recorded when
+  `reservation_no_clobber_verified` is false.
 - Serialize concurrent Home Assistant writes through per-entry, per-target
   `asyncio.Lock` instances.
 - Add a shared per-target write generation registry. Coordinators capture the
@@ -488,5 +488,5 @@ No constitution violations are planned. The elevated risks are Hostaway's
 whole-object listing update endpoint and the reservation endpoint's
 custom-field no-clobber behavior. Those risks are addressed by explicit,
 default-off executable gates for FR-035 and FR-055. Writes remain disabled per
-target type until the corresponding listing ladder evidence or accepted
-reservation production evidence is recorded and its gate is enabled.
+target type until the corresponding listing ladder evidence or reservation
+`customFieldValues` evidence is recorded and its gate is enabled.

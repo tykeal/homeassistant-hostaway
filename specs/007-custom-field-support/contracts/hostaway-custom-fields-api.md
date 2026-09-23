@@ -275,10 +275,9 @@ Content-Type: application/json
 
 **Safety contract**:
 
-- Reservation custom-field writes are disabled until documented evidence is
-  recorded. For the owner's current account, the gate may be enabled from
-  production `doorCode` evidence accepted under FR-055 instead of a live
-  custom-variable mutation.
+- Reservation custom-field writes are disabled until reservation
+  `customFieldValues` no-op/sentinel/restore evidence or an authoritative
+  Hostaway contract is recorded for that payload.
 - Custom-field writes still read current reservation values first and submit a
   merged `customFieldValues` collection.
 - Unaddressed values and unaddressed raw malformed entries are preserved.
@@ -293,20 +292,20 @@ Content-Type: application/json
   `HostawayApiClient.update_reservation`. Its production history since v0.4.0
   with no reported reservation data loss demonstrates top-level merge
   semantics for built-in fields, but not `customFieldValues` round-tripping.
-- Until reservation `customFieldValues` round-tripping is verified,
-  reservation custom-field writes fail closed when the pre-write reservation
-  already has existing `customFieldValues`.
-- Production `doorCode` evidence enables the reservation gate only for the
-  verified Hostaway account/config entry. Other accounts stay disabled until
-  their own evidence is recorded or they explicitly opt in to the same
-  accepted-risk basis.
+- Until reservation `customFieldValues` no-op/sentinel/restore evidence or an
+  authoritative Hostaway contract is recorded, reservation custom-field writes
+  fail closed.
+- Production `doorCode` evidence may be recorded as account-bound top-level
+  merge evidence, but it does not enable reservation custom-field writes by
+  itself. Other accounts stay disabled until their own account-bound evidence
+  is recorded.
 - The executable gate is
   `custom_field_write_safety.reservation_no_clobber_verified`, stored per
   config entry under `hass.data[DOMAIN][entry.entry_id]`, plus a non-`None`
   `reservation_payload_strategy`, and defaults to disabled. While missing,
   `hostaway.set_custom_field` rejects reservation writes with
-  `reservation custom-field writes are disabled until safety evidence is
-  recorded` before reading the target or sending any mutation.
+  `reservation custom-field writes are disabled until customFieldValues safety
+  evidence is recorded` before reading the target or sending any mutation.
 - The API layer provides both partial and full-object payload builders. The
   partial `PUT` body contains exactly one top-level key,
   `customFieldValues`; the selected strategy is per target type and must be
@@ -459,8 +458,8 @@ Exactly one of `customFieldId` or `varName` is required.
 - Hostaway rejects the update.
 - Listing write attempted before the verification ladder records passing
   evidence.
-- Reservation write attempted before accepted production or live evidence is
-  recorded.
+- Reservation write attempted before reservation `customFieldValues` evidence
+  or an authoritative contract is recorded.
 
 ## Rate limits
 

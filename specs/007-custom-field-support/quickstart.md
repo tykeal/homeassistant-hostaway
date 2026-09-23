@@ -117,9 +117,10 @@ the implementation must make `hostaway.set_custom_field` fail closed for
 
 ## Reservation no-clobber evidence
 
-Record production evidence in
+Record production top-level merge evidence in
 `specs/007-custom-field-support/live-verification.md` before enabling
-reservation writes. `hostaway.set_door_code` sends a partial
+reservation writes. This evidence does not enable reservation custom-field
+writes by itself. `hostaway.set_door_code` sends a partial
 `PUT /v1/reservations/{id}` containing only `doorCode` plus optional
 `doorCodeVendor` and `doorCodeInstruction`, through
 `HostawayApiClient.update_reservation`. That behavior has shipped since
@@ -131,13 +132,11 @@ Record the residual gap honestly: this evidence does not prove reservation
 variables in the owner's account today, the current clobber surface is limited
 to built-in fields, which the door-code evidence covers. If reservation custom
 variables become available later, run the same no-op, sentinel, and restore
-protocol used for listings. Until that round-trip evidence exists,
-reservation custom-field writes must fail closed when the pre-write reservation
-already has existing `customFieldValues`.
+protocol used for listings. Until that round-trip evidence or an authoritative
+Hostaway contract exists, reservation custom-field writes remain disabled.
 
 Bind this evidence to the verified Hostaway account/config entry. Other
-accounts remain disabled until their own evidence is recorded or they
-explicitly opt in to the same accepted-risk basis.
+accounts remain disabled until their own account-bound evidence is recorded.
 
 ## Key implementation patterns
 
