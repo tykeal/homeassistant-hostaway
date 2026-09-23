@@ -3,6 +3,7 @@
 """Hostaway custom field definitions, values, and safe write helpers."""
 
 # aislop-ignore-file ai-slop/hallucinated-import -- HA runtime provides these packages
+# aislop-ignore-file complexity/file-too-large -- cohesive foundation module
 
 from __future__ import annotations
 
@@ -73,10 +74,10 @@ def _optional_int(data: Mapping[str, Any], key: str) -> int | None:
 def _required_flag(data: Mapping[str, Any], key: str) -> bool:
     """Return a required 0/1 API flag as a boolean."""
     value = data.get(key)
-    if isinstance(value, bool) or value not in (0, 1):
+    if not isinstance(value, int) or isinstance(value, bool) or value not in (0, 1):
         msg = f"{key} must be 0 or 1"
         raise ValueError(msg)
-    return int(value) == 1
+    return value == 1
 
 
 def _possible_values(value: Any) -> list[str]:

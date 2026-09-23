@@ -128,7 +128,11 @@ async def verify(args: argparse.Namespace) -> int:
             print(json.dumps({"dry_run": True, "payload": redact(payload)}))
             return 0
         snap_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        snap_path.parent.chmod(0o700)
+        snap_path.touch(mode=0o600, exist_ok=True)
+        snap_path.chmod(0o600)
         snap_path.write_text(json.dumps(before, indent=2, sort_keys=True))
+        snap_path.chmod(0o600)
         answer = input(f"Type MUTATE {args.target_type} {args.target_id} to continue: ")
         if answer != f"MUTATE {args.target_type} {args.target_id}":
             raise RuntimeError("confirmation did not match; no mutation sent")
@@ -137,7 +141,7 @@ async def verify(args: argparse.Namespace) -> int:
         }
         complete_restore_payload = deepcopy(before)
         verification_error: BaseException | None = None
-        restore_payload: dict[str, Any] = custom_field_restore_payload
+        restore_payload: dict[str, Any] = complete_restore_payload
         mutation_sent = False
         try:
             await _request(client, "PUT", path, token, json=payload)
@@ -149,8 +153,8 @@ async def verify(args: argparse.Namespace) -> int:
                 raise RuntimeError("target custom field did not change")
             problems = compare_unrelated(before, after, args.custom_field_id)
             if problems:
-                restore_payload = complete_restore_payload
                 raise RuntimeError("; ".join(problems))
+            restore_payload = custom_field_restore_payload
         except BaseException as exc:
             verification_error = exc
         finally:

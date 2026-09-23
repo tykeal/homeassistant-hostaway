@@ -102,7 +102,7 @@ def test_definition_skips_malformed_and_bool_id(
     assert "Skipping malformed Hostaway custom field" in caplog.text
 
 
-@pytest.mark.parametrize("is_public", [None, True, False, "0", 2])
+@pytest.mark.parametrize("is_public", [None, True, False, "0", 1.0, 0.0, 2])
 def test_definition_rejects_malformed_is_public(is_public: object) -> None:
     """Definition parser rejects non-0/1 isPublic values."""
     data = _definition()
