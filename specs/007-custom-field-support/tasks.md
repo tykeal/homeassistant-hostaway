@@ -120,7 +120,7 @@ detect the latest refresh failure.
 ### Implementation for Definitions Infrastructure
 
 - [ ] T028 [Coordinator] Add `custom_field_definitions_scan_interval` constants in `custom_components/hostaway/const.py`, defaulting to 15 minutes with the existing minimum scan interval
-- [ ] T029 [Coordinator] Implement the options-flow field via `custom_components/hostaway/config_options.py` and `custom_components/hostaway/config_flow.py`
+- [ ] T029 [Coordinator] Implement the options-flow field in `custom_components/hostaway/config_flow.py`; use `custom_components/hostaway/config_options.py` only if T005 chose to extract shared options helpers
 - [ ] T030 [Coordinator] Add matching options-flow strings to `custom_components/hostaway/strings.json` and `custom_components/hostaway/translations/en.json`
 - [ ] T031 [Coordinator] Implement `HostawayCustomFieldsCoordinator` in `custom_components/hostaway/coordinator.py`, keeping all definition retrieval isolated to the coordinator interval
 - [ ] T032 [Coordinator] Wire `HostawayCustomFieldsCoordinator` into `custom_components/hostaway/__init__.py` under a new key inside `hass.data[DOMAIN][entry.entry_id]` without replacing that mapping, and explicitly call its shutdown method from the unload path alongside the listing and reservation coordinators before the per-entry data is popped
