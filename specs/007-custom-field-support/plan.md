@@ -275,6 +275,9 @@ table-driven.
   restoration depends on cleared built-in fields being writable. A selected
   full-object strategy must repeat the no-op, sentinel, and restore live steps
   with the reconstructed full-object payload before listing writes are enabled.
+  It must also define and test a per-target writable-field allowlist and
+  normalization rules; deep-copying a `GET` response into a full-object `PUT`
+  payload is prohibited.
 - Record production reservation evidence from the existing `set_door_code`
   service before enabling reservation writes. The handler sends a partial
   `PUT /v1/reservations/{id}` with only `doorCode` plus optional

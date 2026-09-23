@@ -246,6 +246,10 @@ Content-Type: application/json
   only when they are reconstructable from the pre-write snapshot and recorded
   evidence supports that safer strategy. The selected strategy is explicit
   gate state, not inferred from a partial-verification boolean.
+- Full-object payloads are disabled until a per-target writable-field allowlist
+  and normalization rules are defined and tested. Copying a complete
+  `includeResources=1` response into a `PUT` payload is never valid evidence of
+  a safe full-object strategy.
 
 ### PUT /v1/reservations/{id}
 

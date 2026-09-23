@@ -561,7 +561,10 @@ field they operate on and cross-reference each other.
   `listing_partial_put_verified` to true. If partial listing verification
   fails and a full-object listing strategy is selected, the no-op, sentinel,
   and restore steps MUST be repeated with the reconstructed full-object payload
-  before listing writes are enabled. The existing `update_reservation` partial
+  before listing writes are enabled. A full-object payload strategy MUST remain
+  disabled until the implementation defines a per-target writable-field
+  allowlist and normalization rules; deep-copying a `GET` response into a
+  `PUT` payload is prohibited. The existing `update_reservation` partial
   payload
   (`{"doorCode": ...}`) is supporting evidence for reservation top-level merge
   semantics, but it is not verification for the listing endpoint. If listing

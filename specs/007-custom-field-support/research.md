@@ -174,7 +174,9 @@ payload strategy is specified, tested against live data, and shown to preserve
 every visible built-in field. If full-object listing payloads are selected
 after partial verification fails, the no-op, sentinel, and restore steps must
 be repeated with the reconstructed full-object payload before listing writes
-are enabled.
+are enabled. Full-object payloads also require a per-target writable-field
+allowlist and normalization rules; deep-copying a `GET` response into a `PUT`
+payload is prohibited.
 
 **Reservation verification**:
 

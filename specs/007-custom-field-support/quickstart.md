@@ -211,6 +211,9 @@ must not be represented by a flag that claims partial `PUT` was verified.
 If partial listing verification fails and a full-object listing strategy is
 selected, repeat the no-op, sentinel, and restore steps with the reconstructed
 full-object payload before enabling listing writes.
+Full-object payloads require a per-target writable-field allowlist and
+normalization rules. Do not deep-copy an `includeResources=1` response into a
+`PUT` payload.
 
 ## User-facing behavior to verify
 
