@@ -38,19 +38,19 @@ gates that must remain default-off until the matching verification task passes.
 
 ## Phase 1: Setup and Guardrails
 
-**Purpose**: Create safe extension points, line-budget guardrails, and the
+**Purpose**: Create safe extension points, quality guardrails, and the
 default-off write-gate objects before any user story work starts.
 
 **Phase Exit Rule**: New files exist with SPDX headers, no Home Assistant
-imports are present in `api/custom_fields.py`, and every touched file remains
-planned under aislop's 400-line cap.
+imports are present in `api/custom_fields.py`, and
+`uvx --from aislop==0.12.0 aislop ci` remains at the configured 100/100 score.
 
-- [ ] T001 Run `wc -l custom_components/hostaway/api/*.py custom_components/hostaway/*.py custom_components/hostaway/services/*.py custom_components/hostaway/sensor/*.py` and record in the implementation notes that no task may push a touched file above 400 lines; split `custom_components/hostaway/config_flow.py` before adding options because it is already over budget
+- [ ] T001 Run `uvx --from aislop==0.12.0 aislop ci` from the repository root and record in the implementation notes that the repository scores 100/100 with zero errors and zero warnings; do not add a file-level line-count rule to `.aislop/config.yml`
 - [ ] T002 Create `custom_components/hostaway/api/custom_fields.py` with SPDX header, aislop ignore marker (`# aislop-ignore-file ai-slop/hallucinated-import -- HA runtime provides these packages`), module docstring, zero Home Assistant imports, narrow client protocols, and placeholder dataclasses/helpers for definitions, values, collection state, write gates, locks, and generations
 - [ ] T003 [P] Create `custom_components/hostaway/services/custom_fields.py` with SPDX header, aislop ignore marker, module docstring, and placeholder handlers for `hostaway.get_custom_fields`, `hostaway.get_custom_field_values`, and `hostaway.set_custom_field`
 - [ ] T004 [P] Create `custom_components/hostaway/sensor/custom_fields.py` with SPDX header, aislop ignore marker, module docstring, and placeholder listing custom-field allocator/sensor classes
-- [ ] T005 [P] Create `custom_components/hostaway/config_options.py` with SPDX header, aislop ignore marker, and module docstring, then move existing options-flow helper logic from `custom_components/hostaway/config_flow.py` so `config_flow.py` returns below 400 lines before adding the custom-field option
-- [ ] T006 [P] Add test module skeletons with SPDX headers, aislop ignore markers, and module docstrings in `tests/api/test_custom_fields.py`, `tests/sensor/test_custom_fields.py`, and `tests/services/test_custom_fields.py`
+- [ ] T005 [P] Add the custom-field options-flow extension point in `custom_components/hostaway/config_flow.py`; create `custom_components/hostaway/config_options.py` only if extracting shared options helpers improves separation of concerns, and do not touch the credential-entry flow for this feature
+- [ ] T006 [P] Add test module skeletons with SPDX headers, aislop ignore markers, and module docstrings in `tests/api/test_custom_fields.py`, `tests/sensor/test_custom_fields.py`, `tests/services/__init__.py`, and `tests/services/test_custom_fields.py`
 - [ ] T007 Write failing tests in `tests/api/test_custom_fields.py` for `CustomFieldWriteSafetyGates` defaulting `listing_partial_put_verified = False` and `reservation_no_clobber_verified = False`, then add the defaults in `custom_components/hostaway/api/custom_fields.py`; do not add any code path that can override them yet
 
 **Checkpoint**: Setup complete — extension modules exist, `config_flow.py` has
@@ -89,7 +89,7 @@ phase is complete.
 - [ ] T017 [API] Implement duplicate-id and addressed-malformed-entry preflight checks in `custom_components/hostaway/api/custom_fields.py`; fail closed before any merge can produce a `PUT` payload
 - [ ] T018 [API] Implement paginated custom-field definition retrieval in `custom_components/hostaway/api/custom_fields.py` using `limit=500`, offset pagination, rate-limited client transport, and warning-only skips for malformed definitions
 - [ ] T019 [API] Add direct single-object read helpers for `GET /v1/listings/{id}?includeResources=1` and `GET /v1/reservations/{id}?includeResources=1` without reusing list-only `_request_results`
-- [ ] T020 [API] Update listing pagination in `custom_components/hostaway/api/client.py` with the smallest possible change so `get_all_listings()` and the `_paginate_offset` path request `includeResources=1` on every page while keeping the file under 400 lines
+- [ ] T020 [API] Update listing pagination in `custom_components/hostaway/api/client.py` with the smallest possible transport-only change so `get_all_listings()` and the `_paginate_offset` path request `includeResources=1` on every page
 - [ ] T021 [API] Update `custom_components/hostaway/api/reservations.py` so reservation page reads request `includeResources=1` and pagination remains keyed from raw response items
 - [ ] T022 [API] Extend listing and reservation models in `custom_components/hostaway/api/models.py` to carry parsed presentation values and raw custom-field collections without changing existing built-in fields
 
@@ -112,17 +112,17 @@ detect the latest refresh failure.
 ### Tests for Definitions Infrastructure
 
 - [ ] T023 [P] [Coordinator] Write failing tests in `tests/test_config_flow.py` for `custom_field_definitions_scan_interval` options-flow defaults, required integer-minute selector, 15-minute default, one-minute minimum, and matching `strings.json` / `translations/en.json` labels
-- [ ] T024 [P] [Coordinator] Write failing tests in `tests/test_init.py` or the existing setup tests proving `hass.data[DOMAIN][entry.entry_id]` remains the existing dict, receives new dedicated keys for `custom_fields_coordinator`, `custom_field_write_safety`, write locks, and write generations, shuts the definitions coordinator down on unload, and keeps two config entries' runtime definitions isolated
-- [ ] T025 [P] [Coordinator] Write failing tests in `tests/api/test_custom_fields.py` or `tests/test_coordinator.py` for a definitions coordinator that starts with `last_refresh_succeeded = False`, sets it true after success, stores `last_refresh_error` after failure, and retains stale cached definitions for reads
-- [ ] T026 [P] [Coordinator] Write failing tests proving definitions refresh failure does not abort config entry setup or listing/reservation coordinator refreshes, and that listing/reservation refreshes never call `GET /v1/customFields` per listing, reservation, or field
-- [ ] T027 [P] [Coordinator] Write failing service-level tests proving writes reject with `custom field definitions refresh failed; writes are disabled until the next successful refresh` whenever the most recent definitions refresh failed, even if stale definitions are cached; reads must still use stale cached definitions without extra definition requests
+- [ ] T024 [P] [Coordinator] Write failing tests in `tests/test_init.py` proving `hass.data[DOMAIN][entry.entry_id]` remains the existing dict, receives new dedicated keys for `custom_fields_coordinator`, `custom_field_write_safety`, write locks, and write generations, shuts the definitions coordinator down on unload, and keeps two config entries' runtime definitions isolated
+- [ ] T025 [P] [Coordinator] Write failing tests in `tests/test_coordinator.py` for a definitions coordinator that starts with `last_refresh_succeeded = False`, sets it true after success, stores `last_refresh_error` after failure, and retains stale cached definitions for reads
+- [ ] T026 [P] [Coordinator] Write failing tests in `tests/test_init.py` proving definitions refresh failure does not abort config entry setup or listing/reservation coordinator refreshes, and that listing/reservation refreshes never call `GET /v1/customFields` per listing, reservation, or field
+- [ ] T027 [P] [Coordinator] Write failing service-level tests in `tests/services/test_custom_fields.py` proving writes reject with `custom field definitions refresh failed; writes are disabled until the next successful refresh` whenever the most recent definitions refresh failed, even if stale definitions are cached; reads must still use stale cached definitions without extra definition requests
 
 ### Implementation for Definitions Infrastructure
 
 - [ ] T028 [Coordinator] Add `custom_field_definitions_scan_interval` constants in `custom_components/hostaway/const.py`, defaulting to 15 minutes with the existing minimum scan interval
-- [ ] T029 [Coordinator] Implement the options-flow field via `custom_components/hostaway/config_options.py` and `custom_components/hostaway/config_flow.py`
+- [ ] T029 [Coordinator] Implement the options-flow field in `custom_components/hostaway/config_flow.py`; use `custom_components/hostaway/config_options.py` only if T005 chose to extract shared options helpers
 - [ ] T030 [Coordinator] Add matching options-flow strings to `custom_components/hostaway/strings.json` and `custom_components/hostaway/translations/en.json`
-- [ ] T031 [Coordinator] Implement `HostawayCustomFieldsCoordinator` in `custom_components/hostaway/coordinator.py` or a split module if needed for the 400-line cap, keeping all definition retrieval isolated to the coordinator interval
+- [ ] T031 [Coordinator] Implement `HostawayCustomFieldsCoordinator` in `custom_components/hostaway/coordinator.py`, keeping all definition retrieval isolated to the coordinator interval
 - [ ] T032 [Coordinator] Wire `HostawayCustomFieldsCoordinator` into `custom_components/hostaway/__init__.py` under a new key inside `hass.data[DOMAIN][entry.entry_id]` without replacing that mapping, and explicitly call its shutdown method from the unload path alongside the listing and reservation coordinators before the per-entry data is popped
 - [ ] T033 [Coordinator] Store `CustomFieldWriteSafetyGates`, per-target write locks, and write-generation registry under dedicated keys in the same per-entry runtime dict
 
@@ -146,12 +146,12 @@ any `hostaway.set_custom_field` mutation for the corresponding target type.
 T039. Do not flip either gate and do not send a write for that target type
 until its verification task has passed.
 
-- [ ] T034 [P] [Safety] Write failing tests in `tests/services/test_custom_fields.py` proving `hostaway.set_custom_field` rejects `target_type: listing` before target reads, merges, or `PUT` while `listing_partial_put_verified` is false
-- [ ] T035 [P] [Safety] Write failing tests in `tests/services/test_custom_fields.py` proving `hostaway.set_custom_field` rejects `target_type: reservation` before target reads, merges, or `PUT` while `reservation_no_clobber_verified` is false
-- [ ] T036 [Safety] Implement target-type gate checks in `custom_components/hostaway/services/custom_fields.py` with exact rejection messages from plan.md before any read, merge, or mutation call
-- [ ] T037 [Safety] Write mocked tests for live-verification safety utilities covering no committed credentials, redaction, private snapshot storage outside git, restore-on-failure, and no-mutation-on-preflight-error paths, then add executable helper `scripts/verify_custom_field_writes.py` with SPDX header as a thin wrapper over the tested utilities; it must use disposable/test objects, read with `includeResources=1`, capture complete private restorable snapshots outside git, log only redacted summaries, mutate one harmless custom field, re-read, compare all unrelated custom values and visible built-in fields, and restore values per quickstart.md
-- [ ] T038 [Safety] Run the FR-035 listing partial-`PUT /v1/listings/{id}` live verification after CI is green, using a real listing with at least three populated custom fields and representative built-in fields; if it passes, add redacted evidence to `specs/007-custom-field-support/live-verification.md` with the required SPDX block header and only then enable `listing_partial_put_verified`; if it fails, keep listing writes disabled and document the fail-closed behavior in the same evidence file
-- [ ] T039 [Safety] Run the SC-003 reservation no-clobber live verification after CI is green, using a real reservation with at least three populated custom fields and at least one built-in field such as `doorCode`; if it passes, add redacted evidence to `specs/007-custom-field-support/live-verification.md` with the required SPDX block header and only then enable `reservation_no_clobber_verified`; if it fails, keep reservation writes disabled and document the fail-closed behavior in the same evidence file
+- [ ] T034 [P] [Safety] Write failing handler tests in `tests/services/test_custom_fields.py` proving `async_handle_set_custom_field` rejects `target_type: listing` before target reads, merges, or `PUT` while `listing_partial_put_verified` is false; call the handler directly because the service schema and registration arrive in Phases 6 and 8
+- [ ] T035 [P] [Safety] Write failing handler tests in `tests/services/test_custom_fields.py` proving `async_handle_set_custom_field` rejects `target_type: reservation` before target reads, merges, or `PUT` while `reservation_no_clobber_verified` is false; call the handler directly because the service schema and registration arrive in Phases 6 and 8
+- [ ] T036 [Safety] Implement target-type gate checks in `custom_components/hostaway/services/custom_fields.py` with user-facing rejection messages that say custom-field writes are disabled until live safety verification passes, before any read, merge, or mutation call
+- [ ] T037 [Safety] Write mocked tests for live-verification safety utilities in `tests/api/test_custom_fields.py` and `tests/scripts/test_verify_custom_field_writes.py`, covering the production merge/payload builder, outgoing `PUT` top-level keys exactly equal to `{"customFieldValues"}`, no committed credentials, redaction, private snapshot storage outside git, restore-on-failure, and no-mutation-on-preflight-error paths; implement the production payload builder in `custom_components/hostaway/api/custom_fields.py`, then add executable helper `scripts/verify_custom_field_writes.py` with SPDX header as a thin wrapper that imports that builder instead of hand-rolling payloads; it must use disposable/test objects, read with `includeResources=1`, capture complete private restorable snapshots outside git, log only redacted summaries, mutate one harmless custom field, re-read, compare all unrelated custom values and visible built-in fields, and restore values per quickstart.md
+- [ ] T038 [Safety] Run the FR-035 listing partial-`PUT /v1/listings/{id}` live verification after CI is green, using `scripts/verify_custom_field_writes.py` so the mutation payload is produced by the production no-clobber payload builder, against a real listing with at least three populated custom fields and representative built-in fields; if it passes, add redacted evidence to `specs/007-custom-field-support/live-verification.md` with the required SPDX block header and only then enable `listing_partial_put_verified`; if it fails, keep listing writes disabled and document the fail-closed behavior in the same evidence file
+- [ ] T039 [Safety] Run the SC-003 reservation no-clobber live verification after CI is green, using `scripts/verify_custom_field_writes.py` so the mutation payload is produced by the production no-clobber payload builder, against a real reservation with at least three populated custom fields and at least one built-in field such as `doorCode`; if it passes, add redacted evidence to `specs/007-custom-field-support/live-verification.md` with the required SPDX block header and only then enable `reservation_no_clobber_verified`; if it fails, keep reservation writes disabled and document the fail-closed behavior in the same evidence file
 
 **Checkpoint**: Live safety status known — each target type is either verified
 and explicitly enabled by evidence, or remains disabled with tests proving the
@@ -176,14 +176,14 @@ attributes match the spec without changing existing entity behavior.
 - [ ] T042 [P] [US1] Write failing tests in `tests/sensor/test_custom_fields.py` proving new listing custom-field values observed at runtime create new sensors without a Home Assistant restart
 - [ ] T043 [P] [US1] Write failing tests in `tests/sensor/test_listing.py` proving the seven existing listing diagnostics (`listing_id`, `external_name`, `status`, `base_price`, `bedrooms`, `bathrooms`, `max_guests`) remain unchanged and do not gain custom-variable attributes
 - [ ] T044 [P] [US1] Write failing tests in `tests/sensor/test_reservation.py` proving reservation sensors add `custom_fields`, use `custom_field_<customFieldId>` keys, include resolved human-readable metadata, include unresolved entries without definition metadata, expose `{}` when empty, and keep all existing reservation attributes unchanged
-- [ ] T045 [P] [US1] Write failing tests proving malformed custom value records log warnings that exclude raw custom-field data and values, skip only presentation, preserve raw merge data, and never fail listing or reservation coordinator refreshes
+- [ ] T045 [P] [US1] Write failing tests in `tests/api/test_custom_fields.py` proving malformed custom value records log warnings that exclude raw custom-field data and values, skip only presentation, preserve raw merge data, and never fail listing or reservation coordinator refreshes
 
 ### Implementation for User Story 1
 
 - [ ] T046 [US1] Implement `ListingCustomFieldKeyAllocation` in `custom_components/hostaway/sensor/custom_fields.py`, seeding from entity-registry unique IDs and allocating from one shared namespace per listing
 - [ ] T047 [US1] Implement `HostawayListingCustomFieldSensor` in `custom_components/hostaway/sensor/custom_fields.py` with diagnostic metadata for resolved and unresolved fields
 - [ ] T048 [US1] Wire dynamic listing custom-field sensor discovery into `custom_components/hostaway/sensor/__init__.py` without changing the existing seven listing sensor descriptions
-- [ ] T049 [US1] Extend reservation attribute shaping in `custom_components/hostaway/sensor/helpers.py` or a split helper so `custom_fields` is always present and follows FR-014 through FR-018
+- [ ] T049 [US1] Extend reservation attribute shaping in `custom_components/hostaway/sensor/helpers.py` so `custom_fields` is always present and follows FR-014 through FR-018
 - [ ] T050 [US1] Run `uv run pytest tests/sensor/ -x -q` and confirm listing custom-field sensors, runtime discovery, reservation `custom_fields`, and existing sensor regressions pass before starting read services
 
 **Checkpoint**: Sensor read surface complete — custom values are visible on
@@ -213,7 +213,7 @@ reservation targets and verify exact response envelopes.
 
 ### Implementation for User Story 2
 
-- [ ] T057 [US2] Add schemas for all three custom-field services to `custom_components/hostaway/services/schemas.py` or split schema modules if needed for the 400-line cap, including `SERVICE_SET_CUSTOM_FIELD_SCHEMA`
+- [ ] T057 [US2] Add schemas for all three custom-field services to `custom_components/hostaway/services/schemas.py`, including `SERVICE_SET_CUSTOM_FIELD_SCHEMA`
 - [ ] T058 [US2] Implement `async_handle_get_custom_fields` in `custom_components/hostaway/services/custom_fields.py`
 - [ ] T059 [US2] Implement `async_handle_get_custom_field_values` in `custom_components/hostaway/services/custom_fields.py`, using direct reads, cached definitions, and the listing allocator in non-mutating mode
 - [ ] T060 [US2] Register `hostaway.get_custom_fields` and `hostaway.get_custom_field_values` in `custom_components/hostaway/services/__init__.py` with `SupportsResponse.ONLY`
@@ -240,9 +240,9 @@ numeric id, and verify ambiguous or unknown identifiers fail before mutation.
 
 ### Implementation for User Story 4
 
-- [ ] T064 [US4] Implement definition indexes and `resolve_var_name` / id lookup helpers in the definitions coordinator or API module, scoped by `listing` and `reservation`
+- [ ] T064 [US4] Implement definition indexes and `resolve_var_name` / id lookup helpers in `custom_components/hostaway/api/custom_fields.py`, scoped by `listing` and `reservation`, so service-layer tests can exercise the same API helper through the handler
 - [ ] T065 [US4] Implement shared set-service identifier validation in `custom_components/hostaway/services/custom_fields.py`, requiring exactly one of `varName` or `customFieldId`
-- [ ] T066 [US4] Implement local value validation in `custom_components/hostaway/api/custom_fields.py` or `services/custom_fields.py` for known field types, with boolean-safe number handling and dropdown `possibleValues` checks
+- [ ] T066 [US4] Implement local value validation in `custom_components/hostaway/api/custom_fields.py` for known field types, with boolean-safe number handling and dropdown `possibleValues` checks
 
 **Checkpoint**: Field addressing complete — all resolution and validation
 failures happen before target reads or any mutating request.
@@ -266,7 +266,7 @@ target type disabled and complete only the fail-closed behavior for it.
 
 ### Tests for User Story 3
 
-- [ ] T067 [P] [US3] Write failing tests in `tests/api/test_custom_fields.py` for read-modify-write merge preserving unaddressed values, unresolved values, raw malformed entries, Hostaway order where practical, and explicit `value: None` clears
+- [ ] T067 [P] [US3] Write failing tests in `tests/api/test_custom_fields.py` for read-modify-write merge preserving unaddressed values, unresolved values, raw malformed entries, Hostaway order where practical, explicit `value: None` clears, and outgoing `PUT` payload top-level keys exactly equal to `{"customFieldValues"}` so built-in keys such as `name`, `price`, or `doorCode` cannot be sent accidentally
 - [ ] T068 [P] [US3] Write failing tests in `tests/api/test_custom_fields.py` proving write merge fails closed when `customFieldValues` is missing, `null`, or non-list; a present `[]` is accepted as genuinely empty
 - [ ] T069 [P] [US3] Write failing tests in `tests/api/test_custom_fields.py` proving write merge fails closed when the addressed id has a malformed raw entry or duplicate raw entries, and sends no `PUT`
 - [ ] T070 [P] [US3] Write failing tests in `tests/services/test_custom_fields.py` proving `set_custom_field` is registered with `SupportsResponse.OPTIONAL` and returns exactly `target_type`, `target_id`, `customFieldId`, `varName`, `addressed_by`, and `result: success` when a response is requested
@@ -277,12 +277,12 @@ target type disabled and complete only the fail-closed behavior for it.
 
 ### Implementation for User Story 3
 
-- [ ] T075 [US3] Implement no-clobber merge helpers in `custom_components/hostaway/api/custom_fields.py`, using raw current `customFieldValues` read immediately before the write and preserving unaddressed raw entries unchanged
+- [ ] T075 [US3] Integrate the no-clobber merge helpers from T037 into the write dispatch path in `custom_components/hostaway/api/custom_fields.py`, using raw current `customFieldValues` read immediately before the write and preserving unaddressed raw entries unchanged
 - [ ] T076 [US3] Implement per-entry/per-target lock acquisition and write-generation advancement in `custom_components/hostaway/services/custom_fields.py`
 - [ ] T077 [US3] Register `hostaway.set_custom_field` in `custom_components/hostaway/services/__init__.py` with `SERVICE_SET_CUSTOM_FIELD_SCHEMA` and `SupportsResponse.OPTIONAL`, then implement listing write dispatch in `custom_components/hostaway/services/custom_fields.py` only after T038 passes or retain the fail-closed disabled path if T038 fails
 - [ ] T078 [US3] Implement reservation write dispatch in `custom_components/hostaway/services/custom_fields.py` only after T039 passes or retain the fail-closed disabled path if T039 fails
 - [ ] T079 [US3] Implement local coordinator/entity patching and write-generation publish suppression after successful writes so represented listing sensors and reservation attributes reflect the new value before the next poll and stale in-flight refreshes cannot overwrite it
-- [ ] T080 [US3] Ensure `hostaway.set_custom_field` never creates writable text, number, or select entities for custom variables
+- [ ] T080 [US3] Write and pass negative coverage in `tests/sensor/test_custom_fields.py` proving `hostaway.set_custom_field` never creates writable text, number, or select entities for custom variables and the integration has no custom-field definition create/update/delete code path
 
 **Checkpoint**: Write service complete for each verified target type — writes
 are no-clobber, gated by live evidence, fail closed on every unsafe raw-data
@@ -301,14 +301,14 @@ exclusion, and built-in/custom distinction are present.
 
 ### Tests for User Story 5
 
-- [ ] T081 [P] [US5] Write failing tests or assertions covering service descriptions in `custom_components/hostaway/services.yaml` for all three custom-field services, exact response envelopes, `varName` or `customFieldId` addressing, `config_entry_id` behavior, hidden-field reads, task-field exclusion, and `value: null` clearing
-- [ ] T082 [P] [US5] Write failing tests or documentation checks proving `hostaway.set_door_code` documentation explicitly states it writes built-in reservation fields, not custom variables, and cross-references custom-field services
+- [ ] T081 [P] [US5] Write failing documentation assertions in `tests/services/test_custom_fields.py` that parse `custom_components/hostaway/services.yaml` and require all three custom-field services, exact response envelopes, `varName` or `customFieldId` addressing, `config_entry_id` behavior, hidden-field reads, task-field exclusion, and `value: null` clearing
+- [ ] T082 [P] [US5] Write failing documentation assertions in `tests/services/test_custom_fields.py` proving `hostaway.set_door_code` documentation explicitly states it writes built-in reservation fields, not custom variables, and cross-references custom-field services
 
 ### Implementation for User Story 5
 
 - [ ] T083 [US5] Update `custom_components/hostaway/services.yaml` for `hostaway.get_custom_fields`, `hostaway.get_custom_field_values`, and `hostaway.set_custom_field`, including selectors, response examples, fail-closed multi-account behavior, and hidden/task field notes
 - [ ] T084 [US5] Update existing `hostaway.set_door_code` documentation in `custom_components/hostaway/services.yaml` to state that `doorCode`, `doorCodeVendor`, and `doorCodeInstruction` are built-in reservation fields and not custom variables
-- [ ] T085 [US5] Add user-facing service strings or translations if required by the current Home Assistant service documentation pattern
+- [ ] T085 [US5] Audit the current Home Assistant service documentation pattern and make the result independently verifiable: either add required user-facing service strings/translations to `custom_components/hostaway/strings.json` and `custom_components/hostaway/translations/en.json`, or add an assertion in `tests/services/test_custom_fields.py` proving `custom_components/hostaway/services.yaml` is the repository's complete service documentation source for these services
 
 **Checkpoint**: Documentation complete — users can distinguish built-in
 Hostaway fields from custom variables and can use every new service from the
@@ -318,14 +318,14 @@ documented schemas.
 
 ## Phase 10: Polish, Validation, and Release Notes
 
-**Purpose**: Verify the whole feature, preserve the line budget, and prepare
-atomic implementation PR commits.
+**Purpose**: Verify the whole feature, preserve the configured quality gates,
+and prepare atomic implementation PR commits.
 
-**Phase Exit Rule**: Full tests, linting, file-size checks, quickstart checks,
-pre-commit, CI, and live-verification evidence are green or any disabled write
-target is explicitly documented.
+**Phase Exit Rule**: Full tests, linting, quickstart checks, pre-commit, CI,
+`uvx --from aislop==0.12.0 aislop ci`, and live-verification evidence are
+green or any disabled write target is explicitly documented.
 
-- [ ] T086 [P] Run `wc -l custom_components/hostaway/api/*.py custom_components/hostaway/*.py custom_components/hostaway/services/*.py custom_components/hostaway/sensor/*.py` and split any touched file that is at risk of exceeding 400 lines
+- [ ] T086 [P] Run `uvx --from aislop==0.12.0 aislop ci` and confirm the repository still scores 100/100 with zero errors and zero warnings under the configured `.aislop/config.yml`; do not add a file-level line-count rule
 - [ ] T087 [P] Run targeted tests from quickstart.md: `uv run pytest tests/api/test_custom_fields.py -x -q`, `uv run pytest tests/sensor/test_custom_fields.py -x -q`, `uv run pytest tests/services/test_custom_fields.py -x -q`, and `uv run pytest tests/test_config_flow.py -x -q -k custom_field`
 - [ ] T088 Run full validation with `uv run pytest tests/ -x -q` and `uv run ruff check custom_components/ tests/`
 - [ ] T089 Run `uv run pre-commit run --all-files` and fix markdownlint, codespell, REUSE, mypy, interrogate, and aislop issues without bypassing hooks
@@ -334,8 +334,8 @@ target is explicitly documented.
 - [ ] T092 Re-run quickstart.md user-facing checks for sensors, read services, write gates, successful verified writes, built-in/custom documentation, and existing `set_door_code` regression coverage
 
 **Checkpoint**: Feature ready for implementation PR review — validation is
-green, file budgets are respected, changelog and task checkbox updates are in
-separate commits, and live write safety status is documented.
+green, configured quality gates pass, changelog and task checkbox updates are
+in separate commits, and live write safety status is documented.
 
 ---
 
@@ -476,8 +476,8 @@ must be sequenced or split to avoid merge conflicts.
   `null`, or non-list `customFieldValues` before any write.
 - Preserve raw malformed entries in write payloads whenever they are
   unaddressed; fail closed if the addressed id is malformed or duplicated.
-- Do not add custom-field logic to `api/client.py` beyond thin, line-budgeted
-  transport changes such as `includeResources=1`.
+- Do not add custom-field business logic to `api/client.py` beyond thin
+  transport-only changes such as `includeResources=1`.
 - Do not modify `spec.md`, `plan.md`, `research.md`, `data-model.md`,
   `quickstart.md`, contracts, or checklist artifacts during implementation
   unless a separate spec-fix task and PR are explicitly approved.
