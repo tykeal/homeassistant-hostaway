@@ -30,7 +30,7 @@ def redact(value: Any) -> Any:
         return {key: redact(item) for key, item in value.items()}
     if isinstance(value, list):
         return [redact(item) for item in value]
-    if isinstance(value, str) and value:
+    if value is not None:
         return REDACTED
     return value
 

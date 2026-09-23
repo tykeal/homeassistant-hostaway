@@ -23,8 +23,8 @@ def test_script_uses_runtime_token() -> None:
 
 def test_redaction_hides_string_values() -> None:
     """Logs redact sensitive custom-field values."""
-    assert redact({"customFieldValues": [{"value": "secret"}]}) == {
-        "customFieldValues": [{"value": "<redacted>"}]
+    assert redact({"customFieldValues": [{"customFieldId": 1, "value": 123}]}) == {
+        "customFieldValues": [{"customFieldId": "<redacted>", "value": "<redacted>"}]
     }
 
 

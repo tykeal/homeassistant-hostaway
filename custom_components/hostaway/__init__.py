@@ -109,6 +109,10 @@ async def async_setup_entry(
     reservations_coordinator = HostawayReservationsCoordinator(hass, entry, api_client)
     custom_fields_coordinator = HostawayCustomFieldsCoordinator(hass, entry, api_client)
 
+    # Perform initial data fetch
+    await listings_coordinator.async_config_entry_first_refresh()
+    await reservations_coordinator.async_config_entry_first_refresh()
+
     def _custom_fields_listener() -> None:
         """Keep the definitions coordinator interval scheduled."""
 
@@ -116,9 +120,6 @@ async def async_setup_entry(
         _custom_fields_listener,
     )
 
-    # Perform initial data fetch
-    await listings_coordinator.async_config_entry_first_refresh()
-    await reservations_coordinator.async_config_entry_first_refresh()
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {
         "token_manager": token_manager,

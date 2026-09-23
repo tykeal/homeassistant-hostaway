@@ -550,6 +550,28 @@ class TestHttpClientCore:
 class TestPagination:
     """Tests for pagination helpers."""
 
+    async def test_get_listings_page_includes_resources(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Test listing page reads include custom-field resources."""
+        route = respx.get(f"{FAKE_BASE_URL}/v1/listings").mock(
+            return_value=httpx.Response(
+                200,
+                json={"status": "success", "result": [make_listing_response()]},
+            )
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        listings = await client.get_listings_page(offset=25, limit=50)
+
+        assert len(listings) == 1
+        url = str(route.calls[0].request.url)
+        assert "offset=25" in url
+        assert "limit=50" in url
+        assert "includeResources=1" in url
+
     async def test_get_all_listings_paginates_with_offset(
         self, mock_httpx_client: httpx.AsyncClient
     ) -> None:
@@ -578,6 +600,8 @@ class TestPagination:
 
         assert len(listings) == DEFAULT_PAGE_LIMIT + 10
         assert route.call_count == 2
+        for call in route.calls:
+            assert "includeResources=1" in str(call.request.url)
 
     async def test_get_all_reservations_paginates_with_after_id(
         self, mock_httpx_client: httpx.AsyncClient
@@ -607,6 +631,8 @@ class TestPagination:
 
         assert len(reservations) == DEFAULT_PAGE_LIMIT + 5
         assert route.call_count == 2
+        for call in route.calls:
+            assert "includeResources=1" in str(call.request.url)
 
     async def test_get_all_reservations_skips_bad_page_items(
         self,
