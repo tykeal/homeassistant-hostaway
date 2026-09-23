@@ -123,8 +123,10 @@ async def async_setup_entry(
 
     def _initial_custom_fields_refresh(_now: object) -> None:
         """Start the first definitions refresh without blocking setup."""
-        hass.async_create_task(
-            custom_fields_coordinator.async_refresh_retaining_stale()
+        hass.loop.call_soon_threadsafe(
+            lambda: hass.async_create_task(
+                custom_fields_coordinator.async_refresh_retaining_stale()
+            )
         )
 
     custom_fields_initial_refresh_unsub = async_call_later(
