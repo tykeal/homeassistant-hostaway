@@ -102,6 +102,18 @@ def test_definition_skips_malformed_and_bool_id(
     assert "Skipping malformed Hostaway custom field" in caplog.text
 
 
+@pytest.mark.parametrize("is_public", [None, True, False, "0", 2])
+def test_definition_rejects_malformed_is_public(is_public: object) -> None:
+    """Definition parser rejects non-0/1 isPublic values."""
+    data = _definition()
+    if is_public is None:
+        del data["isPublic"]
+    else:
+        data["isPublic"] = is_public
+
+    assert HostawayCustomFieldDefinition.from_api_dict(data) is None
+
+
 def test_value_collection_states_and_raw_preservation() -> None:
     """Collections distinguish four states and retain raw malformed entries."""
     raw = [

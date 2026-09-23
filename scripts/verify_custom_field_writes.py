@@ -136,10 +136,12 @@ async def verify(args: argparse.Namespace) -> int:
             "customFieldValues": deepcopy(before["customFieldValues"])
         }
         complete_restore_payload = deepcopy(before)
-        verification_error: Exception | None = None
+        verification_error: BaseException | None = None
         restore_payload: dict[str, Any] = custom_field_restore_payload
+        mutation_sent = False
         try:
             await _request(client, "PUT", path, token, json=payload)
+            mutation_sent = True
             after = await _request(
                 client, "GET", path, token, params={"includeResources": 1}
             )
@@ -149,19 +151,26 @@ async def verify(args: argparse.Namespace) -> int:
             if problems:
                 restore_payload = complete_restore_payload
                 raise RuntimeError("; ".join(problems))
-        except Exception as exc:
+        except BaseException as exc:
             verification_error = exc
-
-        await _request(client, "PUT", path, token, json=restore_payload)
-        restored = await _request(
-            client, "GET", path, token, params={"includeResources": 1}
-        )
-        original_target = custom_field_value(before, args.custom_field_id)
-        restored_target = custom_field_value(restored, args.custom_field_id)
-        restore_problems = compare_unrelated(before, restored, args.custom_field_id)
-        if restored_target != original_target or restore_problems:
-            details = restore_problems or ["target custom field was not restored"]
-            raise RuntimeError("restore verification failed: " + "; ".join(details))
+        finally:
+            if mutation_sent:
+                await _request(client, "PUT", path, token, json=restore_payload)
+                restored = await _request(
+                    client, "GET", path, token, params={"includeResources": 1}
+                )
+                original_target = custom_field_value(before, args.custom_field_id)
+                restored_target = custom_field_value(restored, args.custom_field_id)
+                restore_problems = compare_unrelated(
+                    before, restored, args.custom_field_id
+                )
+                if restored_target != original_target or restore_problems:
+                    details = restore_problems or [
+                        "target custom field was not restored"
+                    ]
+                    raise RuntimeError(
+                        "restore verification failed: " + "; ".join(details)
+                    )
         if verification_error is not None:
             raise verification_error
         print(

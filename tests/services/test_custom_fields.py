@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+import voluptuous as vol
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 
@@ -17,6 +18,10 @@ from custom_components.hostaway.api.custom_fields import CustomFieldWriteSafetyG
 from custom_components.hostaway.const import DOMAIN
 from custom_components.hostaway.services.custom_fields import (
     async_handle_set_custom_field,
+)
+from custom_components.hostaway.services.schemas import (
+    SERVICE_GET_CUSTOM_FIELD_VALUES_SCHEMA,
+    SERVICE_SET_CUSTOM_FIELD_SCHEMA,
 )
 
 
@@ -92,6 +97,37 @@ async def test_failed_definitions_refresh_rejects_before_gate(
                 "value": "x",
             },
         )
+
+
+@pytest.mark.parametrize(
+    ("schema", "data"),
+    [
+        (
+            SERVICE_GET_CUSTOM_FIELD_VALUES_SCHEMA,
+            {"target_type": "listing", "target_id": "1"},
+        ),
+        (
+            SERVICE_SET_CUSTOM_FIELD_SCHEMA,
+            {"target_type": "listing", "target_id": 1.0, "value": "x"},
+        ),
+        (
+            SERVICE_SET_CUSTOM_FIELD_SCHEMA,
+            {
+                "target_type": "listing",
+                "target_id": 1,
+                "customFieldId": "2",
+                "value": "x",
+            },
+        ),
+    ],
+)
+def test_custom_field_schemas_use_strict_integer_ids(
+    schema: vol.Schema,
+    data: dict[str, object],
+) -> None:
+    """Custom-field schemas reject coerced identifier values."""
+    with pytest.raises(vol.Invalid):
+        schema(data)
 
 
 async def test_bool_target_id_rejected_before_resolution(

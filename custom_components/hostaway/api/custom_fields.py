@@ -70,6 +70,15 @@ def _optional_int(data: Mapping[str, Any], key: str) -> int | None:
     return value
 
 
+def _required_flag(data: Mapping[str, Any], key: str) -> bool:
+    """Return a required 0/1 API flag as a boolean."""
+    value = data.get(key)
+    if isinstance(value, bool) or value not in (0, 1):
+        msg = f"{key} must be 0 or 1"
+        raise ValueError(msg)
+    return int(value) == 1
+
+
 def _possible_values(value: Any) -> list[str]:
     """Normalize Hostaway possibleValues into a string list."""
     if value is None:
@@ -116,7 +125,7 @@ class HostawayCustomFieldDefinition:
                 field_type=field_type,
                 object_type=object_type,
                 possible_values=_possible_values(data.get("possibleValues")),
-                is_public=bool(data.get("isPublic")),
+                is_public=_required_flag(data, "isPublic"),
                 sort_order=_optional_int(data, "sortOrder"),
             )
         except ValueError as exc:
