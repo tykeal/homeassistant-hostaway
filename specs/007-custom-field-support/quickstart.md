@@ -83,7 +83,10 @@ available, capture a complete private rollback snapshot before sending any
 mutation. Only redacted summaries may be logged or committed.
 If the live object has only one populated custom variable, record that live
 endpoint preservation of additional populated custom values could not be
-observed and cross-reference the automated multi-entry preservation tests.
+observed. Do not enable the partial custom-field preservation strategy from
+single-entry live evidence; require live multi-entry evidence or an
+authoritative Hostaway contract for that strategy. Automated tests still cover
+only the local merge/payload builder.
 
 Authorized now:
 

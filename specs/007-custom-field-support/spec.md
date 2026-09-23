@@ -761,9 +761,13 @@ field they operate on and cross-reference each other.
   variable, as the control group. A deviation anywhere in the object is a
   failure. When the live object has only one populated custom variable, the
   evidence MUST record that live endpoint preservation of additional populated
-  custom values could not be observed; multi-entry preservation MUST still be
-  proven by automated merge/payload tests, and live verification SHOULD be
-  repeated when additional populated custom values become available.
+  custom values could not be observed, and it MUST NOT enable the listing
+  partial-write strategy for custom-field preservation. Multi-entry
+  preservation MUST be proven either by live evidence with multiple populated
+  custom values or by an authoritative Hostaway contract; automated tests still
+  cover only the local merge/payload builder. A single-entry no-op/sentinel
+  result may remain evidence for built-in-field preservation and exact restore
+  behavior.
 - **SC-004**: An automation author can write a custom variable using `varName`,
   without knowing any numeric id, when the `varName` is unique for the target
   object type; ambiguous same-object-type `varName`s require `customFieldId`.

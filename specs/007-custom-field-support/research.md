@@ -168,19 +168,22 @@ This protocol does not require three populated custom variables. The no-op
 self-write uses the entire listing object as the control group; any custom
 value or built-in field deviation is a failure. When the live object has only
 one populated custom variable, the evidence must record that preservation of
-additional populated custom values was not observed and cross-reference the
-automated multi-entry preservation tests.
+additional populated custom values was not observed. That evidence cannot
+enable the partial custom-field preservation strategy; live multi-entry
+evidence or an authoritative Hostaway contract is still required for that
+strategy.
 
 **Fallback if verification fails**: Listing writes must fail closed with an
-actionable error while reads and reservation writes continue. Listing writes
-must remain disabled for this feature unless a separate safe endpoint or full
-payload strategy is specified, tested against live data, and shown to preserve
-every visible built-in field. If full-object listing payloads are selected
-after partial verification fails, the no-op, sentinel, and restore steps must
-be repeated with the reconstructed full-object payload before listing writes
-are enabled. Full-object payloads also require a per-target writable-field
-allowlist and normalization rules; deep-copying a `GET` response into a `PUT`
-payload is prohibited.
+actionable error while reads continue. Reservation custom-field writes remain
+independently gated by reservation `customFieldValues` evidence or an
+authoritative contract. Listing writes must remain disabled for this feature
+unless a separate safe endpoint or full payload strategy is specified, tested
+against live data, and shown to preserve every visible built-in field. If
+full-object listing payloads are selected after partial verification fails, the
+no-op, sentinel, and restore steps must be repeated with the reconstructed
+full-object payload before listing writes are enabled. Full-object payloads
+also require a per-target writable-field allowlist and normalization rules;
+deep-copying a `GET` response into a `PUT` payload is prohibited.
 Full-object writes must either document concurrent external dashboard edits
 after the pre-write read as outside the no-clobber guarantee, or use a Hostaway
 conditional/version check that detects those edits. Without one of those
