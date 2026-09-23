@@ -83,7 +83,7 @@ available, capture a complete private rollback snapshot before sending any
 mutation. Only redacted summaries may be logged or committed.
 If the live object has only one populated custom variable, record that live
 endpoint preservation of additional populated custom values could not be
-observed. Do not enable the partial custom-field preservation strategy from
+observed. Do not enable any listing custom-field preservation strategy from
 single-entry live evidence; require live multi-entry evidence or an
 authoritative Hostaway contract for that strategy. Automated tests still cover
 only the local merge/payload builder.
@@ -214,9 +214,9 @@ or if more than one entry carries that id, fail closed before any `PUT` so the
 write cannot drop raw data or create an ambiguous duplicate.
 
 The API layer must expose both a partial payload builder and a full-object
-payload builder, with explicit strategy selection state per target type. A
-target type may use a partial payload only when recorded evidence supports that
-strategy; a full-object payload must be reconstructable from the pre-write
+payload builder, with explicit listing strategy selection state. A target type
+may use a partial payload only when recorded evidence supports that strategy;
+a full-object listing payload must be reconstructable from the pre-write
 snapshot before any live mutation uses it. A verified full-object strategy
 must not be represented by a flag that claims partial `PUT` was verified.
 If partial listing verification fails and a full-object listing strategy is
@@ -225,10 +225,9 @@ full-object payload before enabling listing writes.
 Full-object payloads require a per-target writable-field allowlist and
 normalization rules. Do not deep-copy an `includeResources=1` response into a
 `PUT` payload.
-For full-object writes, either document concurrent external dashboard edits
-after the pre-write read as outside the no-clobber guarantee or require a
-Hostaway conditional/version check that detects those edits; otherwise keep the
-full-object strategy disabled.
+For full-object writes, require a Hostaway conditional/version check that
+detects concurrent external dashboard edits after the pre-write read; otherwise
+keep the full-object strategy disabled.
 
 ## User-facing behavior to verify
 

@@ -551,17 +551,19 @@ field they operate on and cross-reference each other.
   edits made after the pre-write read, the write MUST fail rather than risk
   overwriting them unless the endpoint provides a conditional/version check
   that detects the concurrent edit. The no-clobber guarantee applies to the
-  canonicalized pre-write snapshot; concurrent external dashboard edits after
-  that snapshot are outside the guarantee unless such detection exists.
+  canonicalized pre-write snapshot plus the conditional/version check; without
+  such detection, full-object strategies that can overwrite post-read external
+  edits MUST remain disabled.
 - **FR-035**: Listing partial-`PUT /v1/listings/{id}` semantics MUST remain
   untrusted until the Step 0 through Step 5 verification ladder in FR-051
   through FR-054 passes for the listing endpoint. The integration MUST
   implement both a partial-payload
-  builder and a full-object payload builder, selectable per target type, so the
-  safe strategy for each endpoint can be chosen from recorded evidence rather
-  than assumed. The executable state MUST record the selected payload strategy
-  separately from whether partial `PUT` semantics were verified; a full-object
-  listing strategy MUST NOT be represented by setting
+  builder and a full-object payload builder. Full-object strategy selection is
+  listing-only for this feature; reservation full-object writes remain disabled
+  until a separate reservation protocol defines and verifies them. The
+  executable state MUST record the selected payload strategy separately from
+  whether partial `PUT` semantics were verified; a full-object listing strategy
+  MUST NOT be represented by setting
   `listing_partial_put_verified` to true. If partial listing verification
   fails and a full-object listing strategy is selected, the no-op, sentinel,
   and restore steps MUST be repeated with the reconstructed full-object payload
@@ -761,8 +763,8 @@ field they operate on and cross-reference each other.
   variable, as the control group. A deviation anywhere in the object is a
   failure. When the live object has only one populated custom variable, the
   evidence MUST record that live endpoint preservation of additional populated
-  custom values could not be observed, and it MUST NOT enable the listing
-  partial-write strategy for custom-field preservation. Multi-entry
+  custom values could not be observed, and it MUST NOT enable any listing
+  write strategy for custom-field preservation. Multi-entry
   preservation MUST be proven either by live evidence with multiple populated
   custom values or by an authoritative Hostaway contract; automated tests still
   cover only the local merge/payload builder. A single-entry no-op/sentinel
@@ -830,11 +832,11 @@ field they operate on and cross-reference each other.
 - Listing update behaviour is unverified. FR-035 requires the verification
   ladder to pass before relying on a listing partial payload, and the
   implementation must also carry a full-object payload strategy so listing
-  writes can choose a safer strategy per target type when evidence requires it.
+  writes can choose a safer strategy when evidence requires it.
 - A read-modify-write merge is performed immediately before each write rather
-  than relying on possibly stale coordinator data. Concurrent dashboard edits
-  made after that read are outside the no-clobber guarantee unless Hostaway
-  exposes a way to detect them.
+  than relying on possibly stale coordinator data. Strategies that can
+  overwrite concurrent dashboard edits made after that read remain disabled
+  unless Hostaway exposes a way to detect those edits.
 - Read and write services follow the integration's existing user-facing service
   conventions, including clear documentation and response support where a
   payload is returned.

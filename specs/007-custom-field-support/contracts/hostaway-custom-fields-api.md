@@ -242,18 +242,19 @@ Content-Type: application/json
   evidence is recorded` before reading the target or sending any mutation.
 - The API layer provides both a partial-payload builder and a full-object
   payload builder. The partial `PUT` body contains exactly one top-level key,
-  `customFieldValues`; full-object payloads may be selected per target type
-  only when they are reconstructable from the pre-write snapshot and recorded
-  evidence supports that safer strategy. The selected strategy is explicit
-  gate state, not inferred from a partial-verification boolean.
+  `customFieldValues`; full-object listing payloads may be selected only when
+  they are reconstructable from the pre-write snapshot and recorded evidence
+  supports that safer strategy. Reservation full-object writes remain disabled
+  until a separate reservation protocol defines and verifies them. The selected
+  strategy is explicit gate state, not inferred from a partial-verification
+  boolean.
 - Full-object payloads are disabled until a per-target writable-field allowlist
   and normalization rules are defined and tested. Copying a complete
   `includeResources=1` response into a `PUT` payload is never valid evidence of
   a safe full-object strategy.
-- Full-object writes must either document concurrent external dashboard edits
-  after the pre-write read as outside the no-clobber guarantee, or use a
-  Hostaway conditional/version check that detects those edits. Without one of
-  those conditions, the full-object strategy remains disabled.
+- Full-object writes require a Hostaway conditional/version check that detects
+  concurrent external dashboard edits after the pre-write read. Without that
+  check, the full-object strategy remains disabled.
 
 ### PUT /v1/reservations/{id}
 
@@ -307,16 +308,19 @@ Content-Type: application/json
   is recorded.
 - The executable gate is
   `custom_field_write_safety.reservation_no_clobber_verified`, stored per
-  config entry under `hass.data[DOMAIN][entry.entry_id]`, plus a non-`None`
-  `reservation_payload_strategy`, and defaults to disabled. While missing,
+  config entry under `hass.data[DOMAIN][entry.entry_id]`, plus
+  `reservation_payload_strategy = "partial"`, and defaults to disabled. While
+  missing,
   `hostaway.set_custom_field` rejects reservation writes with
   `reservation custom-field writes are disabled until customFieldValues safety
   evidence is recorded` before reading the target or sending any mutation.
 - The API layer provides both partial and full-object payload builders. The
   partial `PUT` body contains exactly one top-level key,
-  `customFieldValues`; the selected strategy is per target type and must be
-  supported by recorded evidence. The selected strategy is explicit gate state,
-  not inferred from a partial-verification boolean.
+  `customFieldValues`; reservation writes may select only the partial strategy
+  in this feature and must be supported by recorded evidence. The selected
+  strategy is explicit gate state, not inferred from a partial-verification
+  boolean. Reservation full-object writes remain out of scope unless a future
+  protocol defines and verifies them explicitly.
 
 ## Home Assistant services
 

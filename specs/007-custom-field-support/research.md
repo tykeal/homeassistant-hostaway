@@ -92,7 +92,8 @@ custom-fields design where the APIs permit the same user-facing behavior.
 
 **Decision**: Implement custom-field writes as no-clobber read-modify-write
 operations over Hostaway's whole-object update endpoints, with both partial
-and full-object payload builders available for per-target selection.
+and full-object payload builders available and full-object strategy selection
+limited to listings for this feature.
 
 **Rationale**: Hostaway has no scoped endpoint equivalent to Guesty's
 `PUT /listings/{id}/custom-fields`. The documented write surfaces are `PUT /v1/listings/{id}` and
@@ -100,7 +101,9 @@ and full-object payload builders available for per-target selection.
 service that sends only the target value without preserving the rest risks
 deleting unrelated custom variables or built-in fields. Because endpoint
 semantics may differ, the implementation must be able to choose a partial or
-full-object payload strategy per target type based on recorded evidence.
+full-object listing payload strategy based on recorded evidence. Reservation
+full-object writes stay disabled until a separate protocol defines and verifies
+that path.
 
 **Implementation notes**:
 
@@ -124,8 +127,9 @@ full-object payload strategy per target type based on recorded evidence.
 
 - Assume partial `PUT` is always safe: rejected by FR-035 for listings.
 - Implement only partial payloads: rejected because the owner explicitly chose
-  to implement both partial and full-object builders and select per target type
-  based on evidence.
+  to implement both partial and full-object builders and allow listing
+  full-object selection based on evidence, while reservation full-object writes
+  remain out of scope until a separate protocol exists.
 - Drop malformed custom-field entries: rejected by FR-019 and FR-032 because
   it violates the no-clobber guarantee.
 
@@ -169,9 +173,9 @@ self-write uses the entire listing object as the control group; any custom
 value or built-in field deviation is a failure. When the live object has only
 one populated custom variable, the evidence must record that preservation of
 additional populated custom values was not observed. That evidence cannot
-enable the partial custom-field preservation strategy; live multi-entry
-evidence or an authoritative Hostaway contract is still required for that
-strategy.
+enable any listing custom-field preservation strategy; live multi-entry
+evidence or an authoritative Hostaway contract is still required before
+selecting either `partial` or `full_object` for custom-field preservation.
 
 **Fallback if verification fails**: Listing writes must fail closed with an
 actionable error while reads continue. Reservation custom-field writes remain
@@ -184,10 +188,9 @@ no-op, sentinel, and restore steps must be repeated with the reconstructed
 full-object payload before listing writes are enabled. Full-object payloads
 also require a per-target writable-field allowlist and normalization rules;
 deep-copying a `GET` response into a `PUT` payload is prohibited.
-Full-object writes must either document concurrent external dashboard edits
-after the pre-write read as outside the no-clobber guarantee, or use a Hostaway
-conditional/version check that detects those edits. Without one of those
-conditions, the full-object strategy remains disabled.
+Full-object writes require a Hostaway conditional/version check that detects
+concurrent external dashboard edits after the pre-write read. Without that
+check, the full-object strategy remains disabled.
 
 **Reservation verification**:
 

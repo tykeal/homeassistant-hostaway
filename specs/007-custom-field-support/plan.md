@@ -29,17 +29,18 @@ Hostaway does not expose scoped custom-field write endpoints. Writes therefore
 must read the current listing or reservation with `includeResources=1`, merge
 exactly one addressed custom value into the raw current `customFieldValues`
 collection, preserve unresolved and malformed raw entries, and submit a
-payload selected per target type through the existing whole-object `PUT`
-endpoint. The API layer must provide both the partial `customFieldValues`
-payload builder and a full-object payload builder so each endpoint can use the
-safest strategy supported by recorded evidence. The merge must distinguish an
+payload selected through the existing whole-object `PUT` endpoint. The API
+layer must provide both the partial `customFieldValues` payload builder and a
+full-object payload builder. Full-object strategy selection is listing-only in
+this feature; reservation full-object writes remain disabled until a separate
+reservation protocol defines and verifies them. The merge must distinguish an
 empty list from missing, null, or non-list
 `customFieldValues`; malformed collections abort before any `PUT` so existing
 values are not silently cleared. A malformed entry for the addressed
 `customFieldId` also aborts before any `PUT`, because replacing it could drop
 raw data and appending beside it could create an ambiguous duplicate. Listing
-and reservation write support are gated by default-off executable safety
-flags plus an explicit payload strategy recorded per target type. Listing
+and reservation write support are gated by default-off executable safety flags
+plus explicit payload strategy state. Listing
 writes require recorded evidence for the selected listing payload strategy;
 `listing_partial_put_verified` remains strict proof that partial `PUT` passed
 and must not be used to represent a full-object fallback. Reservation writes
@@ -375,8 +376,7 @@ table-driven.
   key, `customFieldValues`, while full-object payloads contain only fields
   proven reconstructable from the pre-write snapshot.
 - Do not enable a full-object strategy that can overwrite concurrent external
-  dashboard edits made after the pre-write read unless those edits are
-  documented outside the no-clobber guarantee or Hostaway provides a
+  dashboard edits made after the pre-write read unless Hostaway provides a
   conditional/version check that detects them.
 - Treat a present empty `customFieldValues: []` list as genuinely empty, but
   fail closed when the current object omits `customFieldValues`, returns it as

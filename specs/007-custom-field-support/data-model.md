@@ -198,7 +198,7 @@ Per-config-entry executable gates for live no-clobber verification.
 | `listing_partial_put_verified` | `bool` | `False` | FR-035 listing partial-PUT verification passed. |
 | `listing_payload_strategy` | `"partial"` / `"full_object"` / `None` | `None` | Verified listing payload strategy selected from recorded evidence. |
 | `reservation_no_clobber_verified` | `bool` | `False` | FR-055 reservation `customFieldValues` no-op/sentinel/restore evidence or authoritative contract passed. |
-| `reservation_payload_strategy` | `"partial"` / `"full_object"` / `None` | `None` | Verified reservation payload strategy selected from recorded evidence. |
+| `reservation_payload_strategy` | `"partial"` / `None` | `None` | Verified reservation payload strategy selected from recorded evidence; full-object reservation writes are out of scope until a separate protocol exists. |
 
 **Storage**: The gate object lives under
 `hass.data[DOMAIN][entry.entry_id]["custom_field_write_safety"]` and is seeded
