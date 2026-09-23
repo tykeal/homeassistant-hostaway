@@ -42,10 +42,10 @@ gates that must remain default-off until the matching verification task passes.
 default-off write-gate objects before any user story work starts.
 
 **Phase Exit Rule**: New files exist with SPDX headers, no Home Assistant
-imports are present in `api/custom_fields.py`, and `uvx aislop ci` remains at
-the configured 100/100 score.
+imports are present in `api/custom_fields.py`, and
+`uvx --from aislop==0.12.0 aislop ci` remains at the configured 100/100 score.
 
-- [ ] T001 Run `uvx aislop ci` from the repository root and record in the implementation notes that the repository scores 100/100 with zero errors and zero warnings; do not add a file-level line-count rule to `.aislop/config.yml`
+- [ ] T001 Run `uvx --from aislop==0.12.0 aislop ci` from the repository root and record in the implementation notes that the repository scores 100/100 with zero errors and zero warnings; do not add a file-level line-count rule to `.aislop/config.yml`
 - [ ] T002 Create `custom_components/hostaway/api/custom_fields.py` with SPDX header, aislop ignore marker (`# aislop-ignore-file ai-slop/hallucinated-import -- HA runtime provides these packages`), module docstring, zero Home Assistant imports, narrow client protocols, and placeholder dataclasses/helpers for definitions, values, collection state, write gates, locks, and generations
 - [ ] T003 [P] Create `custom_components/hostaway/services/custom_fields.py` with SPDX header, aislop ignore marker, module docstring, and placeholder handlers for `hostaway.get_custom_fields`, `hostaway.get_custom_field_values`, and `hostaway.set_custom_field`
 - [ ] T004 [P] Create `custom_components/hostaway/sensor/custom_fields.py` with SPDX header, aislop ignore marker, module docstring, and placeholder listing custom-field allocator/sensor classes
@@ -322,10 +322,10 @@ documented schemas.
 and prepare atomic implementation PR commits.
 
 **Phase Exit Rule**: Full tests, linting, quickstart checks, pre-commit, CI,
-`uvx aislop ci`, and live-verification evidence are green or any disabled
-write target is explicitly documented.
+`uvx --from aislop==0.12.0 aislop ci`, and live-verification evidence are
+green or any disabled write target is explicitly documented.
 
-- [ ] T086 [P] Run `uvx aislop ci` and confirm the repository still scores 100/100 with zero errors and zero warnings under the configured `.aislop/config.yml`; do not add a file-level line-count rule
+- [ ] T086 [P] Run `uvx --from aislop==0.12.0 aislop ci` and confirm the repository still scores 100/100 with zero errors and zero warnings under the configured `.aislop/config.yml`; do not add a file-level line-count rule
 - [ ] T087 [P] Run targeted tests from quickstart.md: `uv run pytest tests/api/test_custom_fields.py -x -q`, `uv run pytest tests/sensor/test_custom_fields.py -x -q`, `uv run pytest tests/services/test_custom_fields.py -x -q`, and `uv run pytest tests/test_config_flow.py -x -q -k custom_field`
 - [ ] T088 Run full validation with `uv run pytest tests/ -x -q` and `uv run ruff check custom_components/ tests/`
 - [ ] T089 Run `uv run pre-commit run --all-files` and fix markdownlint, codespell, REUSE, mypy, interrogate, and aislop issues without bypassing hooks

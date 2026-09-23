@@ -65,10 +65,11 @@ defaults to 15 minutes and uses Hostaway's maximum 500-item page size; all
 requests remain under Hostaway's 200 requests / 10 seconds rate limit
 
 **Constraints**: All I/O async; no Home Assistant imports in
-`custom_components/hostaway/api/custom_fields.py`; `uvx aislop ci` must keep
-the repository at the configured 100/100 score; writes must preserve raw
-malformed custom field value records and built-in fields; multi-account
-services fail closed without `config_entry_id`
+`custom_components/hostaway/api/custom_fields.py`;
+`uvx --from aislop==0.12.0 aislop ci` must keep the repository at the
+configured 100/100 score; writes must preserve raw malformed custom field value
+records and built-in fields; multi-account services fail closed without
+`config_entry_id`
 
 **Scale/Scope**: Account-level custom field definitions for `listing` and
 `reservation` object types, dynamic listing custom-field sensors, reservation
@@ -174,8 +175,9 @@ table-driven.
   headers and zero Home Assistant imports in `api/custom_fields.py`.
 - Add executable write-gate objects that default to disabled for both target
   types.
-- Verify the repository still passes the configured `uvx aislop ci` score
-  gate; no file-level line-count rule is configured.
+- Verify the repository still passes the configured
+  `uvx --from aislop==0.12.0 aislop ci` score gate; no file-level line-count
+  rule is configured.
 
 ### Phase 2: API models, parsing, and includeResources reads
 
@@ -366,8 +368,8 @@ table-driven.
 ### Phase 10: Polish, validation, and release notes
 
 - Run targeted tests, then the required full test and ruff commands.
-- Run `uvx aislop ci` and keep the configured 100/100 score with zero errors
-  and zero warnings.
+- Run `uvx --from aislop==0.12.0 aislop ci` and keep the configured 100/100
+  score with zero errors and zero warnings.
 - Add changelog and task-checkbox commits separately during the implementation
   PR.
 
@@ -437,9 +439,9 @@ Current relevant file sizes:
 These counts are sizing context only. The repository's actual
 `.aislop/config.yml` enforces `ci.failBelow: 100`; it does not define a
 file-level line-count limit. Keep modules cohesive, use the new custom-field
-modules for separation of concerns, and run `uvx aislop ci` to preserve the
-configured score gate. Do not add custom-field business logic to
-`api/client.py`.
+modules for separation of concerns, and run
+`uvx --from aislop==0.12.0 aislop ci` to preserve the configured score gate.
+Do not add custom-field business logic to `api/client.py`.
 
 Allocator tests must cover duplicate `varName` values, slug collisions,
 fallback-key collisions, a second-order collision where the first

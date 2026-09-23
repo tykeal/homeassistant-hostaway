@@ -65,7 +65,7 @@ uv run ruff check custom_components/ tests/
 Run the configured quality gate before final review:
 
 ```bash
-uvx aislop ci
+uvx --from aislop==0.12.0 aislop ci
 ```
 
 ## Manual FR-035 verification
