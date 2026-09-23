@@ -32,11 +32,14 @@ collection, preserve unresolved and malformed raw entries, and submit the
 merged collection through the existing whole-object `PUT` endpoint. The merge
 must distinguish an empty list from missing, null, or non-list
 `customFieldValues`; malformed collections abort before any `PUT` so existing
-values are not silently cleared. Listing and reservation write support are
-gated by default-off executable safety flags. Listing writes require the FR-035
-partial-PUT verification, and reservation writes require the SC-003 live
-no-clobber verification. Until the matching flag is enabled by a verification
-commit, the service rejects that target type before any read, merge, or `PUT`.
+values are not silently cleared. A malformed entry for the addressed
+`customFieldId` also aborts before any `PUT`, because replacing it could drop
+raw data and appending beside it could create an ambiguous duplicate. Listing
+and reservation write support are gated by default-off executable safety
+flags. Listing writes require the FR-035 partial-PUT verification, and
+reservation writes require the SC-003 live no-clobber verification. Until the
+matching flag is enabled by a verification commit, the service rejects that
+target type before any read, merge, or `PUT`.
 
 ## Technical Context
 
@@ -205,6 +208,10 @@ table-driven.
 
 - Add `HostawayCustomFieldDefinition`, parsed value records, unresolved value
   records, raw malformed value preservation, and response-shaping helpers.
+- Validate every integer identifier with a bool-safe integer check. Definition
+  ids, value-entry `customFieldId`s, service `customFieldId`, and `target_id`
+  accept real integers only; `True` and `False` must be rejected even though
+  Python's `bool` subclasses `int`.
 - Add paginated `GET /v1/customFields` retrieval with `limit=500`, optional
   `objectType`, and filtering that ignores `task`.
 - Update listing and reservation reads to include `includeResources=1` so
@@ -288,11 +295,13 @@ table-driven.
 - Reject `target_type: reservation` with `reservation custom-field writes are
   disabled until SC-003 no-clobber verification passes` when
   `reservation_no_clobber_verified` is false.
-- Validate exactly one of `customFieldId` or `varName`; require definitions for
-  all writes; fail ambiguous same-object-type `varName` resolutions. Also
-  require `definitions_coordinator.last_refresh_succeeded` to be true. A stale
-  cache retained after a failed refresh is available for reads only and must
-  not be used for write resolution.
+- Validate exactly one of `customFieldId` or `varName`; boolean
+  `customFieldId` and boolean `target_id` inputs are invalid identifiers, not
+  integers. Require definitions for all writes; fail ambiguous same-object-type
+  `varName` resolutions. Also require
+  `definitions_coordinator.last_refresh_succeeded` to be true. A stale cache
+  retained after a failed refresh is available for reads only and must not be
+  used for write resolution.
 - Serialize concurrent Home Assistant writes through per-entry, per-target
   `asyncio.Lock` instances.
 - Add a shared per-target write generation registry. Coordinators capture the
@@ -313,7 +322,10 @@ table-driven.
   clear every existing custom value on the Hostaway object.
 - Before merging, scan the raw `customFieldValues` collection for every entry
   that carries the addressed `customFieldId`, including malformed entries that
-  have an id but no `value`. If more than one raw entry targets that id, fail
+  have an id but no `value` or otherwise do not match the expected entry
+  shape. If any malformed raw entry targets the addressed id, fail closed
+  before `PUT` with a clear malformed-entry error; do not replace it, append
+  beside it, or drop it. If more than one raw entry targets that id, fail
   closed before `PUT`; do not append another duplicate and do not drop any raw
   entry. A deterministic replacement policy may be added only with explicit
   tests and evidence that Hostaway handles duplicates predictably.

@@ -188,6 +188,10 @@ definition metadata.
 Never build a write payload from only parsed presentation values. Use the raw
 `customFieldValues` entries read immediately before the write, replace or add
 only the addressed valid entry, and pass through malformed entries unchanged.
+Before replacing or adding the addressed entry, scan raw entries with a
+bool-safe `customFieldId` check. If a malformed entry carries the addressed id,
+or if more than one entry carries that id, fail closed before any `PUT` so the
+write cannot drop raw data or create an ambiguous duplicate.
 
 ## User-facing behavior to verify
 

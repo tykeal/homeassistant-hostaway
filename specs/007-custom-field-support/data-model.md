@@ -56,8 +56,9 @@ Presentation-safe custom field value parsed from an object's
 
 **Validation**:
 
-- Non-mapping entries, missing or non-integer `customFieldId`, or a missing
-  `value` key return `None` and log a warning without logging the raw value.
+- Non-mapping entries, missing or non-integer `customFieldId`, boolean
+  `customFieldId`, or a missing `value` key return `None` and log a warning
+  without logging the raw value.
 - An explicitly present `value: null` is valid and distinct from a missing
   `value` key.
 - The raw entry is preserved separately even when presentation parsing fails,
@@ -93,6 +94,10 @@ Parsed custom field values for one listing or reservation.
   `malformed_entries` and `raw_entries`.
 - A write merge must fail closed if a raw malformed entry cannot be carried
   into the outgoing payload unchanged.
+- A write merge must fail closed if any malformed entry carries the addressed
+  `customFieldId`, even when it is the only raw entry for that id. Replacing it
+  could drop raw data, and appending beside it could leave Hostaway to resolve
+  an arbitrary duplicate.
 - A write merge must fail closed if more than one raw entry carries the
   addressed `customFieldId`, including malformed entries with an id but no
   `value`, because the integration cannot safely choose one duplicate without
@@ -322,12 +327,14 @@ existing key -> later slug collision -> existing key retained
 ```text
 service call
   -> schema validation
+  -> reject boolean integer identifiers
   -> config entry resolution
   -> field definition resolution
   -> local value validation
   -> acquire target lock
   -> increment or mark target write generation
   -> read target by id with includeResources=1
+  -> reject malformed raw entries for the addressed customFieldId
   -> reject duplicate raw entries for the addressed customFieldId
   -> merge raw customFieldValues
   -> PUT target

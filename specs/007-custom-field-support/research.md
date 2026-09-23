@@ -105,6 +105,9 @@ fields.
 - Preserve unresolved values and raw malformed entries exactly as read.
 - If a malformed raw entry cannot be included unchanged in the outgoing
   payload, fail the write instead of silently dropping it.
+- If a malformed raw entry carries the addressed `customFieldId`, fail closed
+  before the mutation. Replacing it could discard raw data, while appending a
+  new entry beside it could leave Hostaway to choose between duplicates.
 - Use per-entry, per-target `asyncio.Lock` objects to serialize Home
   Assistant writes to the same listing or reservation.
 
@@ -261,6 +264,9 @@ compatibility.
 
 - `text` and `textarea`: value must be a string.
 - `number`: value must be int or float, but never bool.
+- Numeric identifiers, including definition ids, value-entry `customFieldId`s,
+  service `customFieldId`, and `target_id`, must also reject bool even though
+  Python treats bool as int.
 - `dropdown`: value must be present in normalized `possibleValues`.
 - `value: null`: accepted as an explicit clear and bypasses type validation.
 - Unknown type: skip local type validation and let Hostaway accept or reject.

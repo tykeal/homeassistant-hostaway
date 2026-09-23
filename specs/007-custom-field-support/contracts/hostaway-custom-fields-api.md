@@ -224,6 +224,9 @@ Content-Type: application/json
   values read immediately before the write.
 - Unaddressed values are preserved.
 - Raw malformed entries are included unchanged.
+- If a raw malformed entry carries the addressed `customFieldId`, the write
+  fails before `PUT`; it is not replaced, dropped, or duplicated.
+- Duplicate raw entries for the addressed `customFieldId` fail before `PUT`.
 - If partial PUT verification fails, this endpoint cannot be used for listing
   writes until a safe full-payload strategy is proven.
 - The executable gate is
@@ -262,6 +265,10 @@ Content-Type: application/json
   built-in field unchanged.
 - Custom-field writes still read current reservation values first and submit a
   merged `customFieldValues` collection.
+- Unaddressed values and unaddressed raw malformed entries are preserved.
+- If a raw malformed entry carries the addressed `customFieldId`, the write
+  fails before `PUT`; it is not replaced, dropped, or duplicated.
+- Duplicate raw entries for the addressed `customFieldId` fail before `PUT`.
 - Built-in fields visible before the write, including `doorCode`, must remain
   unchanged.
 - The executable gate is
@@ -319,7 +326,7 @@ Content-Type: application/json
 | Field | Required | Type | Description |
 |-------|----------|------|-------------|
 | `target_type` | Yes | string | `listing` or `reservation`. |
-| `target_id` | Yes | integer | Hostaway listing or reservation id. |
+| `target_id` | Yes | integer | Hostaway listing or reservation id; booleans are invalid. |
 | `config_entry_id` | No | string | Required when multiple accounts are loaded. |
 
 **Success response**:
@@ -366,8 +373,8 @@ Content-Type: application/json
 | Field | Required | Type | Description |
 |-------|----------|------|-------------|
 | `target_type` | Yes | string | `listing` or `reservation`. |
-| `target_id` | Yes | integer | Hostaway listing or reservation id. |
-| `customFieldId` | Conditionally | integer | Required when `varName` is omitted. |
+| `target_id` | Yes | integer | Hostaway listing or reservation id; booleans are invalid. |
+| `customFieldId` | Conditionally | integer | Required when `varName` is omitted; booleans are invalid. |
 | `varName` | Conditionally | string | Required when `customFieldId` is omitted. |
 | `value` | Yes | any | New value; explicit `null` clears the field. |
 | `config_entry_id` | No | string | Required when multiple accounts are loaded. |
@@ -390,6 +397,8 @@ Exactly one of `customFieldId` or `varName` is required.
 **Validation errors**:
 
 - Missing or multiple field identifiers.
+- Boolean supplied for integer identifiers such as `target_id` or
+  `customFieldId`; bool is not accepted even though Python treats it as int.
 - Unknown `customFieldId` for target object type.
 - Unknown or ambiguous same-object-type `varName`.
 - Dropdown value not in `possibleValues`.
@@ -408,6 +417,10 @@ Exactly one of `customFieldId` or `varName` is required.
   non-list value. A present empty list is valid; any other non-list or absent
   shape is rejected so writes cannot clear unknown existing values.
 - Malformed raw entries cannot be preserved.
+- A malformed raw entry carries the addressed `customFieldId`; replacing it
+  could drop raw data, and appending beside it could create an arbitrary
+  duplicate.
+- Duplicate raw entries carry the addressed `customFieldId`.
 - Hostaway rejects the update.
 - Listing write attempted before FR-035 verification passes.
 - Reservation write attempted before SC-003 verification passes.
