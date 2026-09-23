@@ -389,3 +389,23 @@ class TestHostawayCustomFieldsCoordinator:
         assert coordinator.last_refresh_succeeded is False
         assert coordinator.last_refresh_error is not None
         assert coordinator.data == stale
+
+    async def test_unexpected_refresh_error_fails_closed(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Unexpected definition refresh errors update failure state."""
+        from custom_components.hostaway.coordinator import (
+            HostawayCustomFieldsCoordinator,
+        )
+
+        entry = _make_entry()
+        entry.add_to_hass(hass)
+        api_client = AsyncMock()
+        api_client._request = AsyncMock(side_effect=RuntimeError("boom"))
+        coordinator = HostawayCustomFieldsCoordinator(hass, entry, api_client)
+
+        await coordinator.async_refresh_retaining_stale()
+
+        assert coordinator.last_refresh_succeeded is False
+        assert isinstance(coordinator.last_refresh_error, RuntimeError)

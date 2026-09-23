@@ -63,12 +63,12 @@ def compare_unrelated(
     before_values = [
         item
         for item in before.get("customFieldValues", [])
-        if item.get("customFieldId") != field_id
+        if not isinstance(item, Mapping) or item.get("customFieldId") != field_id
     ]
     after_values = [
         item
         for item in after.get("customFieldValues", [])
-        if item.get("customFieldId") != field_id
+        if not isinstance(item, Mapping) or item.get("customFieldId") != field_id
     ]
     if before_values != after_values:
         problems.append("unrelated customFieldValues changed")
@@ -132,8 +132,12 @@ async def verify(args: argparse.Namespace) -> int:
         answer = input(f"Type MUTATE {args.target_type} {args.target_id} to continue: ")
         if answer != f"MUTATE {args.target_type} {args.target_id}":
             raise RuntimeError("confirmation did not match; no mutation sent")
-        restore_payload = {"customFieldValues": deepcopy(before["customFieldValues"])}
+        custom_field_restore_payload = {
+            "customFieldValues": deepcopy(before["customFieldValues"])
+        }
+        complete_restore_payload = deepcopy(before)
         verification_error: Exception | None = None
+        restore_payload: dict[str, Any] = custom_field_restore_payload
         try:
             await _request(client, "PUT", path, token, json=payload)
             after = await _request(
@@ -143,6 +147,7 @@ async def verify(args: argparse.Namespace) -> int:
                 raise RuntimeError("target custom field did not change")
             problems = compare_unrelated(before, after, args.custom_field_id)
             if problems:
+                restore_payload = complete_restore_payload
                 raise RuntimeError("; ".join(problems))
         except Exception as exc:
             verification_error = exc

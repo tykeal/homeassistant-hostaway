@@ -257,6 +257,7 @@ class TestCustomFieldRuntimeData:
         assert "token_manager" in data
         assert "custom_fields_coordinator" in data
         assert callable(data["custom_fields_update_unsub"])
+        assert callable(data["custom_fields_initial_refresh_unsub"])
         assert isinstance(
             data["custom_field_write_safety"],
             CustomFieldWriteSafetyGates,

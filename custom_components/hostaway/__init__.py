@@ -16,6 +16,7 @@ import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.httpx_client import get_async_client
 
 from custom_components.hostaway.api.auth import HostawayTokenManager
@@ -120,6 +121,18 @@ async def async_setup_entry(
         _custom_fields_listener,
     )
 
+    def _initial_custom_fields_refresh(_now: object) -> None:
+        """Start the first definitions refresh without blocking setup."""
+        hass.async_create_task(
+            custom_fields_coordinator.async_refresh_retaining_stale()
+        )
+
+    custom_fields_initial_refresh_unsub = async_call_later(
+        hass,
+        1,
+        _initial_custom_fields_refresh,
+    )
+
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {
         "token_manager": token_manager,
@@ -128,6 +141,7 @@ async def async_setup_entry(
         "reservations_coordinator": reservations_coordinator,
         "custom_fields_coordinator": custom_fields_coordinator,
         "custom_fields_update_unsub": custom_fields_update_unsub,
+        "custom_fields_initial_refresh_unsub": custom_fields_initial_refresh_unsub,
         "custom_field_write_safety": CustomFieldWriteSafetyGates(),
         "custom_field_write_locks": CustomFieldWriteLockRegistry(),
         "custom_field_write_generations": CustomFieldWriteGenerationRegistry(),
@@ -166,6 +180,11 @@ async def async_unload_entry(
             custom_fields_update_unsub = data.get("custom_fields_update_unsub")
             if callable(custom_fields_update_unsub):
                 custom_fields_update_unsub()
+            custom_fields_initial_refresh_unsub = data.get(
+                "custom_fields_initial_refresh_unsub"
+            )
+            if callable(custom_fields_initial_refresh_unsub):
+                custom_fields_initial_refresh_unsub()
             await data["listings_coordinator"].async_shutdown()
             await data["reservations_coordinator"].async_shutdown()
             await data["custom_fields_coordinator"].async_shutdown()

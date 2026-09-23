@@ -94,6 +94,12 @@ class HostawayCustomFieldsCoordinator(
             raise UpdateFailed(
                 f"Failed to fetch custom field definitions: {exc}",
             ) from exc
+        except Exception as exc:
+            self.last_refresh_succeeded = False
+            self.last_refresh_error = exc
+            raise UpdateFailed(
+                f"Unexpected error fetching custom field definitions: {exc}",
+            ) from exc
         self.last_refresh_succeeded = True
         self.last_refresh_error = None
         return definitions
