@@ -194,7 +194,7 @@ Accept: application/json
 
 Update a listing through Hostaway's whole-object listing endpoint.
 
-**Request shape for custom-field writes after FR-035 passes**:
+**Partial strategy request shape after FR-035 passes**:
 
 ```http
 PUT /v1/listings/67890 HTTP/1.1
@@ -249,7 +249,8 @@ Content-Type: application/json
 - The API layer provides both a partial-payload builder and a full-object
   payload builder. The partial `PUT` body contains exactly one top-level key,
   `customFieldValues`; full-object listing payloads may be selected only when
-  they are reconstructable from the pre-write snapshot and recorded evidence
+  the full-object body is reconstructed from allowlisted writable listing
+  fields plus the merged `customFieldValues` collection, and recorded evidence
   supports that safer strategy. Reservation full-object writes remain disabled
   until a separate reservation protocol defines and verifies them. The selected
   strategy is explicit gate state, not inferred from a partial-verification
@@ -315,8 +316,9 @@ Content-Type: application/json
 - The executable gate is
   `custom_field_write_safety.reservation_no_clobber_verified`, stored per
   config entry under `hass.data[DOMAIN][entry.entry_id]`, plus
-  `reservation_payload_strategy = "partial"`, and defaults to disabled. While
-  missing,
+  `reservation_payload_strategy`, which defaults to `None` and may become
+  `"partial"` only after reservation `customFieldValues` evidence or an
+  authoritative contract is recorded. While missing,
   `hostaway.set_custom_field` rejects reservation writes with
   `reservation custom-field writes are disabled until customFieldValues safety
   evidence is recorded` before reading the target or sending any mutation.
