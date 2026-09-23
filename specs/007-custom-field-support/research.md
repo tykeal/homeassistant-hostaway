@@ -91,14 +91,16 @@ custom-fields design where the APIs permit the same user-facing behavior.
 ## R-004: Read-modify-write instead of scoped writes
 
 **Decision**: Implement custom-field writes as no-clobber read-modify-write
-operations over Hostaway's whole-object update endpoints.
+operations over Hostaway's whole-object update endpoints, with both partial
+and full-object payload builders available for per-target selection.
 
 **Rationale**: Hostaway has no scoped endpoint equivalent to Guesty's
-`PUT /listings/{id}/custom-fields`. The documented write surfaces are
-`PUT /v1/listings/{id}` and `PUT /v1/reservations/{id}`, both of which accept
-`customFieldValues`. A service that sends only the target value without
-preserving the rest risks deleting unrelated custom variables or built-in
-fields.
+`PUT /listings/{id}/custom-fields`. The documented write surfaces are `PUT /v1/listings/{id}` and
+`PUT /v1/reservations/{id}`, both of which accept `customFieldValues`. A
+service that sends only the target value without preserving the rest risks
+deleting unrelated custom variables or built-in fields. Because endpoint
+semantics may differ, the implementation must be able to choose a partial or
+full-object payload strategy per target type based on recorded evidence.
 
 **Implementation notes**:
 
@@ -121,6 +123,9 @@ fields.
 **Alternatives considered**:
 
 - Assume partial `PUT` is always safe: rejected by FR-035 for listings.
+- Implement only partial payloads: rejected because the owner explicitly chose
+  to implement both partial and full-object builders and select per target type
+  based on evidence.
 - Drop malformed custom-field entries: rejected by FR-019 and FR-032 because
   it violates the no-clobber guarantee.
 
@@ -138,17 +143,28 @@ variable.
 
 **Listing verification**:
 
-1. Select a real listing with at least three populated custom fields and
-   representative built-in fields. Prefer a disposable test listing.
-2. Read it with `includeResources=1` and store a complete private rollback
-   snapshot. Only redacted summaries may be logged or committed.
-3. Send a partial `PUT /v1/listings/{id}` payload containing only the merged
-   `customFieldValues` for a harmless value change.
-4. Re-read with `includeResources=1`.
-5. Assert the target value changed and every unrelated custom field and
-   visible built-in field stayed byte-for-byte equivalent.
-6. Roll back using the complete private snapshot if any unexpected mutation is
-   detected; otherwise restore the harmless target value if necessary.
+- Step 0: Ask Hostaway support for authoritative `PUT /v1/listings/{id}`
+  semantics.
+- Step 1: Read the listing with `includeResources=1`, store a complete private
+  rollback snapshot outside git, and prove the restore payload is
+  reconstructable before mutation. Only redacted summaries may be logged or
+  committed.
+- Step 2: Inspect the generated dry-run payload; the verification script
+  defaults to dry-run.
+- Step 3: Run a disposable task canary first: create a throwaway Hostaway task,
+  send partial `PUT /v1/tasks/{id}`, verify unrelated task fields survive, and
+  delete the task. This is indicative, not conclusive, for listing semantics
+  because task and listing endpoints may use different controllers.
+- Step 4: After a separate explicit owner decision, self-write one populated
+  listing custom variable's current value and re-read with
+  `includeResources=1`. Assert the whole-object diff is empty.
+- Step 5: Under the same separate owner decision, write a distinct sentinel
+  value, re-read, assert exactly one field changed, restore the original value,
+  and assert the object matches the pre-write snapshot exactly.
+
+This protocol does not require three populated custom variables. The no-op
+self-write uses the entire listing object as the control group; any custom
+value or built-in field deviation is a failure.
 
 **Fallback if verification fails**: Listing writes must fail closed with an
 actionable error while reads and reservation writes continue. Listing writes
@@ -158,23 +174,27 @@ every visible built-in field.
 
 **Reservation verification**:
 
-1. Select a real reservation with at least three populated custom fields and
-   at least one visible built-in field such as `doorCode`.
-2. Read it with `includeResources=1` and store a complete private rollback
-   snapshot. Only redacted summaries may be logged or committed.
-3. Send a merged `PUT /v1/reservations/{id}` payload containing one harmless
-   custom-field value change.
-4. Re-read with `includeResources=1`.
-5. Assert the target value changed and every unrelated custom field and
-   visible built-in field stayed byte-for-byte equivalent.
-6. Roll back using the complete private snapshot if any unexpected mutation is
-   detected; otherwise restore the harmless target value if necessary.
+Reservation writes may be enabled from documented production evidence instead
+of a live custom-variable mutation. The existing `set_door_code` handler sends
+a partial `PUT /v1/reservations/{id}` with only `doorCode` plus optional
+`doorCodeVendor` and `doorCodeInstruction`, via
+`HostawayApiClient.update_reservation`. That behavior has shipped since
+v0.4.0 with no reported reservation data loss, so it is empirical evidence
+that the reservation endpoint merges top-level keys rather than replacing the
+object. The evidence must record the residual gap: it does not prove that
+reservation `customFieldValues` specifically round-trips. With zero
+reservation custom variables in the owner's account today, the current clobber
+surface is limited to built-in fields, which the door-code evidence covers.
+
+If reservation custom variables become available later, the same no-op,
+sentinel, and restore protocol can be run for reservation `customFieldValues`.
 
 **Executable gates**: The implementation must carry default-false
 `listing_partial_put_verified` and `reservation_no_clobber_verified` flags in
 per-entry `CustomFieldWriteSafetyGates`. Each target type rejects before
 reading or mutating while its flag is false. A flag may become true only in an
-implementation change that records the corresponding successful verification.
+implementation change that records the corresponding successful evidence in
+`specs/007-custom-field-support/live-verification.md`.
 
 ## R-006: Definition coordinator behavior
 

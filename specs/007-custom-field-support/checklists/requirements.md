@@ -50,9 +50,12 @@ proceeding to planning
   - **FR-015/FR-024**: reservation custom fields and read-service responses use
     collision-safe `custom_fields` mappings rather than display-name keys.
 - External API endpoint and payload details appear in the spec only where they
-  are the subject of a safety verification requirement (FR-035); they are
-  drawn from issue #195 and define integration obligations rather than internal
-  implementation design.
+  are the subject of safety verification requirements (FR-035 and FR-051
+  through FR-055); they are drawn from issue #195 and live source evidence and
+  define integration obligations rather than internal implementation design.
+- SC-003 no longer depends on a minimum count of populated custom variables.
+  The empty-diff no-op protocol uses the whole object as the control group,
+  followed by a sentinel write and exact restore check.
 - Three checklist items remain intentionally unchecked: implementation-detail
   and technology-agnostic checks are not fully met because this feature's
   measurable outcomes must name Home Assistant visibility, Hostaway service

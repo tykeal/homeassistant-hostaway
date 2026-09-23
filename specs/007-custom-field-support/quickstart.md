@@ -20,8 +20,9 @@ SPDX-License-Identifier: Apache-2.0
   uv sync --all-extras --group dev
   ```
 
-- A Hostaway test account for manual FR-035 and SC-003 verification before
-  writes are enabled.
+- A Hostaway account for manual FR-035 verification before listing writes are
+  enabled. No sandbox is assumed; the verification ladder starts with
+  zero-risk read-only and dry-run steps.
 
 ## Development order
 
@@ -29,8 +30,8 @@ SPDX-License-Identifier: Apache-2.0
 2. API models, parsers, direct reads, and `includeResources=1` listing and
    reservation reads.
 3. Definitions coordinator and options flow.
-4. FR-035 listing partial-PUT and SC-003 reservation no-clobber verification,
-   using the production no-clobber payload builder.
+4. FR-035 listing verification ladder and reservation production-evidence
+   recording, using the production no-clobber payload builders.
 5. Listing custom-field key allocator, listing sensors, and reservation
    `custom_fields` attributes.
 6. Read services.
@@ -39,10 +40,11 @@ SPDX-License-Identifier: Apache-2.0
 9. Documentation and UX clarity.
 10. Polish and final validation.
 
-The FR-035 and SC-003 verification steps are intentionally before write
-support. Listing and reservation writes each have a default-off executable
-gate. If a verification has not passed, `hostaway.set_custom_field` must fail
-closed for that target type while continuing to allow reads.
+The FR-035 verification ladder and reservation evidence recording are
+intentionally before write support. Listing and reservation writes each have a
+default-off executable gate. If evidence has not passed for a target type,
+`hostaway.set_custom_field` must fail closed for that target type while
+continuing to allow reads.
 
 ## Targeted test commands
 
@@ -74,58 +76,58 @@ Do not run live, mutating verification until CI is green for the
 implementation branch. The repository constitution prohibits manual or
 exploratory testing before automated CI has passed.
 
-Use a disposable real listing with at least three custom fields populated.
-If a disposable listing is not available, capture a complete private rollback
-snapshot before sending any mutation. Only redacted summaries may be logged or
-committed.
+Use a real listing with one populated custom variable. No minimum number of
+populated custom variables is required because the no-op empty-diff protocol
+uses the whole object as the control group. If a disposable listing is not
+available, capture a complete private rollback snapshot before sending any
+mutation. Only redacted summaries may be logged or committed.
 
-1. Read the listing with `includeResources=1`.
-2. Record a complete private before snapshot of built-in fields and all
-   `customFieldValues`, plus a redacted summary for review notes.
-3. Send a partial `PUT /v1/listings/{id}` payload that changes one harmless
-   custom field through the production no-clobber payload builder used by
-   `hostaway.set_custom_field`.
-4. Re-read the listing with `includeResources=1`.
-5. Confirm:
-   - the target custom field changed;
-   - every other custom field is unchanged;
-   - built-in fields such as name, pricing, occupancy, and door-code-related
-     fields are unchanged;
-   - hidden custom fields remain present.
-6. Roll back from the complete private snapshot if any unexpected mutation is
-   detected; otherwise restore the original target value if needed.
+Authorized now:
+
+- Step 0: Ask Hostaway support for authoritative
+  `PUT /v1/listings/{id}` semantics.
+- Step 1: Read the listing with `includeResources=1`, record a complete
+  private before snapshot outside git, and verify the restore payload is
+  reconstructable from that snapshot.
+- Step 2: Inspect the generated dry-run payload. The verification script must
+  default to dry-run, so this step sends no mutation.
+- Step 3: Run a disposable task canary: create a throwaway Hostaway task, send
+  partial `PUT /v1/tasks/{id}`, verify unrelated task fields survive, and
+  delete the task. Treat the result as indicative, not conclusive, for
+  listings.
+
+Requires a separate explicit owner decision:
+
+- Step 4: Send a listing no-op self-write of the populated custom variable's
+  current value through the production payload strategy, re-read the listing
+  with `includeResources=1`, and confirm the whole-object diff is empty.
+- Step 5: Send a distinct sentinel value, confirm exactly one field changed,
+  restore the original value, and confirm the final object matches the
+  pre-write snapshot exactly. Attempt automatic restore from the complete
+  private snapshot if any unexpected mutation is detected, and document that
+  restore depends on any cleared built-in fields being writable.
 
 Do not enable listing writes unless this verification passes. If it fails,
 the implementation must make `hostaway.set_custom_field` fail closed for
 `target_type: listing` with an actionable message.
 
-## Manual reservation no-clobber verification
+## Reservation no-clobber evidence
 
-Use a disposable real reservation with at least three populated reservation
-custom fields and at least one built-in reservation field such as `doorCode`.
-If a disposable reservation is not available, capture a complete private
-rollback snapshot before sending any mutation. Only redacted summaries may be
-logged or committed.
+Record production evidence in
+`specs/007-custom-field-support/live-verification.md` before enabling
+reservation writes. `hostaway.set_door_code` sends a partial
+`PUT /v1/reservations/{id}` containing only `doorCode` plus optional
+`doorCodeVendor` and `doorCodeInstruction`, through
+`HostawayApiClient.update_reservation`. That behavior has shipped since
+v0.4.0 with no reported reservation data loss, which supports top-level merge
+semantics for the reservation endpoint.
 
-1. Read the reservation with `includeResources=1`.
-2. Record a complete private before snapshot of built-in fields and all
-   `customFieldValues`, plus a redacted summary for review notes.
-3. Send a merged `PUT /v1/reservations/{id}` payload that changes one harmless
-   custom field through the production no-clobber payload builder used by
-   `hostaway.set_custom_field`.
-4. Re-read the reservation with `includeResources=1`.
-5. Confirm:
-   - the target custom field changed;
-   - every other reservation custom field is unchanged;
-   - built-in fields such as `doorCode`, `doorCodeVendor`, and
-     `doorCodeInstruction` are unchanged;
-   - hidden custom fields remain present.
-6. Roll back from the complete private snapshot if any unexpected mutation is
-   detected; otherwise restore the original target value if needed.
-
-Do not enable reservation writes unless this verification passes. If it fails,
-the implementation must make `hostaway.set_custom_field` fail closed for
-`target_type: reservation` with an actionable message.
+Record the residual gap honestly: this evidence does not prove reservation
+`customFieldValues` specifically round-trips. With zero reservation custom
+variables in the owner's account today, the current clobber surface is limited
+to built-in fields, which the door-code evidence covers. If reservation custom
+variables become available later, run the same no-op, sentinel, and restore
+protocol used for listings.
 
 ## Key implementation patterns
 
@@ -195,6 +197,12 @@ Before replacing or adding the addressed entry, scan raw entries with a
 bool-safe `customFieldId` check. If a malformed entry carries the addressed id,
 or if more than one entry carries that id, fail closed before any `PUT` so the
 write cannot drop raw data or create an ambiguous duplicate.
+
+The API layer must expose both a partial payload builder and a full-object
+payload builder, with strategy selection per target type. A target type may
+use a partial payload only when recorded evidence supports that strategy; a
+full-object payload must be reconstructable from the pre-write snapshot before
+any live mutation uses it.
 
 ## User-facing behavior to verify
 
