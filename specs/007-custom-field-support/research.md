@@ -155,13 +155,14 @@ variable.
   send partial `PUT /v1/tasks/{id}`, verify unrelated task fields survive, and
   delete the task. This is indicative, not conclusive, for listing semantics
   because task and listing endpoints may use different controllers.
-- Step 4: After a separate explicit owner decision, self-write one populated
-  listing custom variable's current value and re-read with
-  `includeResources=1`. Assert the canonicalized whole-object diff is empty.
-- Step 5: Under the same separate owner decision, write a distinct sentinel
-  value, re-read, assert exactly one field changed, restore the original value,
-  and assert the object matches the pre-write snapshot exactly using the same
-  canonicalized complete-snapshot comparison.
+- Step 4: With a disposable listing or the allowlisted restore path from Step 1,
+  plus a separate explicit owner decision, self-write one populated listing
+  custom variable's current value and re-read with `includeResources=1`. Assert
+  the canonicalized whole-object diff is empty.
+- Step 5: Under the same restore precondition and owner decision, write a
+  distinct sentinel value, re-read, assert exactly one field changed, restore
+  the original value, and assert the object matches the pre-write snapshot
+  exactly using the same canonicalized complete-snapshot comparison.
 
 This protocol does not require three populated custom variables. The no-op
 self-write uses the entire listing object as the control group; any custom
@@ -180,9 +181,10 @@ payload is prohibited.
 
 **Reservation verification**:
 
-Reservation writes may be enabled from documented production evidence instead
-of a live custom-variable mutation. The existing `set_door_code` handler sends
-a partial `PUT /v1/reservations/{id}` with only `doorCode` plus optional
+Reservation writes may be enabled for the verified Hostaway account/config
+entry from documented production evidence instead of a live custom-variable
+mutation. The existing `set_door_code` handler sends a partial
+`PUT /v1/reservations/{id}` with only `doorCode` plus optional
 `doorCodeVendor` and `doorCodeInstruction`, via
 `HostawayApiClient.update_reservation`. That behavior has shipped since
 v0.4.0 with no reported reservation data loss, so it is empirical evidence
@@ -193,7 +195,8 @@ reservation custom variables in the owner's account today, the current clobber
 surface is limited to built-in fields, which the door-code evidence covers.
 Until reservation `customFieldValues` round-tripping is verified, reservation
 custom-field writes must fail closed when the pre-write reservation already has
-existing `customFieldValues`.
+existing `customFieldValues`. Other accounts remain disabled until their own
+evidence is recorded or they explicitly opt in to the same accepted-risk basis.
 
 If reservation custom variables become available later, the same no-op,
 sentinel, and restore protocol can be run for reservation `customFieldValues`.

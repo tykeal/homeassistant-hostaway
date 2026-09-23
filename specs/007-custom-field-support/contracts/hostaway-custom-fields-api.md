@@ -296,6 +296,10 @@ Content-Type: application/json
 - Until reservation `customFieldValues` round-tripping is verified,
   reservation custom-field writes fail closed when the pre-write reservation
   already has existing `customFieldValues`.
+- Production `doorCode` evidence enables the reservation gate only for the
+  verified Hostaway account/config entry. Other accounts stay disabled until
+  their own evidence is recorded or they explicitly opt in to the same
+  accepted-risk basis.
 - The executable gate is
   `custom_field_write_safety.reservation_no_clobber_verified`, stored per
   config entry under `hass.data[DOMAIN][entry.entry_id]`, plus a non-`None`

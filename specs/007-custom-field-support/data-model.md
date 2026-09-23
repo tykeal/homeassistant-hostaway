@@ -204,10 +204,10 @@ Per-config-entry executable gates for live no-clobber verification.
 `hass.data[DOMAIN][entry.entry_id]["custom_field_write_safety"]` and is seeded
 from implementation constants that default to `False` for each target type.
 The per-entry object is deliberate runtime structure: it lets service code use
-the same entry-scoped state pattern as coordinators, locks, and generations,
-while the account-independent safety defaults remain source-controlled
-constants that can only be enabled by an implementation change with recorded
-live evidence.
+the same entry-scoped state pattern as coordinators, locks, and generations.
+Account-independent safety defaults remain disabled. Evidence-enabled states
+must be bound to the verified Hostaway account/config entry, or require an
+explicit per-entry opt-in to the same accepted-risk basis.
 
 **Enablement rule**: A target type's flag may be changed to `True` only in an
 implementation change that records matching evidence in
@@ -217,12 +217,13 @@ strictly tied to partial-PUT evidence. If the selected listing strategy is
 `full_object`, the implementation must record that strategy separately instead
 of setting `listing_partial_put_verified` to true. Reservation evidence may be
 the documented production `doorCode` partial-`PUT` behavior accepted under
-FR-055, while noting that reservation `customFieldValues` round-tripping
-remains unproven. Both target types also require a non-`None` payload strategy
-before dispatch. Until then, `hostaway.set_custom_field` rejects that target
-type before reading, merging, or sending a mutating request. Until reservation
-`customFieldValues` round-tripping is verified, reservation writes also fail
-closed when the pre-write reservation already has existing `customFieldValues`.
+FR-055 for the verified Hostaway account/config entry, while noting that
+reservation `customFieldValues` round-tripping remains unproven. Both target
+types also require a non-`None` payload strategy before dispatch. Until then,
+`hostaway.set_custom_field` rejects that target type before reading, merging,
+or sending a mutating request. Until reservation `customFieldValues`
+round-tripping is verified, reservation writes also fail closed when the
+pre-write reservation already has existing `customFieldValues`.
 
 ### CustomFieldWriteLockRegistry
 

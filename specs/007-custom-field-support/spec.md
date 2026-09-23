@@ -645,10 +645,12 @@ field they operate on and cross-reference each other.
   Step 0 asks Hostaway support for authoritative `PUT /v1/listings/{id}`
   semantics. Step 1 captures a complete pre-write snapshot of the target
   object outside git and verifies that the write payload needed to reconstruct
-  the target is reconstructable from that snapshot. All later object
-  comparisons MUST compare canonicalized complete snapshots, not only unrelated
-  fields or addressed custom-field values. Step 2 inspects the generated
-  dry-run payload and sends no mutation.
+  the target is reconstructable from that snapshot using allowlisted writable
+  fields and normalization rules. A raw `deepcopy` of a `GET` response is not a
+  valid restore payload. All later object comparisons MUST compare
+  canonicalized complete snapshots, not only unrelated fields or addressed
+  custom-field values. Step 2 inspects the generated dry-run payload and sends
+  no mutation.
 - **FR-052**: Step 3 MUST run a disposable task canary before listing
   mutation: create a throwaway Hostaway task, send a partial
   `PUT /v1/tasks/{id}`, verify unrelated task fields survive, and delete the
@@ -658,23 +660,25 @@ field they operate on and cross-reference each other.
   because Hostaway may implement task and listing updates in different
   controllers.
 - **FR-053**: Steps 4 and 5 are listing mutations and MUST NOT run without a
-  separate explicit owner decision. Step 4 performs the no-op self-write and
-  expects an empty whole-object diff. Step 5 writes the sentinel value, verifies
-  exactly one field changed, restores the original value, and verifies the
-  target matches the pre-write snapshot exactly. Restore-on-failure MUST be
-  attempted automatically during live verification. The verifier and evidence
-  MUST document the residual risk: if listing partial `PUT` clears built-in
-  fields, restoration depends on those built-in fields being writable through
-  the chosen restore payload. If partial listing verification fails and a
-  full-object strategy is selected, Step 4 and Step 5 MUST be repeated with the
-  reconstructed full-object payload before listing writes are enabled.
+  separate explicit owner decision and either a disposable listing or the
+  allowlisted restore path from FR-051. Step 4 performs the no-op self-write
+  and expects an empty whole-object diff. Step 5 writes the sentinel value,
+  verifies exactly one field changed, restores the original value, and verifies
+  the target matches the pre-write snapshot exactly. Restore-on-failure MUST be
+  attempted automatically using the allowlisted restore payload. If no
+  allowlisted restore path exists for the target, the ladder MUST stop at
+  Step 3 and listing writes MUST remain disabled. If partial listing
+  verification fails and a full-object strategy is selected, Step 4 and Step 5
+  MUST be repeated with the reconstructed full-object payload before listing
+  writes are enabled.
 - **FR-054**: Verification evidence for each completed ladder step MUST be
   recorded in `specs/007-custom-field-support/live-verification.md` with
   redacted values before any write-safety gate is enabled. Steps 0 through 3
   are authorized now; Steps 4 and 5 require the separate explicit owner
   decision required by FR-053.
-- **FR-055**: The reservation no-clobber gate MAY be enabled from documented
-  production evidence instead of a live reservation custom-variable write. The
+- **FR-055**: The reservation no-clobber gate MAY be enabled for the verified
+  Hostaway account/config entry from documented production evidence instead of
+  a live reservation custom-variable write. The
   existing `hostaway.set_door_code` handler sends a partial
   `PUT /v1/reservations/{id}` containing only `doorCode` plus optional
   `doorCodeVendor` and `doorCodeInstruction`, through
@@ -689,7 +693,9 @@ field they operate on and cross-reference each other.
   `doorCode` production evidence covers. Until reservation `customFieldValues`
   round-trip behavior is verified, reservation custom-field writes MUST fail
   closed when the pre-write reservation already has existing
-  `customFieldValues`.
+  `customFieldValues`. Other Hostaway accounts/config entries MUST remain
+  disabled until their own evidence is recorded or they explicitly opt in to
+  the same accepted-risk basis.
 
 ### Key Entities
 

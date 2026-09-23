@@ -256,7 +256,9 @@ table-driven.
   listing no-op self-write and expects an empty whole-object diff. Step 5
   writes a distinct listing sentinel value, verifies exactly one field changed,
   restores the original value, and verifies the object matches the pre-write
-  snapshot exactly. Steps 4 and 5 require a separate explicit owner decision.
+  snapshot exactly. Steps 4 and 5 require a disposable listing or the
+  allowlisted restore path from Step 1, plus a separate explicit owner
+  decision.
 - Treat the complete ladder as blocking for listing writes. It must prove
   omitted built-in fields and unrelated custom values remain unchanged before
   any listing write path can rely on partial `PUT`.
@@ -279,8 +281,9 @@ table-driven.
   normalization rules; deep-copying a `GET` response into a full-object `PUT`
   payload is prohibited.
 - Record production reservation evidence from the existing `set_door_code`
-  service before enabling reservation writes. The handler sends a partial
-  `PUT /v1/reservations/{id}` with only `doorCode` plus optional
+  service before enabling reservation writes for the verified Hostaway
+  account/config entry. The handler sends a partial `PUT /v1/reservations/{id}`
+  with only `doorCode` plus optional
   `doorCodeVendor` and `doorCodeInstruction` through
   `HostawayApiClient.update_reservation`, and that behavior has shipped since
   v0.4.0 with no reported reservation data loss. This supports top-level merge
@@ -290,7 +293,8 @@ table-driven.
   built-in fields covered by the door-code evidence. Until reservation
   `customFieldValues` round-tripping is verified, reservation custom-field
   writes must fail closed when the pre-write reservation already has existing
-  `customFieldValues`.
+  `customFieldValues`. Other accounts remain disabled until their own evidence
+  is recorded or they explicitly opt in to the same accepted-risk basis.
 - Treat documented reservation production evidence as sufficient to enable the
   reservation gate when recorded in `live-verification.md`, while recording
   the accepted residual risk that reservation `customFieldValues` round-trip

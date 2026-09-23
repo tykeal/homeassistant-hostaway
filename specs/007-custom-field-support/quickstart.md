@@ -87,8 +87,9 @@ Authorized now:
 - Step 0: Ask Hostaway support for authoritative
   `PUT /v1/listings/{id}` semantics.
 - Step 1: Read the listing with `includeResources=1`, record a complete
-  private before snapshot outside git, and verify the restore payload is
-  reconstructable from that snapshot.
+  private before snapshot outside git, and verify an allowlisted restore
+  payload is reconstructable from that snapshot without deep-copying the GET
+  response.
 - Step 2: Inspect the generated dry-run payload. The verification script must
   default to dry-run, so this step sends no mutation.
 - Step 3: Run a disposable task canary: create a throwaway Hostaway task, send
@@ -96,7 +97,8 @@ Authorized now:
   delete the task. Treat the result as indicative, not conclusive, for
   listings.
 
-Requires a separate explicit owner decision:
+Requires a disposable listing or the allowlisted restore path from Step 1, plus
+a separate explicit owner decision:
 
 - Step 4: Send a listing no-op self-write of the populated custom variable's
   current value through the production payload strategy, re-read the listing
@@ -132,6 +134,10 @@ variables become available later, run the same no-op, sentinel, and restore
 protocol used for listings. Until that round-trip evidence exists,
 reservation custom-field writes must fail closed when the pre-write reservation
 already has existing `customFieldValues`.
+
+Bind this evidence to the verified Hostaway account/config entry. Other
+accounts remain disabled until their own evidence is recorded or they
+explicitly opt in to the same accepted-risk basis.
 
 ## Key implementation patterns
 
