@@ -46,11 +46,11 @@ imports are present in `api/custom_fields.py`, and every touched file remains
 planned under aislop's 400-line cap.
 
 - [ ] T001 Run `wc -l custom_components/hostaway/api/*.py custom_components/hostaway/*.py custom_components/hostaway/services/*.py custom_components/hostaway/sensor/*.py` and record in the implementation notes that no task may push a touched file above 400 lines; split `custom_components/hostaway/config_flow.py` before adding options because it is already over budget
-- [ ] T002 Create `custom_components/hostaway/api/custom_fields.py` with SPDX header, module docstring, zero Home Assistant imports, narrow client protocols, and placeholder dataclasses/helpers for definitions, values, collection state, write gates, locks, and generations
-- [ ] T003 [P] Create `custom_components/hostaway/services/custom_fields.py` with SPDX header, module docstring, and placeholder handlers for `hostaway.get_custom_fields`, `hostaway.get_custom_field_values`, and `hostaway.set_custom_field`
-- [ ] T004 [P] Create `custom_components/hostaway/sensor/custom_fields.py` with SPDX header, module docstring, and placeholder listing custom-field allocator/sensor classes
-- [ ] T005 [P] Create `custom_components/hostaway/config_options.py` and move existing options-flow helper logic from `custom_components/hostaway/config_flow.py` so `config_flow.py` returns below 400 lines before adding the custom-field option
-- [ ] T006 [P] Add test module skeletons with SPDX headers in `tests/api/test_custom_fields.py`, `tests/sensor/test_custom_fields.py`, and `tests/services/test_custom_fields.py`
+- [ ] T002 Create `custom_components/hostaway/api/custom_fields.py` with SPDX header, aislop ignore marker (`# aislop-ignore-file ai-slop/hallucinated-import -- HA runtime provides these packages`), module docstring, zero Home Assistant imports, narrow client protocols, and placeholder dataclasses/helpers for definitions, values, collection state, write gates, locks, and generations
+- [ ] T003 [P] Create `custom_components/hostaway/services/custom_fields.py` with SPDX header, aislop ignore marker, module docstring, and placeholder handlers for `hostaway.get_custom_fields`, `hostaway.get_custom_field_values`, and `hostaway.set_custom_field`
+- [ ] T004 [P] Create `custom_components/hostaway/sensor/custom_fields.py` with SPDX header, aislop ignore marker, module docstring, and placeholder listing custom-field allocator/sensor classes
+- [ ] T005 [P] Create `custom_components/hostaway/config_options.py` with SPDX header, aislop ignore marker, and module docstring, then move existing options-flow helper logic from `custom_components/hostaway/config_flow.py` so `config_flow.py` returns below 400 lines before adding the custom-field option
+- [ ] T006 [P] Add test module skeletons with SPDX headers, aislop ignore markers, and module docstrings in `tests/api/test_custom_fields.py`, `tests/sensor/test_custom_fields.py`, and `tests/services/test_custom_fields.py`
 - [ ] T007 Write failing tests in `tests/api/test_custom_fields.py` for `CustomFieldWriteSafetyGates` defaulting `listing_partial_put_verified = False` and `reservation_no_clobber_verified = False`, then add the defaults in `custom_components/hostaway/api/custom_fields.py`; do not add any code path that can override them yet
 
 **Checkpoint**: Setup complete — extension modules exist, `config_flow.py` has
@@ -176,7 +176,7 @@ attributes match the spec without changing existing entity behavior.
 - [ ] T042 [P] [US1] Write failing tests in `tests/sensor/test_custom_fields.py` proving new listing custom-field values observed at runtime create new sensors without a Home Assistant restart
 - [ ] T043 [P] [US1] Write failing tests in `tests/sensor/test_listing.py` proving the seven existing listing diagnostics (`listing_id`, `external_name`, `status`, `base_price`, `bedrooms`, `bathrooms`, `max_guests`) remain unchanged and do not gain custom-variable attributes
 - [ ] T044 [P] [US1] Write failing tests in `tests/sensor/test_reservation.py` proving reservation sensors add `custom_fields`, use `custom_field_<customFieldId>` keys, include resolved human-readable metadata, include unresolved entries without definition metadata, expose `{}` when empty, and keep all existing reservation attributes unchanged
-- [ ] T045 [P] [US1] Write failing tests proving malformed custom value records log warnings, skip only presentation, preserve raw merge data, and never fail listing or reservation coordinator refreshes
+- [ ] T045 [P] [US1] Write failing tests proving malformed custom value records log warnings that exclude raw custom-field data and values, skip only presentation, preserve raw merge data, and never fail listing or reservation coordinator refreshes
 
 ### Implementation for User Story 1
 
@@ -383,20 +383,26 @@ separate commits, and live write safety status is documented.
 ### Parallel Opportunities
 
 - T003–T006 can run in parallel after T002.
-- T008–T013 can run in parallel because they target independent API behaviors.
+- T008–T013 cover independent API behaviors, but they all mention
+  `tests/api/test_custom_fields.py`; implement them sequentially unless the
+  implementer first splits them into separate test modules.
 - T023–T027 can run in parallel across options, setup, coordinator, and
   service gate checks.
-- T034–T035 can run in parallel; T036 depends on both.
-- T040–T045 can run in parallel across sensor and model tests.
-- T051–T056 can run in parallel across read-service schema and handler tests.
-- T061–T063 can run in parallel across addressing and validation tests.
-- T067–T074 can run in parallel across merge, service, concurrency, and entity
-  update tests.
+- T034–T035 are independent behaviors but share
+  `tests/services/test_custom_fields.py`; run sequentially unless split.
+- T040–T045 can run in parallel only where they target different files; tasks
+  sharing `tests/sensor/test_custom_fields.py` should be sequential or split.
+- T051–T056 are read-service behaviors in one test module; run sequentially
+  unless split into separate files.
+- T061–T063 can run in parallel only after splitting same-file service tests,
+  otherwise run same-file edits sequentially.
+- T067–T074 can run in parallel only across distinct API, service, and sensor
+  files; tasks sharing one file should be sequential or split first.
 - T081–T082 can run in parallel for custom-field and door-code documentation.
 
 ---
 
-## Parallel Example: Foundational API Tests
+## Batched Example: Foundational API Tests
 
 ```bash
 Task T008: "Write definition parsing tests"
@@ -407,7 +413,10 @@ Task T012: "Write includeResources direct and paged read tests"
 Task T013: "Write reservation raw-id pagination tests"
 ```
 
-## Parallel Example: Sensor Read Surface
+These tasks should be implemented sequentially unless the test file is split
+beforehand; they are listed together to show the complete foundational batch.
+
+## Batched Example: Sensor Read Surface
 
 ```bash
 Task T040: "Write listing allocator stability tests"
@@ -417,6 +426,9 @@ Task T043: "Write existing listing diagnostics regression tests"
 Task T044: "Write reservation custom_fields attribute tests"
 Task T045: "Write malformed value presentation tests"
 ```
+
+Only tasks touching different files are parallel-safe; same-file sensor tests
+must be sequenced or split to avoid merge conflicts.
 
 ---
 
