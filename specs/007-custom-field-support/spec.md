@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 
 **Feature Branch**: `007-custom-field-support`
 **Created**: 2026-09-21
-**Status**: Draft
+**Status**: Ready for implementation
 **Input**: User description: "Add the ability to read and write Hostaway custom
 fields (custom variables) for both listings and reservations (issue #195)."
 
@@ -372,7 +372,9 @@ field they operate on and cross-reference each other.
   one shared namespace per listing on a first-come-first-served basis. Any
   newly allocated key that would collide with an existing resolved or fallback
   key MUST append `_<customFieldId>` to the candidate key instead of
-  overwriting or renaming an existing entity.
+  overwriting or renaming an existing entity. If that suffixed key also
+  collides, allocation MUST append deterministic numeric suffixes (`_2`, `_3`,
+  and so on) until an unreserved key is found.
 - **FR-012**: Newly appearing listing custom variables MUST be discovered at
   runtime and added as new sensors without requiring a Home Assistant restart.
 - **FR-013**: The existing diagnostic listing sensors (`listing_id`,
@@ -442,9 +444,10 @@ field they operate on and cross-reference each other.
   selector limited to `listing` and `reservation`. `target_id` MUST be the
   integer Hostaway object id for the selected target type; missing or
   non-integer `target_id` values MUST fail validation before any read is
-  performed. When exactly one Hostaway config entry is loaded, omitting
-  `config_entry_id` MUST select that entry. When multiple entries are loaded,
-  omitting `config_entry_id` MUST fail closed with
+  performed. Boolean values are NOT valid integers for `target_id`, even
+  though Python's `bool` subclasses `int`. When exactly one Hostaway config
+  entry is loaded, omitting `config_entry_id` MUST select that entry. When
+  multiple entries are loaded, omitting `config_entry_id` MUST fail closed with
   `config_entry_id required when multiple entries exist` before resolving the
   target id or performing any read.
 - **FR-024**: The value read service response MUST contain exactly one
@@ -463,8 +466,11 @@ field they operate on and cross-reference each other.
   unresolved listing entry is `custom_field_<customFieldId>`. Any response key
   candidate that collides with an already allocated resolved, unresolved, or
   persisted listing key MUST append `_<customFieldId>` instead of overwriting
-  another entry. Computing a key for a listing entry with `value: null` MUST
-  NOT create or reserve a listing sensor entity outside that service response.
+  another entry. If the suffixed key also collides, the response allocator
+  MUST append deterministic numeric suffixes (`_2`, `_3`, and so on) until an
+  unreserved response key is found. Computing a key for a listing entry with
+  `value: null` MUST NOT create or reserve a listing sensor entity outside
+  that service response.
   For reservation targets, mapping keys MUST match the reservation
   `custom_field_<customFieldId>` key contract from FR-015. For both listing and
   reservation targets, each resolved entry MUST contain exactly these keys:
@@ -492,9 +498,11 @@ field they operate on and cross-reference each other.
   `target_id`, exactly one field identifier, a required `value` key, and
   optional `config_entry_id`. `target_type` MUST be a selector limited to
   `listing` and `reservation`. `target_id` MUST be the integer Hostaway object
-  id for the selected target type. The field identifier MUST be either numeric
-  `customFieldId` or string `varName`, as constrained by FR-030. Omitting the
-  `value` key MUST fail validation rather than being treated as a clear request.
+  id for the selected target type. Boolean values are NOT valid integers for
+  `target_id`. The field identifier MUST be either numeric `customFieldId` or
+  string `varName`, as constrained by FR-030. Boolean values are NOT valid
+  integers for `customFieldId`. Omitting the `value` key MUST fail validation
+  rather than being treated as a clear request.
   When exactly one Hostaway config entry is loaded, omitting
   `config_entry_id` MUST select that entry. When multiple entries are loaded,
   omitting `config_entry_id` MUST fail closed with
@@ -602,6 +610,21 @@ field they operate on and cross-reference each other.
   requests per 10 seconds per account and per IP under normal polling.
 - **FR-047**: Definition lookups MUST NOT be performed per listing, per
   reservation, or per field during a poll.
+- **FR-048**: A write MUST fail closed before any mutating request when the
+  current target object omits `customFieldValues`, supplies
+  `customFieldValues: null`, or supplies any non-list `customFieldValues`
+  shape. A present empty list (`customFieldValues: []`) is a valid, genuinely
+  empty custom-field collection and MUST NOT fail this requirement by itself.
+- **FR-049**: A write MUST fail closed before any mutating request when the raw
+  current `customFieldValues` collection contains duplicate entries for the
+  addressed `customFieldId`, including duplicates that would otherwise be
+  skipped from presentation.
+- **FR-050**: A write MUST fail closed before any mutating request when the raw
+  current entry for the addressed `customFieldId` is malformed. This is
+  distinct from preserving malformed unaddressed entries under FR-019 and
+  FR-032; the addressed malformed entry MUST NOT be replaced, dropped, or
+  duplicated because the integration cannot safely determine Hostaway's
+  intended value.
 
 ### Key Entities
 
