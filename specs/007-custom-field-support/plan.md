@@ -280,22 +280,25 @@ table-driven.
   It must also define and test a per-target writable-field allowlist and
   normalization rules; deep-copying a `GET` response into a full-object `PUT`
   payload is prohibited.
-- Record production reservation evidence from the existing `set_door_code`
-  service before enabling reservation writes for the verified Hostaway
-  account/config entry. The handler sends a partial `PUT /v1/reservations/{id}`
+- Record reservation `doorCode` implementation evidence from the existing
+  `set_door_code` service before enabling reservation writes for the verified
+  Hostaway account/config entry. The handler sends a partial `PUT /v1/reservations/{id}`
   with only `doorCode` plus optional
   `doorCodeVendor` and `doorCodeInstruction` through
-  `HostawayApiClient.update_reservation`, and that behavior has shipped since
-  v0.4.0 with no reported reservation data loss. This supports top-level merge
-  semantics for the reservation endpoint. It does not prove
+  `HostawayApiClient.update_reservation`. Owner-provided external account
+  history may be recorded separately, but this repository does not substantiate
+  a v0.4.0 production release or no-data-loss history. This supports
+  top-level merge semantics for the reservation endpoint. It does not prove
   `customFieldValues` round-tripping. Until reservation `customFieldValues`
   no-op/sentinel/restore evidence or an authoritative Hostaway contract is
   recorded, reservation custom-field writes must fail closed. Other accounts
   remain disabled until their own
   account-bound evidence is recorded.
-- Treat documented reservation production evidence as top-level merge evidence
-  only when recorded in `live-verification.md`. Do not enable the reservation
-  custom-field write gate until reservation `customFieldValues`
+- Treat documented reservation implementation evidence as top-level merge
+  evidence only when recorded in `live-verification.md`; record
+  owner-provided external production history separately if available. Do not
+  enable the reservation custom-field write gate until reservation
+  `customFieldValues`
   no-op/sentinel/restore evidence or an authoritative Hostaway contract covers
   that payload.
 - Keep the reservation write safety gate off by default. The implementation
@@ -371,6 +374,10 @@ table-driven.
   Automated tests must assert partial payloads contain exactly one top-level
   key, `customFieldValues`, while full-object payloads contain only fields
   proven reconstructable from the pre-write snapshot.
+- Do not enable a full-object strategy that can overwrite concurrent external
+  dashboard edits made after the pre-write read unless those edits are
+  documented outside the no-clobber guarantee or Hostaway provides a
+  conditional/version check that detects them.
 - Treat a present empty `customFieldValues: []` list as genuinely empty, but
   fail closed when the current object omits `customFieldValues`, returns it as
   `null`, or returns any non-list value. The parsed

@@ -166,7 +166,10 @@ variable.
 
 This protocol does not require three populated custom variables. The no-op
 self-write uses the entire listing object as the control group; any custom
-value or built-in field deviation is a failure.
+value or built-in field deviation is a failure. When the live object has only
+one populated custom variable, the evidence must record that preservation of
+additional populated custom values was not observed and cross-reference the
+automated multi-entry preservation tests.
 
 **Fallback if verification fails**: Listing writes must fail closed with an
 actionable error while reads and reservation writes continue. Listing writes
@@ -178,6 +181,10 @@ be repeated with the reconstructed full-object payload before listing writes
 are enabled. Full-object payloads also require a per-target writable-field
 allowlist and normalization rules; deep-copying a `GET` response into a `PUT`
 payload is prohibited.
+Full-object writes must either document concurrent external dashboard edits
+after the pre-write read as outside the no-clobber guarantee, or use a Hostaway
+conditional/version check that detects those edits. Without one of those
+conditions, the full-object strategy remains disabled.
 
 **Reservation verification**:
 
@@ -187,11 +194,12 @@ reservation custom-field writes. The existing `set_door_code` handler sends a
 partial
 `PUT /v1/reservations/{id}` with only `doorCode` plus optional
 `doorCodeVendor` and `doorCodeInstruction`, via
-`HostawayApiClient.update_reservation`. That behavior has shipped since
-v0.4.0 with no reported reservation data loss, so it is empirical evidence
-that the reservation endpoint merges top-level keys rather than replacing the
-object. The evidence must record the residual gap: it does not prove that
-reservation `customFieldValues` specifically round-trips. With zero
+`HostawayApiClient.update_reservation`. Owner-provided external account
+history MAY be recorded separately as
+empirical evidence, but this repository does not substantiate a v0.4.0
+production release or no-data-loss history. The evidence must record the
+residual gap: it does not prove that reservation `customFieldValues`
+specifically round-trips. With zero
 reservation custom variables in the owner's account today, the current clobber
 surface is limited to built-in fields, which the door-code evidence covers.
 Reservation custom-field writes remain disabled until reservation

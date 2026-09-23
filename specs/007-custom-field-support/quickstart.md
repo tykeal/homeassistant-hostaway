@@ -81,6 +81,9 @@ populated custom variables is required because the no-op empty-diff protocol
 uses the whole object as the control group. If a disposable listing is not
 available, capture a complete private rollback snapshot before sending any
 mutation. Only redacted summaries may be logged or committed.
+If the live object has only one populated custom variable, record that live
+endpoint preservation of additional populated custom values could not be
+observed and cross-reference the automated multi-entry preservation tests.
 
 Authorized now:
 
@@ -123,9 +126,9 @@ reservation writes. This evidence does not enable reservation custom-field
 writes by itself. `hostaway.set_door_code` sends a partial
 `PUT /v1/reservations/{id}` containing only `doorCode` plus optional
 `doorCodeVendor` and `doorCodeInstruction`, through
-`HostawayApiClient.update_reservation`. That behavior has shipped since
-v0.4.0 with no reported reservation data loss, which supports top-level merge
-semantics for the reservation endpoint.
+`HostawayApiClient.update_reservation`. Owner-provided external account
+history MAY be recorded separately as empirical evidence, but this repository
+does not substantiate a v0.4.0 production release or no-data-loss history.
 
 Record the residual gap honestly: this evidence does not prove reservation
 `customFieldValues` specifically round-trips. With zero reservation custom
@@ -219,6 +222,10 @@ full-object payload before enabling listing writes.
 Full-object payloads require a per-target writable-field allowlist and
 normalization rules. Do not deep-copy an `includeResources=1` response into a
 `PUT` payload.
+For full-object writes, either document concurrent external dashboard edits
+after the pre-write read as outside the no-clobber guarantee or require a
+Hostaway conditional/version check that detects those edits; otherwise keep the
+full-object strategy disabled.
 
 ## User-facing behavior to verify
 

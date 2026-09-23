@@ -250,6 +250,10 @@ Content-Type: application/json
   and normalization rules are defined and tested. Copying a complete
   `includeResources=1` response into a `PUT` payload is never valid evidence of
   a safe full-object strategy.
+- Full-object writes must either document concurrent external dashboard edits
+  after the pre-write read as outside the no-clobber guarantee, or use a
+  Hostaway conditional/version check that detects those edits. Without one of
+  those conditions, the full-object strategy remains disabled.
 
 ### PUT /v1/reservations/{id}
 
@@ -289,9 +293,11 @@ Content-Type: application/json
 - The existing `hostaway.set_door_code` service sends a partial
   `PUT /v1/reservations/{id}` containing only `doorCode` plus optional
   `doorCodeVendor` and `doorCodeInstruction`, through
-  `HostawayApiClient.update_reservation`. Its production history since v0.4.0
-  with no reported reservation data loss demonstrates top-level merge
-  semantics for built-in fields, but not `customFieldValues` round-tripping.
+  `HostawayApiClient.update_reservation`. Owner-provided external account
+  history MAY be recorded separately as empirical evidence, but this repository
+  does not substantiate a v0.4.0 production release or no-data-loss history.
+  This is top-level merge evidence for built-in fields, but not
+  `customFieldValues` round-tripping.
 - Until reservation `customFieldValues` no-op/sentinel/restore evidence or an
   authoritative Hostaway contract is recorded, reservation custom-field writes
   fail closed.
