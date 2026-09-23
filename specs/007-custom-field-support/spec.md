@@ -564,13 +564,14 @@ field they operate on and cross-reference each other.
   executable state MUST record the selected payload strategy separately from
   whether partial `PUT` semantics were verified; a full-object listing strategy
   MUST NOT be represented by setting
-  `listing_partial_put_verified` to true. If partial listing verification
-  fails and a full-object listing strategy is selected, the no-op, sentinel,
-  and restore steps MUST be repeated with the reconstructed full-object payload
-  before listing writes are enabled. A full-object payload strategy MUST remain
-  disabled until the implementation defines a per-target writable-field
-  allowlist and normalization rules; deep-copying a `GET` response into a
-  `PUT` payload is prohibited. The existing `update_reservation` partial
+  `listing_partial_put_verified` to true. The no-op, sentinel, and restore
+  steps MUST exercise whichever listing payload strategy will be enabled; if
+  a full-object listing strategy is selected for any reason, those steps MUST
+  run with the reconstructed full-object payload before listing writes are
+  enabled. A full-object payload strategy MUST remain disabled until the
+  implementation defines a per-target writable-field allowlist and
+  normalization rules; deep-copying a `GET` response into a `PUT` payload is
+  prohibited. The existing `update_reservation` partial
   payload
   (`{"doorCode": ...}`) is supporting evidence for reservation top-level merge
   semantics, but it is not verification for the listing endpoint. If listing
@@ -649,7 +650,10 @@ field they operate on and cross-reference each other.
   intended value.
 - **FR-051**: Listing verification MUST follow the gated ladder in order.
   Step 0 asks Hostaway support for authoritative `PUT /v1/listings/{id}`
-  semantics. Step 1 captures a complete pre-write snapshot of the target
+  semantics and remains incomplete until an authoritative answer is documented
+  in the redacted evidence log; an unanswered or non-authoritative support
+  request is not evidence. Step 1 captures a complete pre-write snapshot of
+  the target
   object outside git and verifies that the write payload needed to reconstruct
   the target is reconstructable from that snapshot using allowlisted writable
   fields and normalization rules. A raw `deepcopy` of a `GET` response is not a
@@ -675,10 +679,10 @@ field they operate on and cross-reference each other.
   the target matches the pre-write snapshot exactly. Restore-on-failure MUST be
   attempted automatically using the allowlisted restore payload. If no
   allowlisted restore path exists for the target, the ladder MUST stop at
-  Step 3 and listing writes MUST remain disabled. If partial listing
-  verification fails and a full-object strategy is selected, Step 4 and Step 5
-  MUST be repeated with the reconstructed full-object payload before listing
-  writes are enabled.
+  Step 3 and listing writes MUST remain disabled. Step 4 and Step 5 MUST use
+  the selected listing payload strategy. If a full-object strategy is selected
+  for any reason, Step 4 and Step 5 MUST run with the reconstructed
+  full-object payload before listing writes are enabled.
 - **FR-054**: Verification evidence for each completed ladder step MUST be
   recorded in `specs/007-custom-field-support/live-verification.md` with
   redacted values before any write-safety gate is enabled. Steps 0 through 3

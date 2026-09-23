@@ -91,7 +91,8 @@ only the local merge/payload builder.
 Authorized now:
 
 - Step 0: Ask Hostaway support for authoritative
-  `PUT /v1/listings/{id}` semantics.
+  `PUT /v1/listings/{id}` semantics and keep the step incomplete until an
+  authoritative response is recorded.
 - Step 1: Read the listing with `includeResources=1`, record a complete
   private before snapshot outside git, and verify an allowlisted restore
   payload is reconstructable from that snapshot without deep-copying the GET
@@ -219,9 +220,10 @@ may use a partial payload only when recorded evidence supports that strategy;
 a full-object listing payload must be reconstructable from the pre-write
 snapshot before any live mutation uses it. A verified full-object strategy
 must not be represented by a flag that claims partial `PUT` was verified.
-If partial listing verification fails and a full-object listing strategy is
-selected, repeat the no-op, sentinel, and restore steps with the reconstructed
-full-object payload before enabling listing writes.
+The no-op, sentinel, and restore steps must run with the selected listing
+payload shape. If a full-object listing strategy is selected for any reason,
+repeat those steps with the reconstructed full-object payload before enabling
+listing writes.
 Full-object payloads require a per-target writable-field allowlist and
 normalization rules. Do not deep-copy an `includeResources=1` response into a
 `PUT` payload.

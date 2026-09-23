@@ -148,7 +148,8 @@ variable.
 **Listing verification**:
 
 - Step 0: Ask Hostaway support for authoritative `PUT /v1/listings/{id}`
-  semantics.
+  semantics and keep the step incomplete until an authoritative response is
+  recorded.
 - Step 1: Read the listing with `includeResources=1`, store a complete private
   rollback snapshot outside git, and prove the restore payload is
   reconstructable before mutation. Only redacted summaries may be logged or
@@ -183,10 +184,10 @@ independently gated by reservation `customFieldValues` evidence or an
 authoritative contract. Listing writes must remain disabled for this feature
 unless a separate safe endpoint or full payload strategy is specified, tested
 against live data, and shown to preserve every visible built-in field. If
-full-object listing payloads are selected after partial verification fails, the
-no-op, sentinel, and restore steps must be repeated with the reconstructed
-full-object payload before listing writes are enabled. Full-object payloads
-also require a per-target writable-field allowlist and normalization rules;
+full-object listing payloads are selected for any reason, the no-op, sentinel,
+and restore steps must be repeated with the reconstructed full-object payload
+before listing writes are enabled. Full-object payloads also require a
+per-target writable-field allowlist and normalization rules;
 deep-copying a `GET` response into a `PUT` payload is prohibited.
 Full-object writes require a Hostaway conditional/version check that detects
 concurrent external dashboard edits after the pre-write read. Without that
