@@ -69,13 +69,15 @@ direct service reads performed by `get_custom_field_values` and
 **Decision**: Add `custom_components/hostaway/api/custom_fields.py` and keep it
 free of Home Assistant imports.
 
-**Rationale**: `api/client.py` is already 371 lines, close to aislop's
-400-line cap. Adding custom-field parsing, definitions pagination, merge, and
-validation there would breach the cap and mix responsibilities. The existing
-`api/reservations.py` helper module and Guesty's custom-fields implementation
-establish the preferred pattern: keep endpoint-specific data handling in
-focused, library-extractable modules and use the main client for authenticated
-request transport.
+**Rationale**: `api/client.py` is focused on authenticated request transport;
+adding custom-field parsing, definitions pagination, merge, and validation
+would mix responsibilities that belong in a focused data-handling module.
+Constitution II requires the Hostaway API client to remain a clean abstraction
+layer, and the existing `api/reservations.py` helper module establishes the
+local pattern: keep endpoint-specific data handling in focused,
+Home-Assistant-independent modules and use the main client for authenticated
+request transport. This also mirrors Guesty's library-extractable
+custom-fields design where the APIs permit the same user-facing behavior.
 
 **Implementation notes**:
 
@@ -102,12 +104,17 @@ fields.
 
 - Read the object immediately before each write with `includeResources=1`.
 - Parse presentation values separately from raw merge values.
+- Treat only a present `customFieldValues` list as mergeable. A present empty
+  list is genuinely empty; missing, `null`, or non-list `customFieldValues`
+  must fail closed before any mutation.
 - Preserve unresolved values and raw malformed entries exactly as read.
 - If a malformed raw entry cannot be included unchanged in the outgoing
   payload, fail the write instead of silently dropping it.
 - If a malformed raw entry carries the addressed `customFieldId`, fail closed
   before the mutation. Replacing it could discard raw data, while appending a
   new entry beside it could leave Hostaway to choose between duplicates.
+- If more than one raw entry carries the addressed `customFieldId`, fail closed
+  before the mutation instead of choosing one or appending another.
 - Use per-entry, per-target `asyncio.Lock` objects to serialize Home
   Assistant writes to the same listing or reservation.
 
