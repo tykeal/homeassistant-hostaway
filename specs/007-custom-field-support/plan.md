@@ -39,11 +39,14 @@ values are not silently cleared. A malformed entry for the addressed
 `customFieldId` also aborts before any `PUT`, because replacing it could drop
 raw data and appending beside it could create an ambiguous duplicate. Listing
 and reservation write support are gated by default-off executable safety
-flags. Listing writes require live partial-PUT verification, and reservation
-writes may use documented production `doorCode` evidence for top-level merge
-semantics until reservation custom variables exist. Until the matching flag is
-enabled by a verification commit, the service rejects that target type before
-any read, merge, or `PUT`.
+flags plus an explicit payload strategy recorded per target type. Listing
+writes require recorded evidence for the selected listing payload strategy;
+`listing_partial_put_verified` remains strict proof that partial `PUT` passed
+and must not be used to represent a full-object fallback. Reservation writes
+may use documented production `doorCode` evidence for top-level merge
+semantics until reservation custom variables exist. Until the matching evidence
+and strategy are enabled by a verification commit, the service rejects that
+target type before any read, merge, or `PUT`.
 
 ## Technical Context
 
@@ -101,7 +104,8 @@ concurrency, response schemas, and no-clobber write behavior
 
 **Post-design re-check**: PASS. The design keeps Hostaway API logic
 library-extractable, preserves current entities and services, and documents
-the listing partial-PUT verification gate before listing writes can ship.
+the listing verification ladder and selected payload strategy before listing
+writes can ship.
 
 ## Project Structure
 
@@ -259,11 +263,12 @@ table-driven.
 - Keep the listing write safety gate off by default. The implementation state
   is `listing_partial_put_verified = False` in the
   `CustomFieldWriteSafetyGates` object stored at
-  `hass.data[DOMAIN][entry.entry_id]["custom_field_write_safety"]`. Listing
-  writes reject with a user-facing message that listing custom-field writes
-  are disabled until the verification ladder records passing evidence while it
-  remains false. It may be flipped on only by an implementation change that
-  records the successful FR-035 evidence.
+  `hass.data[DOMAIN][entry.entry_id]["custom_field_write_safety"]`; the same
+  state also records the selected listing payload strategy. Listing writes
+  reject with a user-facing message that listing custom-field writes are
+  disabled until the verification ladder records passing evidence for the
+  selected strategy. The partial flag may be flipped on only by an
+  implementation change that records successful partial-PUT FR-035 evidence.
 - If partial listing PUT is destructive, keep listing writes disabled or switch
   to a verified full-object payload strategy for this feature. Restore on
   failure must be attempted automatically, but the evidence must document that
@@ -279,7 +284,9 @@ table-driven.
   the owner's account today, the current clobber surface is limited to
   built-in fields covered by the door-code evidence.
 - Treat documented reservation production evidence as sufficient to enable the
-  reservation gate when recorded in `live-verification.md`.
+  reservation gate when recorded in `live-verification.md`, while recording
+  the accepted residual risk that reservation `customFieldValues` round-trip
+  behavior is still unproven until reservation custom variables exist.
 - Keep the reservation write safety gate off by default. The implementation
   state is `reservation_no_clobber_verified = False` in the same
   `CustomFieldWriteSafetyGates` object. Reservation writes reject with a
@@ -329,11 +336,13 @@ table-driven.
   `hass.data[DOMAIN][entry.entry_id]["custom_field_write_safety"]` before any
   target read or merge. The gates are seeded from default-false implementation
   constants for `listing_partial_put_verified` and
-  `reservation_no_clobber_verified`; tests must assert both target types reject
-  while their gates are off.
+  `reservation_no_clobber_verified`, plus explicit per-target payload strategy
+  state. Tests must assert both target types reject while their required safety
+  evidence or strategy state is missing.
 - Reject `target_type: listing` with a clear user-facing message that listing
   custom-field writes are disabled until the verification ladder records
-  passing evidence when `listing_partial_put_verified` is false.
+  passing evidence for the selected payload strategy. Require
+  `listing_partial_put_verified` only when that strategy is `partial`.
 - Reject `target_type: reservation` with a clear user-facing message that
   reservation custom-field writes are disabled until accepted production or
   live evidence is recorded when `reservation_no_clobber_verified` is false.

@@ -221,6 +221,9 @@ Content-Type: application/json
 - Listing writes are disabled until the FR-035 verification ladder records
   evidence for the selected payload strategy. Partial payloads remain untrusted
   for listings until the no-op, sentinel, and restore steps pass.
+- The executable safety state records payload strategy separately from partial
+  `PUT` verification. A full-object listing strategy must not set
+  `listing_partial_put_verified` to true.
 - The outgoing `customFieldValues` array is based on the current raw listing
   values read immediately before the write.
 - Unaddressed values are preserved.
@@ -230,17 +233,19 @@ Content-Type: application/json
 - Duplicate raw entries for the addressed `customFieldId` fail before `PUT`.
 - If partial PUT verification fails, this endpoint cannot use partial listing
   writes until a safe full-object strategy or another safe endpoint is proven.
-- The executable gate is
-  `custom_field_write_safety.listing_partial_put_verified`, stored per config
-  entry under `hass.data[DOMAIN][entry.entry_id]` and defaulting to false.
-  While false, `hostaway.set_custom_field` rejects listing writes with
-  `listing custom-field writes are disabled until safety evidence is recorded`
-  before reading the target or sending any mutation.
+- The executable gate is the combination of recorded listing safety evidence
+  and an explicit `listing_payload_strategy`, stored per config entry under
+  `hass.data[DOMAIN][entry.entry_id]`. When `listing_payload_strategy` is
+  `partial`, `custom_field_write_safety.listing_partial_put_verified` must also
+  be true. Without a verified strategy, `hostaway.set_custom_field` rejects
+  listing writes with `listing custom-field writes are disabled until safety
+  evidence is recorded` before reading the target or sending any mutation.
 - The API layer provides both a partial-payload builder and a full-object
   payload builder. The partial `PUT` body contains exactly one top-level key,
   `customFieldValues`; full-object payloads may be selected per target type
   only when they are reconstructable from the pre-write snapshot and recorded
-  evidence supports that safer strategy.
+  evidence supports that safer strategy. The selected strategy is explicit
+  gate state, not inferred from a partial-verification boolean.
 
 ### PUT /v1/reservations/{id}
 
@@ -293,7 +298,8 @@ Content-Type: application/json
 - The API layer provides both partial and full-object payload builders. The
   partial `PUT` body contains exactly one top-level key,
   `customFieldValues`; the selected strategy is per target type and must be
-  supported by recorded evidence.
+  supported by recorded evidence. The selected strategy is explicit gate state,
+  not inferred from a partial-verification boolean.
 
 ## Home Assistant services
 

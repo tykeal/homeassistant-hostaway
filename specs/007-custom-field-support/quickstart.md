@@ -100,12 +100,14 @@ Requires a separate explicit owner decision:
 
 - Step 4: Send a listing no-op self-write of the populated custom variable's
   current value through the production payload strategy, re-read the listing
-  with `includeResources=1`, and confirm the whole-object diff is empty.
+  with `includeResources=1`, and confirm the canonicalized whole-object diff
+  is empty.
 - Step 5: Send a distinct sentinel value, confirm exactly one field changed,
   restore the original value, and confirm the final object matches the
-  pre-write snapshot exactly. Attempt automatic restore from the complete
-  private snapshot if any unexpected mutation is detected, and document that
-  restore depends on any cleared built-in fields being writable.
+  pre-write snapshot exactly using the same complete-snapshot comparison.
+  Attempt automatic restore from the complete private snapshot if any
+  unexpected mutation is detected, and document that restore depends on any
+  cleared built-in fields being writable.
 
 Do not enable listing writes unless this verification passes. If it fails,
 the implementation must make `hostaway.set_custom_field` fail closed for
@@ -199,10 +201,11 @@ or if more than one entry carries that id, fail closed before any `PUT` so the
 write cannot drop raw data or create an ambiguous duplicate.
 
 The API layer must expose both a partial payload builder and a full-object
-payload builder, with strategy selection per target type. A target type may
-use a partial payload only when recorded evidence supports that strategy; a
-full-object payload must be reconstructable from the pre-write snapshot before
-any live mutation uses it.
+payload builder, with explicit strategy selection state per target type. A
+target type may use a partial payload only when recorded evidence supports that
+strategy; a full-object payload must be reconstructable from the pre-write
+snapshot before any live mutation uses it. A verified full-object strategy
+must not be represented by a flag that claims partial `PUT` was verified.
 
 ## User-facing behavior to verify
 

@@ -157,10 +157,11 @@ variable.
   because task and listing endpoints may use different controllers.
 - Step 4: After a separate explicit owner decision, self-write one populated
   listing custom variable's current value and re-read with
-  `includeResources=1`. Assert the whole-object diff is empty.
+  `includeResources=1`. Assert the canonicalized whole-object diff is empty.
 - Step 5: Under the same separate owner decision, write a distinct sentinel
   value, re-read, assert exactly one field changed, restore the original value,
-  and assert the object matches the pre-write snapshot exactly.
+  and assert the object matches the pre-write snapshot exactly using the same
+  canonicalized complete-snapshot comparison.
 
 This protocol does not require three populated custom variables. The no-op
 self-write uses the entire listing object as the control group; any custom

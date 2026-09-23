@@ -555,7 +555,11 @@ field they operate on and cross-reference each other.
   implement both a partial-payload
   builder and a full-object payload builder, selectable per target type, so the
   safe strategy for each endpoint can be chosen from recorded evidence rather
-  than assumed. The existing `update_reservation` partial payload
+  than assumed. The executable state MUST record the selected payload strategy
+  separately from whether partial `PUT` semantics were verified; a full-object
+  listing strategy MUST NOT be represented by setting
+  `listing_partial_put_verified` to true. The existing
+  `update_reservation` partial payload
   (`{"doorCode": ...}`) is supporting evidence for reservation top-level merge
   semantics, but it is not verification for the listing endpoint. If listing
   partial verification fails, listing write support MUST use a verified
@@ -633,9 +637,11 @@ field they operate on and cross-reference each other.
   intended value.
 - **FR-051**: Listing verification MUST follow the gated ladder in order.
   Step 0 asks Hostaway support for authoritative `PUT /v1/listings/{id}`
-  semantics. Step 1 captures a complete pre-write snapshot of the target object
-  outside git and verifies that the write payload needed to reconstruct the
-  target is reconstructable from that snapshot. Step 2 inspects the generated
+  semantics. Step 1 captures a complete pre-write snapshot of the target
+  object outside git and verifies that the write payload needed to reconstruct
+  the target is reconstructable from that snapshot. All later object
+  comparisons MUST compare canonicalized complete snapshots, not only unrelated
+  fields or addressed custom-field values. Step 2 inspects the generated
   dry-run payload and sends no mutation.
 - **FR-052**: Step 3 MUST run a disposable task canary before listing
   mutation: create a throwaway Hostaway task, send a partial
@@ -669,9 +675,14 @@ field they operate on and cross-reference each other.
   reservation endpoint merges top-level keys rather than replacing the whole
   object. The residual gap MUST be recorded honestly: this does not prove that
   reservation `customFieldValues` specifically round-trips. With zero
-  reservation custom variables in the owner's account today, the current
-  clobber surface for reservation custom-field writes is limited to built-in
-  fields, which the `doorCode` production evidence covers.
+  reservation custom variables in the owner's account today, the gate enables
+  the implementation to proceed only on the accepted residual risk that the
+  current reservation clobber surface is limited to built-in fields, which the
+  `doorCode` production evidence covers. If reservation custom variables later
+  become available, the evidence file MUST record that their
+  `customFieldValues` round-trip behavior still needs the no-op, sentinel, and
+  restore protocol before relying on preservation of existing reservation
+  custom values.
 
 ### Key Entities
 
@@ -726,11 +737,12 @@ field they operate on and cross-reference each other.
   populated custom variable's current value and confirm the whole-object diff
   is empty. It MUST then write a distinct sentinel value and confirm exactly
   one field changed, then restore the original value and confirm the object
-  matches the pre-write snapshot exactly. This verification does not require
-  any minimum number of populated custom variables: the no-op empty-diff check
-  uses the entire object, including every built-in field and every present or
-  absent custom variable, as the control group. A deviation anywhere in the
-  object is a failure.
+  matches the pre-write snapshot exactly using a canonicalized complete-snapshot
+  comparison. This verification does not require any minimum number of
+  populated custom variables: the no-op empty-diff check uses the entire
+  object, including every built-in field and every present or absent custom
+  variable, as the control group. A deviation anywhere in the object is a
+  failure.
 - **SC-004**: An automation author can write a custom variable using `varName`,
   without knowing any numeric id, when the `varName` is unique for the target
   object type; ambiguous same-object-type `varName`s require `customFieldId`.

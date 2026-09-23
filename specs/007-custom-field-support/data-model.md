@@ -195,8 +195,10 @@ Per-config-entry executable gates for live no-clobber verification.
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
-| `listing_partial_put_verified` | `bool` | `False` | FR-035 listing verification ladder passed for the selected payload strategy. |
+| `listing_partial_put_verified` | `bool` | `False` | FR-035 listing partial-PUT verification passed. |
+| `listing_payload_strategy` | `"partial"` / `"full_object"` / `None` | `None` | Verified listing payload strategy selected from recorded evidence. |
 | `reservation_no_clobber_verified` | `bool` | `False` | FR-055 reservation production evidence or later live custom-field verification passed. |
+| `reservation_payload_strategy` | `"partial"` / `"full_object"` / `None` | `None` | Verified reservation payload strategy selected from recorded evidence. |
 
 **Storage**: The gate object lives under
 `hass.data[DOMAIN][entry.entry_id]["custom_field_write_safety"]` and is seeded
@@ -210,11 +212,14 @@ live evidence.
 **Enablement rule**: A target type's flag may be changed to `True` only in an
 implementation change that records matching evidence in
 `specs/007-custom-field-support/live-verification.md`. Listing evidence must
-come from the verification ladder. Reservation evidence may be the documented
-production `doorCode` partial-`PUT` behavior accepted under FR-055, while
-noting that reservation `customFieldValues` round-tripping remains unproven.
-Until then, `hostaway.set_custom_field` rejects that target type before
-reading, merging, or sending a mutating request.
+come from the verification ladder, and `listing_partial_put_verified` remains
+strictly tied to partial-PUT evidence. If the selected listing strategy is
+`full_object`, the implementation must record that strategy separately instead
+of setting `listing_partial_put_verified` to true. Reservation evidence may be
+the documented production `doorCode` partial-`PUT` behavior accepted under
+FR-055, while noting that reservation `customFieldValues` round-tripping
+remains unproven. Until then, `hostaway.set_custom_field` rejects that target
+type before reading, merging, or sending a mutating request.
 
 ### CustomFieldWriteLockRegistry
 
