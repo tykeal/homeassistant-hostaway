@@ -268,6 +268,54 @@ async def test_verify_restores_complete_when_target_does_not_change(
     assert calls[1] == before
 
 
+async def test_verify_restores_when_mutation_response_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Live helper restores when a sent mutation raises."""
+    before = {
+        "id": 10,
+        "price": 100,
+        "customFieldValues": [{"customFieldId": 1, "value": "old"}],
+    }
+    calls: list[dict[str, Any]] = []
+    reads = [before, before]
+    snapshot = Path(".verify-test-artifacts/timeout/listing-10.json")
+
+    async def fake_request(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        """Raise for the mutation and capture the restore payload."""
+        if args[1] == "GET":
+            return reads.pop(0)
+        calls.append(kwargs["json"])
+        if len(calls) == 1:
+            raise RuntimeError("request timed out")
+        return {"id": 10}
+
+    monkeypatch.setenv("HOSTAWAY_ACCESS_TOKEN", "token")
+    monkeypatch.setattr("builtins.input", lambda _prompt: "MUTATE listing 10")
+    monkeypatch.setattr("scripts.verify_custom_field_writes._request", fake_request)
+    monkeypatch.setattr(
+        "scripts.verify_custom_field_writes.snapshot_path",
+        lambda _target_type, _target_id: snapshot,
+    )
+
+    try:
+        with pytest.raises(RuntimeError, match="request timed out"):
+            await verify(
+                Namespace(
+                    target_type="listing",
+                    target_id=10,
+                    custom_field_id=1,
+                    value="new",
+                    mutate=True,
+                )
+            )
+    finally:
+        shutil.rmtree(snapshot.parent, ignore_errors=True)
+
+    assert calls[0] == {"customFieldValues": [{"customFieldId": 1, "value": "new"}]}
+    assert calls[1] == before
+
+
 async def test_verify_uses_minimal_restore_after_checks_pass(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

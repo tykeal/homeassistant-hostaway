@@ -144,8 +144,8 @@ async def verify(args: argparse.Namespace) -> int:
         restore_payload: dict[str, Any] = complete_restore_payload
         mutation_sent = False
         try:
-            await _request(client, "PUT", path, token, json=payload)
             mutation_sent = True
+            await _request(client, "PUT", path, token, json=payload)
             after = await _request(
                 client, "GET", path, token, params={"includeResources": 1}
             )
