@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Implementation Plan: Custom Field Support
 
-**Branch**: `007-custom-field-plan` | **Date**: 2026-09-22 |
+**Branch**: `007-custom-field-support` | **Date**: 2026-09-22 |
 **Spec**: [spec.md](spec.md)
 **Input**: Feature specification from
 `specs/007-custom-field-support/spec.md`
@@ -36,10 +36,10 @@ values are not silently cleared. A malformed entry for the addressed
 `customFieldId` also aborts before any `PUT`, because replacing it could drop
 raw data and appending beside it could create an ambiguous duplicate. Listing
 and reservation write support are gated by default-off executable safety
-flags. Listing writes require the FR-035 partial-PUT verification, and
-reservation writes require the SC-003 live no-clobber verification. Until the
-matching flag is enabled by a verification commit, the service rejects that
-target type before any read, merge, or `PUT`.
+flags. Listing writes require live partial-PUT verification, and reservation
+writes require live no-clobber verification. Until the matching flag is
+enabled by a verification commit, the service rejects that target type before
+any read, merge, or `PUT`.
 
 ## Technical Context
 
@@ -65,10 +65,10 @@ defaults to 15 minutes and uses Hostaway's maximum 500-item page size; all
 requests remain under Hostaway's 200 requests / 10 seconds rate limit
 
 **Constraints**: All I/O async; no Home Assistant imports in
-`custom_components/hostaway/api/custom_fields.py`; every file stays under
-aislop's 400-line cap; writes must preserve raw malformed custom field value
-records and built-in fields; multi-account services fail closed without
-`config_entry_id`
+`custom_components/hostaway/api/custom_fields.py`; `uvx aislop ci` must keep
+the repository at the configured 100/100 score; writes must preserve raw
+malformed custom field value records and built-in fields; multi-account
+services fail closed without `config_entry_id`
 
 **Scale/Scope**: Account-level custom field definitions for `listing` and
 `reservation` object types, dynamic listing custom-field sensors, reservation
@@ -77,7 +77,7 @@ concurrency, response schemas, and no-clobber write behavior
 
 ## Constitution Check
 
-*GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
+*GATE: Must pass before research. Re-check after design.*
 
 | Principle | Status | Notes |
 |-----------|--------|-------|
@@ -94,7 +94,7 @@ concurrency, response schemas, and no-clobber write behavior
 
 **Gate Result**: PASS. No constitution violations.
 
-**Post-Phase 1 re-check**: PASS. The design keeps Hostaway API logic
+**Post-design re-check**: PASS. The design keeps Hostaway API logic
 library-extractable, preserves current entities and services, and documents
 the listing partial-PUT verification gate before listing writes can ship.
 
@@ -113,7 +113,7 @@ specs/007-custom-field-support/
 │   └── hostaway-custom-fields-api.md
 ├── checklists/
 │   └── requirements.md
-└── tasks.md                     # Phase 2 output from /speckit.tasks
+└── tasks.md                     # Output from /speckit.tasks
 ```
 
 ### Source Code (repository root)
@@ -122,14 +122,14 @@ specs/007-custom-field-support/
 custom_components/hostaway/
 ├── __init__.py                    # Add definitions coordinator setup/shutdown
 ├── config_flow.py                 # Add definitions scan interval option
-├── config_options.py              # New options-flow helpers if needed for cap
+├── config_options.py              # Optional options-flow helper module
 ├── const.py                       # Add custom-field option/service constants
 ├── strings.json                   # Add options/service translations
 ├── translations/
 │   └── en.json                    # Add options/service translations
 ├── coordinator.py                 # Add HostawayCustomFieldsCoordinator
 ├── api/
-│   ├── client.py                  # Add thin delegates only if line budget allows
+│   ├── client.py                  # Add thin transport delegates only if needed
 │   ├── custom_fields.py           # New HA-independent custom field module
 │   ├── models.py                  # Add custom field DTOs and raw value storage
 │   └── reservations.py            # Add includeResources=1 to reservation reads
@@ -158,8 +158,8 @@ tests/
 ```
 
 **Structure Decision**: Use a new `api/custom_fields.py` module instead of
-adding methods to `api/client.py`, which is already 371 lines and would exceed
-the 400-line aislop cap. The module receives a `HostawayApiClient` or narrow
+adding custom-field parsing, definitions pagination, merge, and validation
+logic to `api/client.py`. The module receives a `HostawayApiClient` or narrow
 request protocol by dependency injection and contains no Home Assistant
 imports, matching the existing `api/reservations.py` separation and Guesty's
 library-extractable R-005 decision. Home Assistant service handlers live in a
@@ -168,43 +168,16 @@ table-driven.
 
 ## Phase Overview
 
-### Phase 0: API safety verification and research lock-in
+### Phase 1: Setup and guardrails
 
-- Write a real-account verification task that reads a listing with at least
-  three populated custom fields and representative built-in fields, sends a
-  partial `PUT /v1/listings/{id}` containing only a harmless custom-field merge
-  candidate, then re-reads the listing with `includeResources=1`.
-- Treat this task as blocking for listing writes. It must prove omitted
-  built-in fields and unrelated custom values remain unchanged before any
-  listing write path can be enabled.
-- Keep the listing write safety gate off by default. The implementation state
-  is `listing_partial_put_verified = False` in the
-  `CustomFieldWriteSafetyGates` object stored at
-  `hass.data[DOMAIN][entry.entry_id]["custom_field_write_safety"]`. Listing
-  writes reject with `listing custom-field writes are disabled until FR-035
-  partial-PUT verification passes` while it remains false. It may be flipped
-  on only by an implementation change that records the successful live FR-035
-  verification.
-- If partial listing PUT is destructive, keep listing writes disabled for this
-  feature and return a fail-closed actionable error. Do not attempt a full
-  listing rollback/write payload in this feature unless a separate verified
-  endpoint or complete-payload strategy is specified and proven safe.
-- Write a real-account verification task for reservation writes that reads a
-  reservation with at least three populated reservation custom fields and at
-  least one built-in field such as `doorCode`, sends a merged
-  `customFieldValues` update for one harmless custom field, then re-reads the
-  reservation with `includeResources=1`.
-- Treat this task as blocking for reservation writes. It must prove the target
-  custom field changed while every unrelated reservation custom field and each
-  visible built-in reservation field remain unchanged.
-- Keep the reservation write safety gate off by default. The implementation
-  state is `reservation_no_clobber_verified = False` in the same
-  `CustomFieldWriteSafetyGates` object. Reservation writes reject with
-  `reservation custom-field writes are disabled until SC-003 no-clobber
-  verification passes` while it remains false. It may be flipped on only by an
-  implementation change that records the successful live SC-003 verification.
+- Create the API, service, sensor, and test extension points with SPDX
+  headers and zero Home Assistant imports in `api/custom_fields.py`.
+- Add executable write-gate objects that default to disabled for both target
+  types.
+- Verify the repository still passes the configured `uvx aislop ci` score
+  gate; no file-level line-count rule is configured.
 
-### Phase 1: API models, parsing, and includeResources reads
+### Phase 2: API models, parsing, and includeResources reads
 
 - Add `HostawayCustomFieldDefinition`, parsed value records, unresolved value
   records, raw malformed value preservation, and response-shaping helpers.
@@ -226,7 +199,7 @@ table-driven.
 - Mirror `parse_reservations` by skipping malformed presentation records with
   warnings while preserving their raw entries for write merges.
 
-### Phase 2: Definitions coordinator and options flow
+### Phase 3: Definitions coordinator and options flow
 
 - Add `custom_field_definitions_scan_interval`, default 15 minutes, minimum
   one minute, as a required integer minutes option in the existing options
@@ -260,7 +233,47 @@ table-driven.
 - Add user-facing labels and descriptions for the new options-flow field in
   `strings.json` and `translations/en.json`.
 
-### Phase 3: Entity surfaces and deterministic key allocation
+### Phase 4: Blocking live verification gates
+
+- Write a real-account verification task that reads a listing with at least
+  three populated custom fields and representative built-in fields, sends a
+  partial `PUT /v1/listings/{id}` containing only a harmless custom-field merge
+  candidate produced by the production no-clobber payload builder, then
+  re-reads the listing with `includeResources=1`.
+- Treat this task as blocking for listing writes. It must prove omitted
+  built-in fields and unrelated custom values remain unchanged before any
+  listing write path can be enabled.
+- Keep the listing write safety gate off by default. The implementation state
+  is `listing_partial_put_verified = False` in the
+  `CustomFieldWriteSafetyGates` object stored at
+  `hass.data[DOMAIN][entry.entry_id]["custom_field_write_safety"]`. Listing
+  writes reject with a user-facing message that listing custom-field writes
+  are disabled until live safety verification passes while it remains false.
+  It may be flipped on only by an implementation change that records the
+  successful live FR-035
+  verification.
+- If partial listing PUT is destructive, keep listing writes disabled for this
+  feature and return a fail-closed actionable error. Do not attempt a full
+  listing rollback/write payload in this feature unless a separate verified
+  endpoint or complete-payload strategy is specified and proven safe.
+- Write a real-account verification task for reservation writes that reads a
+  reservation with at least three populated reservation custom fields and at
+  least one built-in field such as `doorCode`, sends a merged
+  `customFieldValues` update for one harmless custom field produced by the
+  production no-clobber payload builder, then re-reads the reservation with
+  `includeResources=1`.
+- Treat this task as blocking for reservation writes. It must prove the target
+  custom field changed while every unrelated reservation custom field and each
+  visible built-in reservation field remain unchanged.
+- Keep the reservation write safety gate off by default. The implementation
+  state is `reservation_no_clobber_verified = False` in the same
+  `CustomFieldWriteSafetyGates` object. Reservation writes reject with a
+  user-facing message that reservation custom-field writes are disabled until
+  live safety verification passes while it remains false. It may be flipped on
+  only by an implementation change that records the successful live SC-003
+  verification.
+
+### Phase 5: Entity surfaces and deterministic key allocation
 
 - Add a restart-stable listing custom-field key allocator seeded from the Home
   Assistant entity registry and the current listing definitions.
@@ -271,7 +284,7 @@ table-driven.
 - Add runtime discovery for new listing custom field values observed by the
   listings coordinator.
 
-### Phase 4: Read services
+### Phase 6: Read services
 
 - Register `hostaway.get_custom_fields` with `SupportsResponse.ONLY`.
 - Register `hostaway.get_custom_field_values` with `SupportsResponse.ONLY`.
@@ -280,7 +293,21 @@ table-driven.
 - Shape responses exactly as specified, including defined fields with
   `value: null` and unresolved values without definition metadata.
 
-### Phase 5: Write service and no-clobber merge
+### Phase 7: Addressing and validation
+
+- Validate exactly one of `customFieldId` or `varName`; boolean
+  `customFieldId` and boolean `target_id` inputs are invalid identifiers, not
+  integers. Require definitions for all writes; fail ambiguous
+  same-object-type `varName` resolutions. Also require
+  `definitions_coordinator.last_refresh_succeeded` to be true. A stale cache
+  retained after a failed refresh is available for reads only and must not be
+  used for write resolution.
+- Add shared definition lookup helpers scoped by object type.
+- Validate known field types before writes: strings for text-like fields,
+  non-boolean numbers for number fields, and declared values for dropdowns.
+  Pass unknown future field types through to Hostaway for server validation.
+
+### Phase 8: Write service and no-clobber merge
 
 - Register `hostaway.set_custom_field` with `SupportsResponse.OPTIONAL`.
 - Load `CustomFieldWriteSafetyGates` from
@@ -289,19 +316,12 @@ table-driven.
   constants for `listing_partial_put_verified` and
   `reservation_no_clobber_verified`; tests must assert both target types reject
   while their gates are off.
-- Reject `target_type: listing` with `listing custom-field writes are disabled
-  until FR-035 partial-PUT verification passes` when
+- Reject `target_type: listing` with a clear user-facing message that listing
+  custom-field writes are disabled until live safety verification passes when
   `listing_partial_put_verified` is false.
-- Reject `target_type: reservation` with `reservation custom-field writes are
-  disabled until SC-003 no-clobber verification passes` when
-  `reservation_no_clobber_verified` is false.
-- Validate exactly one of `customFieldId` or `varName`; boolean
-  `customFieldId` and boolean `target_id` inputs are invalid identifiers, not
-  integers. Require definitions for all writes; fail ambiguous same-object-type
-  `varName` resolutions. Also require
-  `definitions_coordinator.last_refresh_succeeded` to be true. A stale cache
-  retained after a failed refresh is available for reads only and must not be
-  used for write resolution.
+- Reject `target_type: reservation` with a clear user-facing message that
+  reservation custom-field writes are disabled until live safety verification
+  passes when `reservation_no_clobber_verified` is false.
 - Serialize concurrent Home Assistant writes through per-entry, per-target
   `asyncio.Lock` instances.
 - Add a shared per-target write generation registry. Coordinators capture the
@@ -311,7 +331,10 @@ table-driven.
   previous post-write target until a later fresh refresh.
 - Read the current object with `includeResources=1`, merge only the addressed
   value into the raw `customFieldValues`, preserve unresolved and raw malformed
-  entries, and submit the safe payload.
+  entries, and submit the safe payload. Automated tests must assert the
+  outgoing `PUT` body contains exactly one top-level key,
+  `customFieldValues`, so built-in keys such as `name`, `price`, or `doorCode`
+  cannot be sent accidentally.
 - Treat a present empty `customFieldValues: []` list as genuinely empty, but
   fail closed when the current object omits `customFieldValues`, returns it as
   `null`, or returns any non-list value. The parsed
@@ -332,14 +355,21 @@ table-driven.
 - Refresh or patch affected local coordinator data after success so entities
   reflect the new value before the next scheduled poll.
 
-### Phase 6: Documentation and validation
+### Phase 9: Documentation and UX clarity
 
 - Update `services.yaml` for all three custom-field services, their selectors,
   response schemas, hidden-field behavior, task-field exclusion, and the
   built-in `doorCode` distinction.
 - Update `set_door_code` documentation to state that it writes built-in
   reservation fields, not custom variables.
+
+### Phase 10: Polish, validation, and release notes
+
 - Run targeted tests, then the required full test and ruff commands.
+- Run `uvx aislop ci` and keep the configured 100/100 score with zero errors
+  and zero warnings.
+- Add changelog and task-checkbox commits separately during the implementation
+  PR.
 
 ## Entity Key Allocation Algorithm
 
@@ -384,29 +414,31 @@ from persisted entity-registry keys, reserves them, and computes response keys
 for defined but unset `value: null` entries without creating sensors or
 persisting new mappings.
 
-## Line Budget
+## Implementation Sizing Notes
 
 Current relevant file sizes:
 
 | File | Lines | Plan |
 |------|------:|------|
-| `api/client.py` | 371 | Avoid adding custom-field logic here. |
+| `api/client.py` | 371 | Keep custom-field business logic out. |
 | `api/reservations.py` | 142 | Small includeResources change only. |
-| `coordinator.py` | 183 | Add coordinator or split if near 400. |
+| `api/models.py` | 421 | Extend models surgically; no split required. |
+| `coordinator.py` | 183 | Add coordinator here if it remains cohesive. |
 | `services/__init__.py` | 154 | Table entries only. |
 | `services/helpers.py` | 216 | Reuse entry resolver; avoid bloat. |
-| `services/schemas.py` | 237 | Add schemas; split if near 400. |
+| `services/schemas.py` | 237 | Add schemas here if it remains cohesive. |
 | `sensor/__init__.py` | 96 | Add wiring carefully or extract helpers. |
 | `sensor/listing.py` | 140 | Keep existing diagnostics unchanged. |
 | `sensor/reservation.py` | 180 | Minimal wiring; helpers own shaping. |
 | `sensor/helpers.py` | 189 | Add only small attribute hook. |
-| `config_flow.py` | 424 | Split before adding the new option. |
-| `config_options.py` | new | Move options-flow helpers here if needed. |
+| `config_flow.py` | 424 | Add options carefully or extract for clarity. |
+| `config_options.py` | new | Optional helper module if extraction helps. |
 
-Because `config_flow.py` already exceeds aislop's cap, implementation tasks
-must first split options-flow helpers into a new module and reduce
-`config_flow.py` below the cap before adding
-`custom_field_definitions_scan_interval`. Do not add more lines to
+These counts are sizing context only. The repository's actual
+`.aislop/config.yml` enforces `ci.failBelow: 100`; it does not define a
+file-level line-count limit. Keep modules cohesive, use the new custom-field
+modules for separation of concerns, and run `uvx aislop ci` to preserve the
+configured score gate. Do not add custom-field business logic to
 `api/client.py`.
 
 Allocator tests must cover duplicate `varName` values, slug collisions,

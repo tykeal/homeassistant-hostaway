@@ -233,8 +233,10 @@ Content-Type: application/json
   `custom_field_write_safety.listing_partial_put_verified`, stored per config
   entry under `hass.data[DOMAIN][entry.entry_id]` and defaulting to false.
   While false, `hostaway.set_custom_field` rejects listing writes with
-  `listing custom-field writes are disabled until FR-035 partial-PUT
-  verification passes` before reading the target or sending any mutation.
+  `listing custom-field writes are disabled until live safety verification
+  passes` before reading the target or sending any mutation.
+- The outgoing `PUT` body contains exactly one top-level key:
+  `customFieldValues`.
 
 ### PUT /v1/reservations/{id}
 
@@ -275,8 +277,10 @@ Content-Type: application/json
   `custom_field_write_safety.reservation_no_clobber_verified`, stored per
   config entry under `hass.data[DOMAIN][entry.entry_id]` and defaulting to
   false. While false, `hostaway.set_custom_field` rejects reservation writes
-  with `reservation custom-field writes are disabled until SC-003 no-clobber
+  with `reservation custom-field writes are disabled until live safety
   verification passes` before reading the target or sending any mutation.
+- The outgoing `PUT` body contains exactly one top-level key:
+  `customFieldValues`.
 
 ## Home Assistant services
 
@@ -422,8 +426,8 @@ Exactly one of `customFieldId` or `varName` is required.
   duplicate.
 - Duplicate raw entries carry the addressed `customFieldId`.
 - Hostaway rejects the update.
-- Listing write attempted before FR-035 verification passes.
-- Reservation write attempted before SC-003 verification passes.
+- Listing write attempted before live safety verification passes.
+- Reservation write attempted before live safety verification passes.
 
 ## Rate limits
 

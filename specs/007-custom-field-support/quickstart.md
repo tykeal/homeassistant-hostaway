@@ -25,15 +25,19 @@ SPDX-License-Identifier: Apache-2.0
 
 ## Development order
 
-1. API models and parsers.
-2. `includeResources=1` listing and reservation reads.
+1. Setup and guardrails.
+2. API models, parsers, direct reads, and `includeResources=1` listing and
+   reservation reads.
 3. Definitions coordinator and options flow.
-4. Listing custom-field key allocator and sensors.
-5. Reservation `custom_fields` attributes.
+4. FR-035 listing partial-PUT and SC-003 reservation no-clobber verification,
+   using the production no-clobber payload builder.
+5. Listing custom-field key allocator, listing sensors, and reservation
+   `custom_fields` attributes.
 6. Read services.
-7. FR-035 listing partial-PUT and SC-003 reservation no-clobber verification.
-8. Write service and no-clobber merge.
-9. Documentation and final validation.
+7. Field addressing and value validation.
+8. Write service dispatch, local patching, and no-clobber integration.
+9. Documentation and UX clarity.
+10. Polish and final validation.
 
 The FR-035 and SC-003 verification steps are intentionally before write
 support. Listing and reservation writes each have a default-off executable
@@ -58,15 +62,10 @@ uv run pytest tests/ -x -q
 uv run ruff check custom_components/ tests/
 ```
 
-Check line budgets before final review:
+Run the configured quality gate before final review:
 
 ```bash
-wc -l \
-  custom_components/hostaway/api/*.py \
-  custom_components/hostaway/coordinator.py \
-  custom_components/hostaway/services/*.py \
-  custom_components/hostaway/sensor/*.py \
-  custom_components/hostaway/config_flow.py
+uvx aislop ci
 ```
 
 ## Manual FR-035 verification
@@ -84,7 +83,8 @@ committed.
 2. Record a complete private before snapshot of built-in fields and all
    `customFieldValues`, plus a redacted summary for review notes.
 3. Send a partial `PUT /v1/listings/{id}` payload that changes one harmless
-   custom field through the planned merged `customFieldValues` shape.
+   custom field through the production no-clobber payload builder used by
+   `hostaway.set_custom_field`.
 4. Re-read the listing with `includeResources=1`.
 5. Confirm:
    - the target custom field changed;
@@ -111,7 +111,8 @@ logged or committed.
 2. Record a complete private before snapshot of built-in fields and all
    `customFieldValues`, plus a redacted summary for review notes.
 3. Send a merged `PUT /v1/reservations/{id}` payload that changes one harmless
-   custom field.
+   custom field through the production no-clobber payload builder used by
+   `hostaway.set_custom_field`.
 4. Re-read the reservation with `includeResources=1`.
 5. Confirm:
    - the target custom field changed;
@@ -188,6 +189,8 @@ definition metadata.
 Never build a write payload from only parsed presentation values. Use the raw
 `customFieldValues` entries read immediately before the write, replace or add
 only the addressed valid entry, and pass through malformed entries unchanged.
+A present empty `customFieldValues: []` list is genuinely empty, but missing,
+`null`, or non-list `customFieldValues` must fail closed before any `PUT`.
 Before replacing or adding the addressed entry, scan raw entries with a
 bool-safe `customFieldId` check. If a malformed entry carries the addressed id,
 or if more than one entry carries that id, fail closed before any `PUT` so the

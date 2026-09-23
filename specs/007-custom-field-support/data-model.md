@@ -201,6 +201,11 @@ Per-config-entry executable gates for live no-clobber verification.
 **Storage**: The gate object lives under
 `hass.data[DOMAIN][entry.entry_id]["custom_field_write_safety"]` and is seeded
 from implementation constants that default to `False` for each target type.
+The per-entry object is deliberate runtime structure: it lets service code use
+the same entry-scoped state pattern as coordinators, locks, and generations,
+while the account-independent safety defaults remain source-controlled
+constants that can only be enabled by an implementation change with recorded
+live evidence.
 
 **Enablement rule**: A target type's flag may be changed to `True` only in an
 implementation change that records the matching live verification result. Until
