@@ -7,6 +7,8 @@
 from __future__ import annotations
 
 import logging
+from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import AsyncMock
 
 import pytest
@@ -292,6 +294,46 @@ class TestBuildReservationAttributes:
         assert attrs["guest_name"] is None
         assert attrs["listing_id"] == 100
         assert attrs["upcoming_reservations"] == []
+
+    async def test_sensor_listens_for_definition_refresh(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Reservation sensor subscribes to definition metadata refreshes."""
+        entry = _make_entry(selected=[100])
+        entry.add_to_hass(hass)
+        api = AsyncMock()
+        api.get_all_reservations = AsyncMock(return_value=[])
+        listings_api = AsyncMock()
+        listings_api.get_all_listings = AsyncMock(return_value=[_make_listing(100)])
+        l_coord = HostawayListingsCoordinator(hass, entry, listings_api)
+        r_coord = HostawayReservationsCoordinator(hass, entry, api)
+        listeners: list[object] = []
+
+        def _async_add_listener(listener: object) -> object:
+            """Capture a definitions coordinator listener."""
+            listeners.append(listener)
+            return lambda: None
+
+        definitions_coord = SimpleNamespace(
+            data=[],
+            async_add_listener=_async_add_listener,
+        )
+        sensor = HostawayReservationStatusSensor(
+            r_coord,
+            l_coord,
+            100,
+            entry,
+            cast(Any, definitions_coord),
+        )
+        sensor.hass = hass
+
+        await sensor.async_added_to_hass()
+
+        assert listeners == [sensor.async_write_ha_state]
+        await l_coord.async_shutdown()
+        await r_coord.async_shutdown()
+        assert listeners == [sensor.async_write_ha_state]
 
     def test_attributes_include_all_fr_r04_fields(self) -> None:
         """Attributes include all FR-R04 required fields."""

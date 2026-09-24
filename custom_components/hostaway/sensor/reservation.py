@@ -93,6 +93,16 @@ class HostawayReservationStatusSensor(
         self._attr_unique_id = f"{entry.unique_id}_{listing_id}_reservation_status"
         self._attr_translation_key = "reservation_status"
 
+    async def async_added_to_hass(self) -> None:
+        """Subscribe to custom-field definition refreshes for attributes."""
+        await super().async_added_to_hass()
+        if self._custom_fields_coordinator is not None:
+            self.async_on_remove(
+                self._custom_fields_coordinator.async_add_listener(
+                    self.async_write_ha_state,
+                )
+            )
+
     @property
     def _filter_cancelled(self) -> bool:
         """Read filter_cancelled from current entry options.

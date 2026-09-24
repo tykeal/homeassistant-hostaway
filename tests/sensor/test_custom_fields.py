@@ -162,3 +162,43 @@ async def test_listing_custom_field_sensor_resolved_and_unresolved(
         "value": None,
         "resolved": False,
     }
+
+
+async def test_listing_custom_field_sensor_listens_for_definition_refresh(
+    hass: HomeAssistant,
+) -> None:
+    """Custom-field sensors subscribe to definitions metadata refreshes."""
+    entry = _make_entry(selected=[100])
+    entry.add_to_hass(hass)
+    api_client = AsyncMock()
+    api_client.get_all_listings = AsyncMock(
+        return_value=[_listing([{"customFieldId": 9, "value": "A1"}])]
+    )
+    coordinator = HostawayListingsCoordinator(hass, entry, api_client)
+    await coordinator.async_refresh()
+    listeners: list[object] = []
+
+    def _async_add_listener(listener: object) -> object:
+        """Capture a definitions coordinator listener."""
+        listeners.append(listener)
+        return lambda: None
+
+    definitions_coordinator = SimpleNamespace(
+        data=[],
+        get_definition=lambda custom_field_id, object_type: None,
+        async_add_listener=_async_add_listener,
+    )
+    sensor = HostawayListingCustomFieldSensor(
+        coordinator,
+        cast(Any, definitions_coordinator),
+        100,
+        entry,
+        9,
+        "custom_field_9",
+    )
+    sensor.hass = hass
+
+    await sensor.async_added_to_hass()
+
+    assert listeners == [sensor.async_write_ha_state]
+    await coordinator.async_shutdown()

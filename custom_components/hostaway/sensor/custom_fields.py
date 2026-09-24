@@ -207,7 +207,6 @@ class HostawayListingCustomFieldSensor(HostawayEntity, SensorEntity):
             f"{entry.unique_id}_{listing_id}_custom_field_"
             f"{custom_field_id}_{allocated_key}"
         )
-        self._attr_translation_key = "listing_custom_field"
         self._attr_name = allocated_key.replace("_", " ").title()
         self._suggested_object_id: str | None = None
         listing = coordinator.data.get(listing_id) if coordinator.data else None
@@ -224,6 +223,16 @@ class HostawayListingCustomFieldSensor(HostawayEntity, SensorEntity):
     def allocated_key(self) -> str:
         """Return the stable per-listing custom-field key."""
         return self._allocated_key
+
+    async def async_added_to_hass(self) -> None:
+        """Subscribe to definition refreshes for metadata-only updates."""
+        await super().async_added_to_hass()
+        if self._definitions_coordinator is not None:
+            self.async_on_remove(
+                self._definitions_coordinator.async_add_listener(
+                    self.async_write_ha_state,
+                )
+            )
 
     @property
     def suggested_object_id(self) -> str | None:
