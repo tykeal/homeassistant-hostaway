@@ -16,8 +16,8 @@ Write failing tests first, confirm they fail for the intended reason, then
 implement the minimum code and refactor with tests green.
 
 **Organization**: Tasks are grouped by phase and user story so each increment
-has a testable checkpoint. The write path has two blocking live verification
-gates that must remain default-off until the matching verification task passes.
+has a testable checkpoint. The write path has two blocking safety evidence
+gates that must remain default-off until the matching evidence task passes.
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -134,24 +134,29 @@ the state required to fail closed.
 
 ## Phase 4: Blocking Live Verification Gates
 
-**Purpose**: Schedule and execute the two live no-clobber verifications before
-either write target type can be enabled.
+**Purpose**: Schedule and execute the listing verification ladder and
+reservation evidence recording before either write target type can be enabled.
 
-**Phase Exit Rule**: The implementation records explicit evidence for each
-passed live verification, or keeps that target type's write gate disabled with
-an actionable rejection path. These tasks must happen before Phase 8 enables
-any `hostaway.set_custom_field` mutation for the corresponding target type.
+**Phase Exit Rule**: The implementation records explicit target-specific
+evidence for each enabled write gate, or keeps that target type's write gate
+disabled with an actionable rejection path. These tasks must happen before
+Phase 8 enables any `hostaway.set_custom_field` mutation for the corresponding
+target type.
 
-**⚠️ BLOCKING**: Listing writes depend on T038. Reservation writes depend on
-T039. Do not flip either gate and do not send a write for that target type
-until its verification task has passed.
+**⚠️ BLOCKING**: Listing writes depend on the full T038 ladder. Reservation
+writes depend on reservation `customFieldValues` no-op/sentinel/restore
+evidence or an authoritative Hostaway contract. Do not flip either gate and do
+not send a write for that target type until its required evidence is recorded.
 
-- [x] T034 [P] [Safety] Write failing handler tests in `tests/services/test_custom_fields.py` proving `async_handle_set_custom_field` rejects `target_type: listing` before target reads, merges, or `PUT` while `listing_partial_put_verified` is false; call the handler directly because the service schema and registration arrive in Phases 6 and 8
+- [x] T034 [P] [Safety] Write failing handler tests in `tests/services/test_custom_fields.py` proving `async_handle_set_custom_field` rejects `target_type: listing` before target reads, merges, or `PUT` while `listing_partial_put_verified` is false; call the handler directly because the service schema and registration arrive in Phases 6 and 8. T096 extends this baseline gate coverage for explicit payload-strategy state before T093 changes dispatch semantics.
 - [x] T035 [P] [Safety] Write failing handler tests in `tests/services/test_custom_fields.py` proving `async_handle_set_custom_field` rejects `target_type: reservation` before target reads, merges, or `PUT` while `reservation_no_clobber_verified` is false; call the handler directly because the service schema and registration arrive in Phases 6 and 8
-- [x] T036 [Safety] Implement target-type gate checks in `custom_components/hostaway/services/custom_fields.py` with user-facing rejection messages that say custom-field writes are disabled until live safety verification passes, before any read, merge, or mutation call
-- [x] T037 [Safety] Write mocked tests for live-verification safety utilities in `tests/api/test_custom_fields.py` and `tests/scripts/test_verify_custom_field_writes.py`, covering the production merge/payload builder, outgoing `PUT` top-level keys exactly equal to `{"customFieldValues"}`, no committed credentials, redaction, private snapshot storage outside git, restore-on-failure, and no-mutation-on-preflight-error paths; implement the production payload builder in `custom_components/hostaway/api/custom_fields.py`, then add executable helper `scripts/verify_custom_field_writes.py` with SPDX header as a thin wrapper that imports that builder instead of hand-rolling payloads; it must use disposable/test objects, read with `includeResources=1`, capture complete private restorable snapshots outside git, log only redacted summaries, mutate one harmless custom field, re-read, compare all unrelated custom values and visible built-in fields, and restore values per quickstart.md
-- [ ] T038 [Safety] Run the FR-035 listing partial-`PUT /v1/listings/{id}` live verification after CI is green, using `scripts/verify_custom_field_writes.py` so the mutation payload is produced by the production no-clobber payload builder, against a real listing with at least three populated custom fields and representative built-in fields; if it passes, add redacted evidence to `specs/007-custom-field-support/live-verification.md` with the required SPDX block header and only then enable `listing_partial_put_verified`; if it fails, keep listing writes disabled and document the fail-closed behavior in the same evidence file
-- [ ] T039 [Safety] Run the SC-003 reservation no-clobber live verification after CI is green, using `scripts/verify_custom_field_writes.py` so the mutation payload is produced by the production no-clobber payload builder, against a real reservation with at least three populated custom fields and at least one built-in field such as `doorCode`; if it passes, add redacted evidence to `specs/007-custom-field-support/live-verification.md` with the required SPDX block header and only then enable `reservation_no_clobber_verified`; if it fails, keep reservation writes disabled and document the fail-closed behavior in the same evidence file
+- [x] T036 [Safety] Implement target-type gate checks in `custom_components/hostaway/services/custom_fields.py` with user-facing rejection messages that say custom-field writes are disabled until target-specific safety evidence is recorded, before any read, merge, or mutation call
+- [x] T037 [Safety] Write mocked tests for live-verification safety utilities in `tests/api/test_custom_fields.py` and `tests/scripts/test_verify_custom_field_writes.py`, covering the production merge/partial-payload builder, outgoing partial `PUT` top-level keys exactly equal to `{"customFieldValues"}`, no committed credentials, redaction, private snapshot storage outside git, restore-on-failure, and no-mutation-on-preflight-error paths; implement the production partial-payload builder in `custom_components/hostaway/api/custom_fields.py`, then add executable helper `scripts/verify_custom_field_writes.py` with SPDX header as a thin wrapper that imports that builder instead of hand-rolling payloads; it must use disposable/test objects, read with `includeResources=1`, capture complete private restorable snapshots outside git, log only redacted summaries, mutate one harmless custom field, re-read, compare all unrelated custom values and visible built-in fields, and restore values per quickstart.md. T096 upgrades this verification to canonicalized complete-snapshot comparison before the new protocol can be used for enablement.
+- [ ] T096 [API] Write failing mocked tests for the full-object payload builder, per-target writable-field allowlists and normalization rules, rejection of unsafe GET-response deep copies, per-target strategy selection, explicit payload-strategy gate state, conditional/version-check rejection when concurrent external edits cannot be detected, `--snapshot` mode, allowlisted restore-payload reconstruction, canonicalized complete-snapshot comparison with server-managed volatile-field normalization, account-bound reservation evidence state, reservation fail-closed behavior until `customFieldValues` no-op/sentinel/restore or authoritative contract evidence exists, task-canary mutate/restore/verify mode using the production restore-path code with mocked Hostaway responses, and multi-entry custom-value preservation beyond the single live variable case in `tests/api/test_custom_fields.py` and `tests/scripts/test_verify_custom_field_writes.py` before implementing T093 through T095. Live task-canary execution remains a separate T038 evidence step and MUST NOT be part of the pytest suite
+- [ ] T094 [Safety] Add `--snapshot` mode to `scripts/verify_custom_field_writes.py` so the verifier captures a complete target snapshot outside git, validates that an allowlisted restore payload is reconstructable before any mutation, refuses to use raw GET-response deep copies as restore payloads, and records only redacted summaries in `specs/007-custom-field-support/live-verification.md`
+- [ ] T095 [Safety] Add task-canary mode to `scripts/verify_custom_field_writes.py` so it can create a disposable Hostaway task, capture a canonicalized complete snapshot, send partial `PUT /v1/tasks/{id}`, verify unrelated task fields survive, apply the allowlisted restore payload built by the same production restore-path code used by listing Steps 4 and 5, re-read and verify the task matches its pre-mutation snapshot, then delete the task while reporting that server-accepted task restore is indicative rather than conclusive for listing semantics
+- [ ] T038 [Safety] Run the authorized zero-risk and negligible-risk listing verification ladder after CI is green: Step 0 ask Hostaway support for authoritative `PUT /v1/listings/{id}` semantics and keep the step incomplete until an authoritative answer is recorded (owner action, zero risk); Step 1 capture a complete listing snapshot and verify an allowlisted restore payload is reconstructable without deep-copying the GET response (read-only, zero risk); Step 2 inspect the generated dry-run payload from `scripts/verify_custom_field_writes.py` (zero risk, because dry-run is the default); Step 3 run the disposable task canary by creating a throwaway task, snapshotting it, sending partial `PUT /v1/tasks/{id}`, verifying unrelated task fields survive, applying the allowlisted restore payload built by the same production restore-path code used by Steps 4 and 5, verifying the task matches its pre-mutation snapshot, and deleting the task (negligible risk and indicative only). Record redacted evidence in `specs/007-custom-field-support/live-verification.md`. Do not enable `listing_partial_put_verified` yet; Step 4 listing no-op self-write with an expected empty whole-object diff and Step 5 listing sentinel write/verify/restore to snapshot require a disposable listing or the allowlisted restore path plus the server-accepted restore demonstrated by Step 3, and a separate explicit owner decision before they run. If the live listing has only one populated custom variable, record that additional populated custom-value preservation was not observed and do not enable any listing write strategy for custom-field preservation until live multi-entry evidence or an authoritative Hostaway contract exists. Steps 4 and 5 must run with the selected listing payload shape; if a full-object listing strategy is selected for any reason, repeat those steps with the reconstructed full-object payload, record that full-object evidence, and require Hostaway conditional/version detection for concurrent external dashboard edits before enabling listing writes.
+- [ ] T039 [Safety] Record the reservation `doorCode` implementation evidence in `specs/007-custom-field-support/live-verification.md` and bind any owner-provided external production history to the verified Hostaway account/config entry as top-level merge evidence only. The evidence must cite `custom_components/hostaway/services/reservation_handlers.py` sending only `doorCode` plus optional `doorCodeVendor` and `doorCodeInstruction` through `HostawayApiClient.update_reservation`, state that this repository does not substantiate any v0.4.0 production release or no-data-loss history, and record the residual gap that reservation `customFieldValues` round-tripping is not yet proven. Do not set `reservation_payload_strategy` or enable `reservation_no_clobber_verified` until reservation `customFieldValues` no-op/sentinel/restore evidence or an authoritative Hostaway contract covers that payload. Other Hostaway accounts/config entries remain disabled until their own account-bound evidence is recorded.
 
 **Checkpoint**: Live safety status known — each target type is either verified
 and explicitly enabled by evidence, or remains disabled with tests proving the
@@ -255,7 +260,7 @@ failures happen before target reads or any mutating request.
 custom variable while preserving every unaddressed custom value, malformed raw
 entry, and visible built-in field.
 
-**Independent Test**: With the relevant live verification gate enabled, call
+**Independent Test**: With the relevant safety evidence gate enabled, call
 `hostaway.set_custom_field` for one listing or reservation value and confirm
 the target changed, every other custom value and built-in field is unchanged,
 and the local entity surface updates immediately.
@@ -266,7 +271,7 @@ target type disabled and complete only the fail-closed behavior for it.
 
 ### Tests for User Story 3
 
-- [ ] T067 [P] [US3] Write failing tests in `tests/api/test_custom_fields.py` for read-modify-write merge preserving unaddressed values, unresolved values, raw malformed entries, Hostaway order where practical, explicit `value: None` clears, and outgoing `PUT` payload top-level keys exactly equal to `{"customFieldValues"}` so built-in keys such as `name`, `price`, or `doorCode` cannot be sent accidentally
+- [ ] T067 [P] [US3] Write failing tests in `tests/api/test_custom_fields.py` for read-modify-write merge preserving unaddressed values, unresolved values, raw malformed entries, Hostaway order where practical, explicit `value: None` clears, per-target payload strategy selection, partial outgoing `PUT` payload top-level keys exactly equal to `{"customFieldValues"}`, and full-object payloads that include only fields proven safe and reconstructable from the pre-write snapshot
 - [ ] T068 [P] [US3] Write failing tests in `tests/api/test_custom_fields.py` proving write merge fails closed when `customFieldValues` is missing, `null`, or non-list; a present `[]` is accepted as genuinely empty
 - [ ] T069 [P] [US3] Write failing tests in `tests/api/test_custom_fields.py` proving write merge fails closed when the addressed id has a malformed raw entry or duplicate raw entries, and sends no `PUT`
 - [ ] T070 [P] [US3] Write failing tests in `tests/services/test_custom_fields.py` proving `set_custom_field` is registered with `SupportsResponse.OPTIONAL` and returns exactly `target_type`, `target_id`, `customFieldId`, `varName`, `addressed_by`, and `result: success` when a response is requested
@@ -277,16 +282,17 @@ target type disabled and complete only the fail-closed behavior for it.
 
 ### Implementation for User Story 3
 
-- [ ] T075 [US3] Integrate the no-clobber merge helpers from T037 into the write dispatch path in `custom_components/hostaway/api/custom_fields.py`, using raw current `customFieldValues` read immediately before the write and preserving unaddressed raw entries unchanged
+- [ ] T093 [API] Implement a full-object payload builder in `custom_components/hostaway/api/custom_fields.py` alongside the existing `build_custom_field_values_payload`, with listing writable-field allowlists, normalization rules, explicit rejection of unsafe GET-response deep copies, conditional/version-check enforcement that keeps full-object listing writes disabled when Hostaway cannot detect concurrent external edits, and explicit listing strategy selection state so listing writes can choose partial or full-object payloads based on recorded verification evidence without representing full-object fallback as partial-PUT verification. Keep reservation full-object writes disabled until a separate reservation protocol defines and verifies that path
+- [ ] T075 [US3] Integrate the no-clobber merge helpers from T037 and the listing full-object strategy from T093 into the write dispatch path in `custom_components/hostaway/api/custom_fields.py`, using raw current `customFieldValues` read immediately before the write, preserving unaddressed raw entries unchanged, selecting listing payload strategy from recorded evidence only after the no-op/sentinel/restore ladder has run with that selected payload shape, rejecting full-object listing dispatch when Hostaway cannot detect concurrent external edits, and keeping reservation dispatch limited to the partial strategy unless a future protocol defines another path
 - [ ] T076 [US3] Implement per-entry/per-target lock acquisition and write-generation advancement in `custom_components/hostaway/services/custom_fields.py`
-- [ ] T077 [US3] Register `hostaway.set_custom_field` in `custom_components/hostaway/services/__init__.py` with `SERVICE_SET_CUSTOM_FIELD_SCHEMA` and `SupportsResponse.OPTIONAL`, then implement listing write dispatch in `custom_components/hostaway/services/custom_fields.py` only after T038 passes or retain the fail-closed disabled path if T038 fails
-- [ ] T078 [US3] Implement reservation write dispatch in `custom_components/hostaway/services/custom_fields.py` only after T039 passes or retain the fail-closed disabled path if T039 fails
+- [ ] T077 [US3] Register `hostaway.set_custom_field` in `custom_components/hostaway/services/__init__.py` with `SERVICE_SET_CUSTOM_FIELD_SCHEMA` and `SupportsResponse.OPTIONAL`, then implement listing write dispatch in `custom_components/hostaway/services/custom_fields.py` only after the full T038 ladder passes or retain the fail-closed disabled path if it fails or stops after the currently authorized steps
+- [ ] T078 [US3] Implement reservation write dispatch in `custom_components/hostaway/services/custom_fields.py` only after reservation `customFieldValues` no-op/sentinel/restore evidence or an authoritative Hostaway contract is recorded, or retain the fail-closed disabled path
 - [ ] T079 [US3] Implement local coordinator/entity patching and write-generation publish suppression after successful writes so represented listing sensors and reservation attributes reflect the new value before the next poll and stale in-flight refreshes cannot overwrite it
 - [ ] T080 [US3] Write and pass negative coverage in `tests/sensor/test_custom_fields.py` proving `hostaway.set_custom_field` never creates writable text, number, or select entities for custom variables and the integration has no custom-field definition create/update/delete code path
 
 **Checkpoint**: Write service complete for each verified target type — writes
-are no-clobber, gated by live evidence, fail closed on every unsafe raw-data
-shape, and update local state immediately after success.
+are no-clobber, gated by target-specific safety evidence, fail closed on every
+unsafe raw-data shape, and update local state immediately after success.
 
 ---
 
@@ -329,7 +335,7 @@ green or any disabled write target is explicitly documented.
 - [ ] T087 [P] Run targeted tests from quickstart.md: `uv run pytest tests/api/test_custom_fields.py -x -q`, `uv run pytest tests/sensor/test_custom_fields.py -x -q`, `uv run pytest tests/services/test_custom_fields.py -x -q`, and `uv run pytest tests/test_config_flow.py -x -q -k custom_field`
 - [ ] T088 Run full validation with `uv run pytest tests/ -x -q` and `uv run ruff check custom_components/ tests/`
 - [ ] T089 Run `uv run pre-commit run --all-files` and fix markdownlint, codespell, REUSE, mypy, interrogate, and aislop issues without bypassing hooks
-- [ ] T090 Add a separate `Docs(changelog):` implementation-PR commit updating `CHANGELOG.md` for custom field support, including any target type that remains disabled by failed live verification
+- [ ] T090 Add a separate `Docs(changelog):` implementation-PR commit updating `CHANGELOG.md` for custom field support, including any target type that remains disabled by failed or incomplete safety evidence
 - [ ] T091 Add a separate atomic `Docs(tasks):` implementation-PR commit that flips completed checkboxes in `specs/007-custom-field-support/tasks.md`; do not bundle checkbox updates with code or changelog commits
 - [ ] T092 Re-run quickstart.md user-facing checks for sensors, read services, write gates, successful verified writes, built-in/custom documentation, and existing `set_door_code` regression coverage
 
@@ -366,7 +372,8 @@ in separate commits, and live write safety status is documented.
 - **US2 (P1 read services)**: Needs foundational API, definitions
   coordinator, and listing allocator non-mutating response behavior.
 - **US3 (P1 writes)**: Needs field resolution, value validation, write gates,
-  live verification for each enabled target type, and no-clobber merge helpers.
+  target-specific safety evidence for each enabled target type, and
+  no-clobber merge helpers.
 - **US4 (P2 addressing)**: Can be built before writes and supplies write
   resolution logic.
 - **US5 (P3 docs)**: Depends on final service schemas and write-gate outcomes.
@@ -444,12 +451,12 @@ must be sequenced or split to avoid merge conflicts.
 
 ### Write Enablement
 
-1. Complete Phase 4 gate tests and live verification tasks before enabling any
-   write target.
+1. Complete Phase 4 gate tests and target-specific evidence tasks before
+   enabling any write target.
 2. Complete Phase 7 addressing and validation.
-3. Complete Phase 8 write implementation only for target types whose live
-   verification passed. Keep any failed target type disabled with the
-   documented fail-closed path.
+3. Complete Phase 8 write implementation only for target types whose required
+   listing ladder evidence or reservation `customFieldValues` evidence passed.
+   Keep any failed target type disabled with the documented fail-closed path.
 
 ### Finalization
 

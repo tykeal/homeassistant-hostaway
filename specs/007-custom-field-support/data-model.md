@@ -196,21 +196,30 @@ Per-config-entry executable gates for live no-clobber verification.
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
 | `listing_partial_put_verified` | `bool` | `False` | FR-035 listing partial-PUT verification passed. |
-| `reservation_no_clobber_verified` | `bool` | `False` | SC-003 reservation no-clobber verification passed. |
+| `listing_payload_strategy` | `"partial"` / `"full_object"` / `None` | `None` | Verified listing payload strategy selected from recorded evidence. |
+| `reservation_no_clobber_verified` | `bool` | `False` | FR-055 reservation `customFieldValues` no-op/sentinel/restore evidence or authoritative contract passed. |
+| `reservation_payload_strategy` | `"partial"` / `None` | `None` | Verified reservation payload strategy selected from recorded evidence; full-object reservation writes are out of scope until a separate protocol exists. |
 
 **Storage**: The gate object lives under
 `hass.data[DOMAIN][entry.entry_id]["custom_field_write_safety"]` and is seeded
 from implementation constants that default to `False` for each target type.
 The per-entry object is deliberate runtime structure: it lets service code use
-the same entry-scoped state pattern as coordinators, locks, and generations,
-while the account-independent safety defaults remain source-controlled
-constants that can only be enabled by an implementation change with recorded
-live evidence.
+the same entry-scoped state pattern as coordinators, locks, and generations.
+Account-independent safety defaults remain disabled. Evidence-enabled states
+must be bound to the verified Hostaway account/config entry.
 
 **Enablement rule**: A target type's flag may be changed to `True` only in an
-implementation change that records the matching live verification result. Until
-then, `hostaway.set_custom_field` rejects that target type before reading,
-merging, or sending a mutating request.
+implementation change that records matching evidence in
+`specs/007-custom-field-support/live-verification.md`. Listing evidence must
+come from the verification ladder, and `listing_partial_put_verified` remains
+strictly tied to partial-PUT evidence. If the selected listing strategy is
+`full_object`, the implementation must record that strategy separately instead
+of setting `listing_partial_put_verified` to true. Reservation production `doorCode` evidence may be recorded as top-level merge
+evidence for the verified Hostaway account/config entry, but it does not enable
+`reservation_no_clobber_verified`. Both target types also require a non-`None`
+payload strategy before dispatch. Until then, `hostaway.set_custom_field`
+rejects that target type before reading, merging, or sending a mutating
+request.
 
 ### CustomFieldWriteLockRegistry
 

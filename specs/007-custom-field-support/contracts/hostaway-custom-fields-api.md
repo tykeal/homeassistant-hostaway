@@ -194,7 +194,7 @@ Accept: application/json
 
 Update a listing through Hostaway's whole-object listing endpoint.
 
-**Request shape for custom-field writes after FR-035 passes**:
+**Partial strategy request shape after FR-035 passes**:
 
 ```http
 PUT /v1/listings/67890 HTTP/1.1
@@ -218,8 +218,18 @@ Content-Type: application/json
 
 **Safety contract**:
 
-- Listing writes are disabled until FR-035 verifies this partial payload does
-  not clear omitted built-in listing fields.
+- Listing writes are disabled until the FR-035 verification ladder records
+  evidence for the selected payload strategy. Partial payloads remain untrusted
+  for listings until the no-op, sentinel, and restore steps pass.
+- Listing mutation steps require a separate explicit owner decision and either
+  a disposable listing or an allowlisted restore path plus task-canary evidence
+  that the live API accepted and persisted a reconstructed restore payload
+  built by the same production restore-path code. Task restore evidence remains
+  indicative, not conclusive, for listing semantics because task and listing
+  endpoints may use different controllers.
+- The executable safety state records payload strategy separately from partial
+  `PUT` verification. A full-object listing strategy must not set
+  `listing_partial_put_verified` to true.
 - The outgoing `customFieldValues` array is based on the current raw listing
   values read immediately before the write.
 - Unaddressed values are preserved.
@@ -227,16 +237,31 @@ Content-Type: application/json
 - If a raw malformed entry carries the addressed `customFieldId`, the write
   fails before `PUT`; it is not replaced, dropped, or duplicated.
 - Duplicate raw entries for the addressed `customFieldId` fail before `PUT`.
-- If partial PUT verification fails, this endpoint cannot be used for listing
-  writes until a safe full-payload strategy is proven.
-- The executable gate is
-  `custom_field_write_safety.listing_partial_put_verified`, stored per config
-  entry under `hass.data[DOMAIN][entry.entry_id]` and defaulting to false.
-  While false, `hostaway.set_custom_field` rejects listing writes with
-  `listing custom-field writes are disabled until live safety verification
-  passes` before reading the target or sending any mutation.
-- The outgoing `PUT` body contains exactly one top-level key:
-  `customFieldValues`.
+- If partial PUT verification fails, this endpoint cannot use partial listing
+  writes until a safe full-object strategy or another safe endpoint is proven.
+- The executable gate is the combination of recorded listing safety evidence
+  and an explicit `listing_payload_strategy`, stored per config entry under
+  `hass.data[DOMAIN][entry.entry_id]`. When `listing_payload_strategy` is
+  `partial`, `custom_field_write_safety.listing_partial_put_verified` must also
+  be true. Without a verified strategy, `hostaway.set_custom_field` rejects
+  listing writes with `listing custom-field writes are disabled until safety
+  evidence is recorded` before reading the target or sending any mutation.
+- The API layer provides both a partial-payload builder and a full-object
+  payload builder. The partial `PUT` body contains exactly one top-level key,
+  `customFieldValues`; full-object listing payloads may be selected only when
+  the full-object body is reconstructed from allowlisted writable listing
+  fields plus the merged `customFieldValues` collection, and recorded evidence
+  supports that safer strategy. Reservation full-object writes remain disabled
+  until a separate reservation protocol defines and verifies them. The selected
+  strategy is explicit gate state, not inferred from a partial-verification
+  boolean.
+- Full-object payloads are disabled until a per-target writable-field allowlist
+  and normalization rules are defined and tested. Copying a complete
+  `includeResources=1` response into a `PUT` payload is never valid evidence of
+  a safe full-object strategy.
+- Full-object writes require a Hostaway conditional/version check that detects
+  concurrent external dashboard edits after the pre-write read. Without that
+  check, the full-object strategy remains disabled.
 
 ### PUT /v1/reservations/{id}
 
@@ -262,9 +287,9 @@ Content-Type: application/json
 
 **Safety contract**:
 
-- Reservation custom-field writes are disabled until SC-003 verifies a live
-  merged reservation write leaves every unrelated custom field and visible
-  built-in field unchanged.
+- Reservation custom-field writes are disabled until reservation
+  `customFieldValues` no-op/sentinel/restore evidence or an authoritative
+  Hostaway contract is recorded for that payload.
 - Custom-field writes still read current reservation values first and submit a
   merged `customFieldValues` collection.
 - Unaddressed values and unaddressed raw malformed entries are preserved.
@@ -273,14 +298,37 @@ Content-Type: application/json
 - Duplicate raw entries for the addressed `customFieldId` fail before `PUT`.
 - Built-in fields visible before the write, including `doorCode`, must remain
   unchanged.
+- The existing `hostaway.set_door_code` service sends a partial
+  `PUT /v1/reservations/{id}` containing only `doorCode` plus optional
+  `doorCodeVendor` and `doorCodeInstruction`, through
+  `HostawayApiClient.update_reservation`. Owner-provided external account
+  history MAY be recorded separately as empirical evidence, but this repository
+  does not substantiate a v0.4.0 production release or no-data-loss history.
+  This is top-level merge evidence for built-in fields, but not
+  `customFieldValues` round-tripping.
+- Until reservation `customFieldValues` no-op/sentinel/restore evidence or an
+  authoritative Hostaway contract is recorded, reservation custom-field writes
+  fail closed.
+- Production `doorCode` evidence may be recorded as account-bound top-level
+  merge evidence, but it does not enable reservation custom-field writes by
+  itself. Other accounts stay disabled until their own account-bound evidence
+  is recorded.
 - The executable gate is
   `custom_field_write_safety.reservation_no_clobber_verified`, stored per
-  config entry under `hass.data[DOMAIN][entry.entry_id]` and defaulting to
-  false. While false, `hostaway.set_custom_field` rejects reservation writes
-  with `reservation custom-field writes are disabled until live safety
-  verification passes` before reading the target or sending any mutation.
-- The outgoing `PUT` body contains exactly one top-level key:
-  `customFieldValues`.
+  config entry under `hass.data[DOMAIN][entry.entry_id]`, plus
+  `reservation_payload_strategy`, which defaults to `None` and may become
+  `"partial"` only after reservation `customFieldValues` evidence or an
+  authoritative contract is recorded. While missing,
+  `hostaway.set_custom_field` rejects reservation writes with
+  `reservation custom-field writes are disabled until customFieldValues safety
+  evidence is recorded` before reading the target or sending any mutation.
+- The API layer provides both partial and full-object payload builders. The
+  partial `PUT` body contains exactly one top-level key,
+  `customFieldValues`; reservation writes may select only the partial strategy
+  in this feature and must be supported by recorded evidence. The selected
+  strategy is explicit gate state, not inferred from a partial-verification
+  boolean. Reservation full-object writes remain out of scope unless a future
+  protocol defines and verifies them explicitly.
 
 ## Home Assistant services
 
@@ -426,8 +474,10 @@ Exactly one of `customFieldId` or `varName` is required.
   duplicate.
 - Duplicate raw entries carry the addressed `customFieldId`.
 - Hostaway rejects the update.
-- Listing write attempted before live safety verification passes.
-- Reservation write attempted before live safety verification passes.
+- Listing write attempted before the verification ladder records passing
+  evidence.
+- Reservation write attempted before reservation `customFieldValues` evidence
+  or an authoritative contract is recorded.
 
 ## Rate limits
 
