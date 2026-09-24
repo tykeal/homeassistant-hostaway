@@ -36,6 +36,19 @@ if TYPE_CHECKING:
     )
 
 
+@dataclass(frozen=True)
+class CustomFieldDiscoveryState:
+    """Shared state for dynamic listing custom-field discovery."""
+
+    hass: HomeAssistant
+    entry: ConfigEntry
+    listings_coordinator: HostawayListingsCoordinator
+    custom_fields_coordinator: HostawayCustomFieldsCoordinator | None
+    allocations: dict[int, ListingCustomFieldKeyAllocation]
+    known_custom_fields: set[tuple[int, int]]
+    reserved_keys: tuple[str, ...]
+
+
 def _custom_field_unique_id_prefix(entry_unique_id: str | None, listing_id: int) -> str:
     """Return the stable unique-id prefix for listing custom-field sensors."""
     return f"{entry_unique_id}_{listing_id}_custom_field_"
@@ -284,3 +297,50 @@ class HostawayListingCustomFieldSensor(HostawayEntity, SensorEntity):
             "value": value,
             "resolved": True,
         }
+
+
+def extend_custom_field_entities(
+    state: CustomFieldDiscoveryState,
+    entities: list[SensorEntity],
+    listing_id: int,
+) -> None:
+    """Append missing dynamic custom-field sensors for one listing."""
+    listing = (
+        state.listings_coordinator.data.get(listing_id)
+        if state.listings_coordinator.data
+        else None
+    )
+    if listing is None or listing.custom_field_collection is None:
+        return
+    allocation = state.allocations.get(listing_id)
+    if allocation is None:
+        allocation = ListingCustomFieldKeyAllocation.from_entity_registry(
+            state.hass,
+            state.entry,
+            listing_id,
+            reserved_keys=state.reserved_keys,
+        )
+        state.allocations[listing_id] = allocation
+    definitions = getattr(state.custom_fields_coordinator, "data", None) or []
+    for custom_field_id in listing.custom_field_collection.values:
+        key = (listing_id, custom_field_id)
+        if key in state.known_custom_fields:
+            continue
+        definition = None
+        if state.custom_fields_coordinator is not None:
+            definition = state.custom_fields_coordinator.get_definition(
+                custom_field_id,
+                LISTING_OBJECT_TYPE,
+            )
+        allocated_key = allocation.allocate(custom_field_id, definition, definitions)
+        state.known_custom_fields.add(key)
+        entities.append(
+            HostawayListingCustomFieldSensor(
+                state.listings_coordinator,
+                state.custom_fields_coordinator,
+                listing_id,
+                state.entry,
+                custom_field_id,
+                allocated_key,
+            )
+        )
