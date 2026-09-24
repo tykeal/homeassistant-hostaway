@@ -263,11 +263,11 @@ def _value_response_context(
     """Return response context with one non-mutating listing allocation."""
     allocation = None
     if target_type == LISTING_OBJECT_TYPE:
-        allocation = _listing_allocation(
+        allocation = _listing_allocation_preview(
             hass,
             entry_data,
             target_id,
-        ).clone()
+        )
     return _ValueResponseContext(
         hass=hass,
         entry_data=entry_data,
@@ -278,30 +278,27 @@ def _value_response_context(
     )
 
 
-def _listing_allocation(
+def _listing_allocation_preview(
     hass: HomeAssistant,
     entry_data: dict[str, Any],
     listing_id: int,
 ) -> ListingCustomFieldKeyAllocation:
-    """Return persistent allocation state for a listing without mutating it."""
-    allocations: dict[int, ListingCustomFieldKeyAllocation] = entry_data.setdefault(
-        "custom_field_key_allocations",
-        {},
+    """Return a non-persistent allocation preview for a listing response."""
+    allocations = cast(
+        dict[int, ListingCustomFieldKeyAllocation],
+        entry_data.get("custom_field_key_allocations", {}),
     )
     allocation = allocations.get(listing_id)
     if allocation is not None:
-        return allocation
+        return allocation.clone()
     entry = getattr(entry_data.get("listings_coordinator"), "config_entry", None)
     if entry is None:
-        allocation = ListingCustomFieldKeyAllocation(listing_id=listing_id)
-    else:
-        allocation = ListingCustomFieldKeyAllocation.from_entity_registry(
-            hass,
-            entry,
-            listing_id,
-        )
-    allocations[listing_id] = allocation
-    return allocation
+        return ListingCustomFieldKeyAllocation(listing_id=listing_id)
+    return ListingCustomFieldKeyAllocation.from_entity_registry(
+        hass,
+        entry,
+        listing_id,
+    )
 
 
 def _validate_set_request(

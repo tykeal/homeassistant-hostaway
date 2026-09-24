@@ -3,7 +3,9 @@
 set_door_code:
   name: Set door code
   description: >-
-    Set the door code on a Hostaway reservation.
+    Set built-in Hostaway reservation door-code fields. These are not
+    custom variables; use set_custom_field only for Hostaway custom
+    variables.
   fields:
     reservation_id:
       name: Reservation ID
@@ -522,7 +524,7 @@ set_custom_field:
     Validate a request to set one Hostaway custom variable on a listing or
     reservation. Writes remain disabled until target-specific safety
     evidence is recorded; built-in fields such as doorCode are not custom
-    variables.
+    variables. Use set_door_code for built-in reservation door-code fields.
   fields:
     target_type:
       name: Target type

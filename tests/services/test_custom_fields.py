@@ -551,8 +551,7 @@ async def test_get_custom_field_values_reuses_persisted_listing_keys(
     custom_fields = cast(dict[str, Any], result_data["custom_fields"])
     assert "custom_field_1" in custom_fields
     assert "custom_gate_code" in custom_fields
-    allocation = hass.data[DOMAIN]["entry-1"]["custom_field_key_allocations"][123]
-    assert allocation.field_to_key == {1: "custom_field_1"}
+    assert "custom_field_key_allocations" not in hass.data[DOMAIN]["entry-1"]
 
 
 async def test_get_custom_field_values_preserves_response_key_reservations(
