@@ -176,20 +176,20 @@ attributes match the spec without changing existing entity behavior.
 
 ### Tests for User Story 1
 
-- [ ] T040 [P] [US1] Write failing tests in `tests/sensor/test_custom_fields.py` for the listing key allocator covering unique `varName`, duplicate `varName`, slug collisions, fallback `custom_field_<customFieldId>` keys, fallback collisions, second-order suffix collisions, persisted entity-registry mappings, no renaming after restart/reload, and the runtime transition where an unresolved fallback-key sensor later resolves metadata without renaming or creating a second sensor
-- [ ] T041 [P] [US1] Write failing tests in `tests/sensor/test_custom_fields.py` proving dynamic listing custom-field sensors are created only for present values, hidden fields are included, unresolved values use fallback metadata, resolved values expose `customFieldId`, `varName`, `name`, `type`, `possibleValues`, `value`, and `resolved: true`, and cleared existing values remain present with native value `None`
-- [ ] T042 [P] [US1] Write failing tests in `tests/sensor/test_custom_fields.py` proving new listing custom-field values observed at runtime create new sensors without a Home Assistant restart
-- [ ] T043 [P] [US1] Write failing tests in `tests/sensor/test_listing.py` proving the seven existing listing diagnostics (`listing_id`, `external_name`, `status`, `base_price`, `bedrooms`, `bathrooms`, `max_guests`) remain unchanged and do not gain custom-variable attributes
-- [ ] T044 [P] [US1] Write failing tests in `tests/sensor/test_reservation.py` proving reservation sensors add `custom_fields`, use `custom_field_<customFieldId>` keys, include resolved human-readable metadata, include unresolved entries without definition metadata, expose `{}` when empty, and keep all existing reservation attributes unchanged
-- [ ] T045 [P] [US1] Write failing tests in `tests/api/test_custom_fields.py` proving malformed custom value records log warnings that exclude raw custom-field data and values, skip only presentation, preserve raw merge data, and never fail listing or reservation coordinator refreshes
+- [x] T040 [P] [US1] Write failing tests in `tests/sensor/test_custom_fields.py` for the listing key allocator covering unique `varName`, duplicate `varName`, slug collisions, fallback `custom_field_<customFieldId>` keys, fallback collisions, second-order suffix collisions, persisted entity-registry mappings, no renaming after restart/reload, and the runtime transition where an unresolved fallback-key sensor later resolves metadata without renaming or creating a second sensor
+- [x] T041 [P] [US1] Write failing tests in `tests/sensor/test_custom_fields.py` proving dynamic listing custom-field sensors are created only for present values, hidden fields are included, unresolved values use fallback metadata, resolved values expose `customFieldId`, `varName`, `name`, `type`, `possibleValues`, `value`, and `resolved: true`, and cleared existing values remain present with native value `None`
+- [x] T042 [P] [US1] Write failing tests in `tests/sensor/test_custom_fields.py` proving new listing custom-field values observed at runtime create new sensors without a Home Assistant restart
+- [x] T043 [P] [US1] Write failing tests in `tests/sensor/test_listing.py` proving the seven existing listing diagnostics (`listing_id`, `external_name`, `status`, `base_price`, `bedrooms`, `bathrooms`, `max_guests`) remain unchanged and do not gain custom-variable attributes
+- [x] T044 [P] [US1] Write failing tests in `tests/sensor/test_reservation.py` proving reservation sensors add `custom_fields`, use `custom_field_<customFieldId>` keys, include resolved human-readable metadata, include unresolved entries without definition metadata, expose `{}` when empty, and keep all existing reservation attributes unchanged
+- [x] T045 [P] [US1] Write failing tests in `tests/api/test_custom_fields.py` proving malformed custom value records log warnings that exclude raw custom-field data and values, skip only presentation, preserve raw merge data, and never fail listing or reservation coordinator refreshes
 
 ### Implementation for User Story 1
 
-- [ ] T046 [US1] Implement `ListingCustomFieldKeyAllocation` in `custom_components/hostaway/sensor/custom_fields.py`, seeding from entity-registry unique IDs and allocating from one shared namespace per listing
-- [ ] T047 [US1] Implement `HostawayListingCustomFieldSensor` in `custom_components/hostaway/sensor/custom_fields.py` with diagnostic metadata for resolved and unresolved fields
-- [ ] T048 [US1] Wire dynamic listing custom-field sensor discovery into `custom_components/hostaway/sensor/__init__.py` without changing the existing seven listing sensor descriptions
-- [ ] T049 [US1] Extend reservation attribute shaping in `custom_components/hostaway/sensor/helpers.py` so `custom_fields` is always present and follows FR-014 through FR-018
-- [ ] T050 [US1] Run `uv run pytest tests/sensor/ -x -q` and confirm listing custom-field sensors, runtime discovery, reservation `custom_fields`, and existing sensor regressions pass before starting read services
+- [x] T046 [US1] Implement `ListingCustomFieldKeyAllocation` in `custom_components/hostaway/sensor/custom_fields.py`, seeding from entity-registry unique IDs and allocating from one shared namespace per listing
+- [x] T047 [US1] Implement `HostawayListingCustomFieldSensor` in `custom_components/hostaway/sensor/custom_fields.py` with diagnostic metadata for resolved and unresolved fields
+- [x] T048 [US1] Wire dynamic listing custom-field sensor discovery into `custom_components/hostaway/sensor/__init__.py` without changing the existing seven listing sensor descriptions
+- [x] T049 [US1] Extend reservation attribute shaping in `custom_components/hostaway/sensor/helpers.py` so `custom_fields` is always present and follows FR-014 through FR-018
+- [x] T050 [US1] Run `uv run pytest tests/sensor/ -x -q` and confirm listing custom-field sensors, runtime discovery, reservation `custom_fields`, and existing sensor regressions pass before starting read services
 
 **Checkpoint**: Sensor read surface complete — custom values are visible on
 entities within one poll interval, dynamic listing sensors are restart-stable,
@@ -209,19 +209,19 @@ reservation targets and verify exact response envelopes.
 
 ### Tests for User Story 2
 
-- [ ] T051 [P] [US2] Write failing schema tests in `tests/services/test_custom_fields.py` for `SERVICE_GET_CUSTOM_FIELDS_SCHEMA` and `SERVICE_GET_CUSTOM_FIELD_VALUES_SCHEMA`, including bool-safe `target_id` rejection and target type limited to `listing` / `reservation`
-- [ ] T052 [P] [US2] Write failing tests in `tests/services/test_custom_fields.py` proving `get_custom_fields` is registered with `SupportsResponse.ONLY`, uses `_resolve_entry_data`, returns exactly `{"custom_fields": [...]}`, each entry contains exactly `customFieldId`, `varName`, `name`, `type`, `objectType`, `possibleValues`, `isPublic`, and `sortOrder`, includes listing and reservation definitions, ignores task definitions, and returns `{"custom_fields": []}` for an empty cache
-- [ ] T053 [P] [US2] Write failing tests in `tests/services/test_custom_fields.py` proving missing `config_entry_id` fails closed with `config_entry_id required when multiple entries exist` before any read when multiple entries are loaded, and explicit `config_entry_id` selection for two loaded entries returns only that entry's definitions/metadata so accounts cannot label or validate each other's data
-- [ ] T054 [P] [US2] Write failing tests in `tests/services/test_custom_fields.py` proving `get_custom_field_values` is registered with `SupportsResponse.ONLY`, performs direct target reads with `includeResources=1`, returns exactly `{"custom_fields": {...}}`, resolved entries contain exactly `customFieldId`, `varName`, `name`, `type`, `possibleValues`, `value`, and `resolved`, unresolved entries contain exactly `customFieldId`, `value`, and `resolved`, defined-but-unset fields include `value: None`, and empty results return `{"custom_fields": {}}`
-- [ ] T055 [P] [US2] Write failing tests in `tests/services/test_custom_fields.py` proving listing value-service response keys reuse persisted sensor keys, reserve other persisted keys, allocate unset fields in non-mutating mode without creating entities, and suffix collisions deterministically
-- [ ] T056 [P] [US2] Write failing tests in `tests/services/test_custom_fields.py` proving inaccessible or missing listings/reservations raise clear errors naming the target type and id
+- [x] T051 [P] [US2] Write failing schema tests in `tests/services/test_custom_fields.py` for `SERVICE_GET_CUSTOM_FIELDS_SCHEMA` and `SERVICE_GET_CUSTOM_FIELD_VALUES_SCHEMA`, including bool-safe `target_id` rejection and target type limited to `listing` / `reservation`
+- [x] T052 [P] [US2] Write failing tests in `tests/services/test_custom_fields.py` proving `get_custom_fields` is registered with `SupportsResponse.ONLY`, uses `_resolve_entry_data`, returns exactly `{"custom_fields": [...]}`, each entry contains exactly `customFieldId`, `varName`, `name`, `type`, `objectType`, `possibleValues`, `isPublic`, and `sortOrder`, includes listing and reservation definitions, ignores task definitions, and returns `{"custom_fields": []}` for an empty cache
+- [x] T053 [P] [US2] Write failing tests in `tests/services/test_custom_fields.py` proving missing `config_entry_id` fails closed with `config_entry_id required when multiple entries exist` before any read when multiple entries are loaded, and explicit `config_entry_id` selection for two loaded entries returns only that entry's definitions/metadata so accounts cannot label or validate each other's data
+- [x] T054 [P] [US2] Write failing tests in `tests/services/test_custom_fields.py` proving `get_custom_field_values` is registered with `SupportsResponse.ONLY`, performs direct target reads with `includeResources=1`, returns exactly `{"custom_fields": {...}}`, resolved entries contain exactly `customFieldId`, `varName`, `name`, `type`, `possibleValues`, `value`, and `resolved`, unresolved entries contain exactly `customFieldId`, `value`, and `resolved`, defined-but-unset fields include `value: None`, and empty results return `{"custom_fields": {}}`
+- [x] T055 [P] [US2] Write failing tests in `tests/services/test_custom_fields.py` proving listing value-service response keys reuse persisted sensor keys, reserve other persisted keys, allocate unset fields in non-mutating mode without creating entities, and suffix collisions deterministically
+- [x] T056 [P] [US2] Write failing tests in `tests/services/test_custom_fields.py` proving inaccessible or missing listings/reservations raise clear errors naming the target type and id
 
 ### Implementation for User Story 2
 
-- [ ] T057 [US2] Add schemas for all three custom-field services to `custom_components/hostaway/services/schemas.py`, including `SERVICE_SET_CUSTOM_FIELD_SCHEMA`
-- [ ] T058 [US2] Implement `async_handle_get_custom_fields` in `custom_components/hostaway/services/custom_fields.py`
-- [ ] T059 [US2] Implement `async_handle_get_custom_field_values` in `custom_components/hostaway/services/custom_fields.py`, using direct reads, cached definitions, and the listing allocator in non-mutating mode
-- [ ] T060 [US2] Register `hostaway.get_custom_fields` and `hostaway.get_custom_field_values` in `custom_components/hostaway/services/__init__.py` with `SupportsResponse.ONLY`
+- [x] T057 [US2] Add schemas for all three custom-field services to `custom_components/hostaway/services/schemas.py`, including `SERVICE_SET_CUSTOM_FIELD_SCHEMA`
+- [x] T058 [US2] Implement `async_handle_get_custom_fields` in `custom_components/hostaway/services/custom_fields.py`
+- [x] T059 [US2] Implement `async_handle_get_custom_field_values` in `custom_components/hostaway/services/custom_fields.py`, using direct reads, cached definitions, and the listing allocator in non-mutating mode
+- [x] T060 [US2] Register `hostaway.get_custom_fields` and `hostaway.get_custom_field_values` in `custom_components/hostaway/services/__init__.py` with `SupportsResponse.ONLY`
 
 **Checkpoint**: Read services complete — definitions and values return the
 exact envelopes from the spec, multi-account resolution fails closed, and
@@ -239,15 +239,15 @@ numeric id, and verify ambiguous or unknown identifiers fail before mutation.
 
 ### Tests for User Story 4
 
-- [ ] T061 [P] [US4] Write failing tests in `tests/api/test_custom_fields.py` for definition lookup by `customFieldId`, object-type scoping, unknown ids, duplicate same-object-type `varName`, duplicate cross-object-type `varName`, slug-identical names, and unknown `varName`
-- [ ] T062 [P] [US4] Write failing tests in `tests/services/test_custom_fields.py` proving `SERVICE_SET_CUSTOM_FIELD_SCHEMA` and `hostaway.set_custom_field` validation require a present `value` key, accept explicit `value: None` as clear, reject omitted `value` before reads or writes, limit `target_type` to `listing` / `reservation`, and reject missing identifiers, both identifiers, boolean `customFieldId`, boolean `target_id`, unknown ids, unknown `varName`, and ambiguous same-object-type `varName` before any write
-- [ ] T063 [P] [US4] Write failing tests in `tests/services/test_custom_fields.py` proving `text` and `textarea` require strings, `number` accepts non-bool numbers and rejects booleans/non-numbers, `dropdown` accepts only normalized `possibleValues`, `value: None` clears and bypasses type validation, and unknown future field types pass through to Hostaway
+- [x] T061 [P] [US4] Write failing tests in `tests/api/test_custom_fields.py` for definition lookup by `customFieldId`, object-type scoping, unknown ids, duplicate same-object-type `varName`, duplicate cross-object-type `varName`, slug-identical names, and unknown `varName`
+- [x] T062 [P] [US4] Write failing tests in `tests/services/test_custom_fields.py` proving `SERVICE_SET_CUSTOM_FIELD_SCHEMA` and `hostaway.set_custom_field` validation require a present `value` key, accept explicit `value: None` as clear, reject omitted `value` before reads or writes, limit `target_type` to `listing` / `reservation`, and reject missing identifiers, both identifiers, boolean `customFieldId`, boolean `target_id`, unknown ids, unknown `varName`, and ambiguous same-object-type `varName` before any write
+- [x] T063 [P] [US4] Write failing tests in `tests/services/test_custom_fields.py` proving `text` and `textarea` require strings, `number` accepts non-bool numbers and rejects booleans/non-numbers, `dropdown` accepts only normalized `possibleValues`, `value: None` clears and bypasses type validation, and unknown future field types pass through to Hostaway
 
 ### Implementation for User Story 4
 
-- [ ] T064 [US4] Implement definition indexes and `resolve_var_name` / id lookup helpers in `custom_components/hostaway/api/custom_fields.py`, scoped by `listing` and `reservation`, so service-layer tests can exercise the same API helper through the handler
-- [ ] T065 [US4] Implement shared set-service identifier validation in `custom_components/hostaway/services/custom_fields.py`, requiring exactly one of `varName` or `customFieldId`
-- [ ] T066 [US4] Implement local value validation in `custom_components/hostaway/api/custom_fields.py` for known field types, with boolean-safe number handling and dropdown `possibleValues` checks
+- [x] T064 [US4] Implement definition indexes and `resolve_var_name` / id lookup helpers in `custom_components/hostaway/api/custom_fields.py`, scoped by `listing` and `reservation`, so service-layer tests can exercise the same API helper through the handler
+- [x] T065 [US4] Implement shared set-service identifier validation in `custom_components/hostaway/services/custom_fields.py`, requiring exactly one of `varName` or `customFieldId`
+- [x] T066 [US4] Implement local value validation in `custom_components/hostaway/api/custom_fields.py` for known field types, with boolean-safe number handling and dropdown `possibleValues` checks
 
 **Checkpoint**: Field addressing complete — all resolution and validation
 failures happen before target reads or any mutating request.
