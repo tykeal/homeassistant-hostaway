@@ -103,13 +103,17 @@ async def async_handle_set_custom_field(
     target_id = validate_identifier(data.get("target_id"), "target_id")
     del target_id
     entry_data = _resolve_entry_data(hass, data)
-    _validate_set_request(data, entry_data, target_type)
     coordinator = entry_data.get("custom_fields_coordinator")
-    if coordinator is not None and not coordinator.last_refresh_succeeded:
+    if coordinator is not None and not getattr(
+        coordinator,
+        "last_refresh_succeeded",
+        True,
+    ):
         raise ServiceValidationError(
             "custom field definitions refresh failed; writes are disabled "
             "until the next successful refresh"
         )
+    _validate_set_request(data, entry_data, target_type)
     gates = entry_data.get("custom_field_write_safety")
     if not isinstance(gates, CustomFieldWriteSafetyGates):
         gates = CustomFieldWriteSafetyGates()
@@ -314,7 +318,9 @@ def _validate_set_request(
         raise ServiceValidationError("value is required")
     definitions = _entry_definitions(entry_data)
     if not definitions:
-        return None
+        raise ServiceValidationError(
+            "custom field definitions are unavailable; writes are disabled"
+        )
     try:
         if has_id:
             definition = lookup_definition_by_id(

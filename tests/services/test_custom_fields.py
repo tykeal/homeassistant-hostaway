@@ -21,7 +21,7 @@ from custom_components.hostaway.api.custom_fields import (
     HostawayCustomFieldDefinition,
 )
 from custom_components.hostaway.api.exceptions import HostawayResponseError
-from custom_components.hostaway.api.models import HostawayListing
+from custom_components.hostaway.api.models import HostawayListing, HostawayReservation
 from custom_components.hostaway.const import DOMAIN
 from custom_components.hostaway.services import SERVICE_DEFINITIONS
 from custom_components.hostaway.services.custom_fields import (
@@ -76,11 +76,33 @@ def _listing_with_custom_fields(
     )
 
 
+def _reservation_with_custom_fields(
+    reservation_id: int,
+    custom_field_values: list[dict[str, object]],
+) -> HostawayReservation:
+    """Return a parsed reservation with customFieldValues."""
+    return HostawayReservation.from_api_response(
+        {
+            "id": reservation_id,
+            "listingMapId": 123,
+            "guestName": "Guest",
+            "arrivalDate": "2026-01-01",
+            "departureDate": "2026-01-02",
+            "status": "confirmed",
+            "customFieldValues": custom_field_values,
+        }
+    )
+
+
 async def test_listing_write_rejects_before_reads(hass: HomeAssistant) -> None:
     """Listing writes reject while live safety gate is false."""
     api_client = SimpleNamespace(get_listing=AsyncMock(), update_listing=AsyncMock())
     hass.data.setdefault(DOMAIN, {})["entry-1"] = {
         "api_client": api_client,
+        "custom_fields_coordinator": SimpleNamespace(
+            data=[_definition(2)],
+            last_refresh_succeeded=True,
+        ),
         "custom_field_write_safety": CustomFieldWriteSafetyGates(),
     }
 
@@ -107,6 +129,10 @@ async def test_reservation_write_rejects_before_reads(hass: HomeAssistant) -> No
     )
     hass.data.setdefault(DOMAIN, {})["entry-1"] = {
         "api_client": api_client,
+        "custom_fields_coordinator": SimpleNamespace(
+            data=[_definition(2, "reservation")],
+            last_refresh_succeeded=True,
+        ),
         "custom_field_write_safety": CustomFieldWriteSafetyGates(),
     }
 
@@ -139,6 +165,30 @@ async def test_failed_definitions_refresh_rejects_before_gate(
         ServiceValidationError,
         match="custom field definitions refresh failed",
     ):
+        await async_handle_set_custom_field(
+            hass,
+            {
+                "target_type": "listing",
+                "target_id": 1,
+                "customFieldId": 2,
+                "value": "x",
+            },
+        )
+
+
+async def test_unavailable_definitions_reject_before_gate(
+    hass: HomeAssistant,
+) -> None:
+    """Writes fail closed when no definitions are available."""
+    hass.data.setdefault(DOMAIN, {})["entry-1"] = {
+        "custom_fields_coordinator": SimpleNamespace(
+            data=[],
+            last_refresh_succeeded=True,
+        ),
+        "custom_field_write_safety": CustomFieldWriteSafetyGates(),
+    }
+
+    with pytest.raises(ServiceValidationError, match="definitions are unavailable"):
         await async_handle_set_custom_field(
             hass,
             {
@@ -346,6 +396,58 @@ async def test_get_custom_field_values_direct_read_response(
             "custom_field_99": {
                 "customFieldId": 99,
                 "value": "mystery",
+                "resolved": False,
+            },
+        }
+    }
+
+
+async def test_get_custom_field_values_reservation_response(
+    hass: HomeAssistant,
+) -> None:
+    """Value service supports reservation targets with resolved/unresolved values."""
+    definitions = [_definition(5, "reservation", var_name="cleaner_note")]
+    api_client = SimpleNamespace(
+        get_reservation=AsyncMock(
+            return_value=_reservation_with_custom_fields(
+                456,
+                [
+                    {"customFieldId": 5, "value": "Bring linen"},
+                    {"customFieldId": 99, "value": "Mystery"},
+                ],
+            )
+        )
+    )
+    hass.data.setdefault(DOMAIN, {})["entry-1"] = {
+        "api_client": api_client,
+        "custom_fields_coordinator": SimpleNamespace(data=definitions),
+    }
+
+    result = await async_handle_get_custom_field_values(
+        hass,
+        ServiceCall(
+            hass,
+            DOMAIN,
+            "get_custom_field_values",
+            {"target_type": "reservation", "target_id": 456},
+        ),
+    )
+
+    api_client.get_reservation.assert_awaited_once_with(456)
+    assert result == {
+        "custom_fields": {
+            "custom_field_5": {
+                "customFieldId": 5,
+                "varName": "cleaner_note",
+                "name": "Cleaner Note",
+                "type": "text",
+                "possibleValues": [],
+                "value": "Bring linen",
+                "resolved": True,
+            },
+            "custom_field_99": {
+                "customFieldId": 99,
+                "value": "Mystery",
                 "resolved": False,
             },
         }
