@@ -464,6 +464,117 @@ get_tasks:
         config_entry:
           integration: hostaway
 
+get_custom_fields:
+  name: Get custom fields
+  description: >-
+    Return cached Hostaway custom variable definitions for listing and
+    reservation objects. Task definitions are not returned.
+  fields:
+    config_entry_id:
+      name: Config entry ID
+      description: >-
+        Target a specific Hostaway config entry. Required only when
+        multiple accounts are configured.
+      required: false
+      selector:
+        config_entry:
+          integration: hostaway
+
+get_custom_field_values:
+  name: Get custom field values
+  description: >-
+    Return Hostaway custom variable values for one listing or reservation.
+    The service reads the target directly from Hostaway and includes
+    defined-but-unset fields with a null value.
+  fields:
+    target_type:
+      name: Target type
+      description: Hostaway object type to read.
+      required: true
+      example: "listing"
+      selector:
+        select:
+          options:
+            - "listing"
+            - "reservation"
+    target_id:
+      name: Target ID
+      description: Hostaway listing or reservation ID.
+      required: true
+      example: 12345
+      selector:
+        number:
+          min: 1
+          mode: box
+    config_entry_id:
+      name: Config entry ID
+      description: >-
+        Target a specific Hostaway config entry. Required only when
+        multiple accounts are configured.
+      required: false
+      selector:
+        config_entry:
+          integration: hostaway
+
+set_custom_field:
+  name: Set custom field
+  description: >-
+    Validate a request to set one Hostaway custom variable on a listing or
+    reservation. Writes remain disabled until target-specific safety
+    evidence is recorded; built-in fields such as doorCode are not custom
+    variables.
+  fields:
+    target_type:
+      name: Target type
+      description: Hostaway object type to write.
+      required: true
+      example: "listing"
+      selector:
+        select:
+          options:
+            - "listing"
+            - "reservation"
+    target_id:
+      name: Target ID
+      description: Hostaway listing or reservation ID.
+      required: true
+      example: 12345
+      selector:
+        number:
+          min: 1
+          mode: box
+    customFieldId:
+      name: Custom field ID
+      description: Numeric Hostaway customFieldId. Use exactly one of this
+        field or varName.
+      required: false
+      selector:
+        number:
+          min: 1
+          mode: box
+    varName:
+      name: Variable name
+      description: Hostaway custom variable varName. Use exactly one of this
+        field or customFieldId.
+      required: false
+      selector:
+        text:
+    value:
+      name: Value
+      description: New custom variable value. Use null to clear.
+      required: true
+      selector:
+        object:
+    config_entry_id:
+      name: Config entry ID
+      description: >-
+        Target a specific Hostaway config entry. Required only when
+        multiple accounts are configured.
+      required: false
+      selector:
+        config_entry:
+          integration: hostaway
+
 get_users:
   name: Get users
   description: >-

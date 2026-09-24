@@ -75,8 +75,8 @@ async def async_handle_get_custom_field_values(
     """Return custom-field values for one listing or reservation target."""
     data = _call_data(call)
     target_type = _validate_target_type(data.get("target_type"))
-    target_id = validate_identifier(data.get("target_id"), "target_id")
     entry_data = _resolve_entry_data(hass, data)
+    target_id = validate_identifier(data.get("target_id"), "target_id")
     definitions = _entry_definitions(entry_data)
     collection = await _read_target_collection(entry_data, target_type, target_id)
     return cast(
@@ -100,9 +100,9 @@ async def async_handle_set_custom_field(
     """Reject custom-field writes until live safety verification passes."""
     data = _call_data(call)
     target_type = _validate_target_type(data.get("target_type"))
+    entry_data = _resolve_entry_data(hass, data)
     target_id = validate_identifier(data.get("target_id"), "target_id")
     del target_id
-    entry_data = _resolve_entry_data(hass, data)
     coordinator = entry_data.get("custom_fields_coordinator")
     if coordinator is not None and not getattr(
         coordinator,

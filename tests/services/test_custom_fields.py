@@ -200,6 +200,32 @@ async def test_unavailable_definitions_reject_before_gate(
         )
 
 
+async def test_set_custom_field_resolves_entry_before_target_id(
+    hass: HomeAssistant,
+) -> None:
+    """set_custom_field multi-entry ambiguity fails before target_id validation."""
+    hass.data.setdefault(DOMAIN, {})["entry-1"] = {
+        "custom_fields_coordinator": SimpleNamespace(data=[]),
+    }
+    hass.data[DOMAIN]["entry-2"] = {
+        "custom_fields_coordinator": SimpleNamespace(data=[]),
+    }
+
+    with pytest.raises(
+        ServiceValidationError,
+        match="config_entry_id required when multiple entries exist",
+    ):
+        await async_handle_set_custom_field(
+            hass,
+            {
+                "target_type": "listing",
+                "target_id": True,
+                "customFieldId": 1,
+                "value": "x",
+            },
+        )
+
+
 @pytest.mark.parametrize(
     ("schema", "data"),
     [
@@ -235,6 +261,10 @@ async def test_bool_target_id_rejected_before_resolution(
     hass: HomeAssistant,
 ) -> None:
     """Boolean target identifiers are rejected as invalid."""
+    hass.data.setdefault(DOMAIN, {})["entry-1"] = {
+        "custom_fields_coordinator": SimpleNamespace(data=[_definition(1)])
+    }
+
     with pytest.raises(ValueError, match="target_id"):
         await async_handle_set_custom_field(
             hass,
@@ -339,6 +369,32 @@ async def test_get_custom_fields_fails_closed_for_multiple_entries(
     result_data = cast(dict[str, Any], result)
     custom_fields = cast(list[dict[str, Any]], result_data["custom_fields"])
     assert custom_fields[0]["customFieldId"] == 2
+
+
+async def test_get_custom_field_values_resolves_entry_before_target_id(
+    hass: HomeAssistant,
+) -> None:
+    """Multi-entry ambiguity fails before target_id validation."""
+    hass.data.setdefault(DOMAIN, {})["entry-1"] = {
+        "custom_fields_coordinator": SimpleNamespace(data=[]),
+    }
+    hass.data[DOMAIN]["entry-2"] = {
+        "custom_fields_coordinator": SimpleNamespace(data=[]),
+    }
+
+    with pytest.raises(
+        ServiceValidationError,
+        match="config_entry_id required when multiple entries exist",
+    ):
+        await async_handle_get_custom_field_values(
+            hass,
+            ServiceCall(
+                hass,
+                DOMAIN,
+                "get_custom_field_values",
+                {"target_type": "listing", "target_id": True},
+            ),
+        )
 
 
 async def test_get_custom_field_values_direct_read_response(
