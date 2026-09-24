@@ -256,3 +256,28 @@ class TestListingSensor:
             assert desc.entity_category == EntityCategory.DIAGNOSTIC, (
                 f"{desc.key} missing EntityCategory.DIAGNOSTIC"
             )
+
+    async def test_existing_diagnostics_unchanged_by_custom_fields(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """The seven listing diagnostics keep keys and no custom attributes."""
+        entry = _make_entry(selected=[100])
+        entry.add_to_hass(hass)
+        api_client = AsyncMock()
+        api_client.get_all_listings = AsyncMock(return_value=[_make_listing(100)])
+        coordinator = HostawayListingsCoordinator(hass, entry, api_client)
+        await coordinator.async_refresh()
+
+        assert [description.key for description in LISTING_SENSOR_DESCRIPTIONS] == [
+            "listing_id",
+            "external_name",
+            "status",
+            "base_price",
+            "bedrooms",
+            "bathrooms",
+            "max_guests",
+        ]
+        for description in LISTING_SENSOR_DESCRIPTIONS:
+            sensor = HostawayListingSensor(coordinator, 100, entry, description)
+            assert sensor.extra_state_attributes is None

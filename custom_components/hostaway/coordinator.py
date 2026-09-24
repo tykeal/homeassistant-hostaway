@@ -19,6 +19,8 @@ from homeassistant.helpers.update_coordinator import (
 from custom_components.hostaway.api.custom_fields import (
     HostawayCustomFieldDefinition,
     fetch_custom_field_definitions,
+    lookup_definition_by_id,
+    resolve_var_name,
 )
 from custom_components.hostaway.api.exceptions import (
     HostawayApiError,
@@ -136,6 +138,18 @@ class HostawayCustomFieldsCoordinator(
             if definition.custom_field_id == custom_field_id:
                 return definition
         return None
+
+    def require_definition(
+        self, custom_field_id: int, object_type: str
+    ) -> HostawayCustomFieldDefinition:
+        """Return a cached definition or raise a definition error."""
+        return lookup_definition_by_id(self.data or [], custom_field_id, object_type)
+
+    def resolve_var_name(
+        self, var_name: str, object_type: str
+    ) -> HostawayCustomFieldDefinition:
+        """Resolve a varName against cached definitions for one object type."""
+        return resolve_var_name(self.data or [], var_name, object_type)
 
 
 class HostawayListingsCoordinator(

@@ -9,6 +9,10 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from custom_components.hostaway.api.custom_fields import (
+    RESERVATION_OBJECT_TYPE,
+    HostawayCustomFieldDefinition,
+)
 from custom_components.hostaway.api.models import HostawayReservation
 
 _LOGGER = logging.getLogger(__name__)
@@ -130,6 +134,7 @@ def _build_reservation_attributes(
     reservation: HostawayReservation | None,
     all_reservations: list[HostawayReservation],
     listing_id: int,
+    definitions: list[HostawayCustomFieldDefinition] | None = None,
 ) -> dict[str, Any]:
     """Build extra_state_attributes for the reservation sensor.
 
@@ -171,6 +176,7 @@ def _build_reservation_attributes(
             "confirmation_code": None,
             "listing_id": listing_id,
             "upcoming_reservations": upcoming,
+            "custom_fields": {},
         }
 
     return {
@@ -186,4 +192,41 @@ def _build_reservation_attributes(
         "confirmation_code": reservation.confirmation_code,
         "listing_id": listing_id,
         "upcoming_reservations": upcoming,
+        "custom_fields": _reservation_custom_fields(reservation, definitions or []),
     }
+
+
+def _reservation_custom_fields(
+    reservation: HostawayReservation,
+    definitions: list[HostawayCustomFieldDefinition],
+) -> dict[str, dict[str, Any]]:
+    """Return reservation custom-field attributes keyed by customFieldId."""
+    definition_by_id = {
+        definition.custom_field_id: definition
+        for definition in definitions
+        if definition.object_type == RESERVATION_OBJECT_TYPE
+    }
+    collection = reservation.custom_field_collection
+    if collection is None:
+        return {}
+    result: dict[str, dict[str, Any]] = {}
+    for custom_field_id, field_value in collection.values.items():
+        key = f"custom_field_{custom_field_id}"
+        definition = definition_by_id.get(custom_field_id)
+        if definition is None:
+            result[key] = {
+                "customFieldId": custom_field_id,
+                "value": field_value.value,
+                "resolved": False,
+            }
+            continue
+        result[key] = {
+            "customFieldId": custom_field_id,
+            "varName": definition.var_name,
+            "name": definition.name,
+            "type": definition.field_type,
+            "possibleValues": list(definition.possible_values),
+            "value": field_value.value,
+            "resolved": True,
+        }
+    return result
