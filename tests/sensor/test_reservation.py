@@ -7,11 +7,14 @@
 from __future__ import annotations
 
 import logging
+from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import AsyncMock
 
 import pytest
 from homeassistant.core import HomeAssistant
 
+from custom_components.hostaway.api.custom_fields import HostawayCustomFieldDefinition
 from custom_components.hostaway.const import CONF_FILTER_CANCELLED, DOMAIN
 from custom_components.hostaway.coordinator import (
     HostawayListingsCoordinator,
@@ -27,6 +30,25 @@ from custom_components.hostaway.sensor.reservation import (
     HostawayReservationStatusSensor,
 )
 from tests.sensor.conftest import _make_entry, _make_listing, _make_reservation
+
+
+def _custom_definition(custom_field_id: int) -> HostawayCustomFieldDefinition:
+    """Return a reservation custom-field definition fixture."""
+    parsed = HostawayCustomFieldDefinition.from_api_dict(
+        {
+            "id": custom_field_id,
+            "accountId": 1,
+            "name": "Cleaner Note",
+            "varName": "cleaner_note",
+            "possibleValues": [],
+            "type": "textarea",
+            "objectType": "reservation",
+            "isPublic": 0,
+            "sortOrder": 1,
+        }
+    )
+    assert parsed is not None
+    return parsed
 
 
 class TestSelectReservation:
@@ -273,6 +295,46 @@ class TestBuildReservationAttributes:
         assert attrs["listing_id"] == 100
         assert attrs["upcoming_reservations"] == []
 
+    async def test_sensor_listens_for_definition_refresh(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Reservation sensor subscribes to definition metadata refreshes."""
+        entry = _make_entry(selected=[100])
+        entry.add_to_hass(hass)
+        api = AsyncMock()
+        api.get_all_reservations = AsyncMock(return_value=[])
+        listings_api = AsyncMock()
+        listings_api.get_all_listings = AsyncMock(return_value=[_make_listing(100)])
+        l_coord = HostawayListingsCoordinator(hass, entry, listings_api)
+        r_coord = HostawayReservationsCoordinator(hass, entry, api)
+        listeners: list[object] = []
+
+        def _async_add_listener(listener: object) -> object:
+            """Capture a definitions coordinator listener."""
+            listeners.append(listener)
+            return lambda: None
+
+        definitions_coord = SimpleNamespace(
+            data=[],
+            async_add_listener=_async_add_listener,
+        )
+        sensor = HostawayReservationStatusSensor(
+            r_coord,
+            l_coord,
+            100,
+            entry,
+            cast(Any, definitions_coord),
+        )
+        sensor.hass = hass
+
+        await sensor.async_added_to_hass()
+
+        assert listeners == [sensor.async_write_ha_state]
+        await l_coord.async_shutdown()
+        await r_coord.async_shutdown()
+        assert listeners == [sensor.async_write_ha_state]
+
     def test_attributes_include_all_fr_r04_fields(self) -> None:
         """Attributes include all FR-R04 required fields."""
         res = _make_reservation(
@@ -299,6 +361,49 @@ class TestBuildReservationAttributes:
         assert attrs["num_guests"] == 2
         assert attrs["confirmation_code"] == "XYZ789"
         assert attrs["listing_id"] == 100
+        assert attrs["custom_fields"] == {}
+
+    def test_attributes_include_reservation_custom_fields(self) -> None:
+        """Reservation attributes include resolved and unresolved custom fields."""
+        res = _make_reservation()
+        parsed = type(res).from_api_response(
+            {
+                "id": res.id,
+                "listingMapId": res.listing_id,
+                "guestName": res.guest_name,
+                "arrivalDate": res.check_in,
+                "departureDate": res.check_out,
+                "status": res.status,
+                "customFieldValues": [
+                    {"customFieldId": 8, "value": "Bring linen"},
+                    {"customFieldId": 9, "value": "Unknown"},
+                ],
+            }
+        )
+
+        attrs = _build_reservation_attributes(
+            parsed,
+            [parsed],
+            100,
+            [_custom_definition(8)],
+        )
+
+        assert attrs["custom_fields"] == {
+            "custom_field_8": {
+                "customFieldId": 8,
+                "varName": "cleaner_note",
+                "name": "Cleaner Note",
+                "type": "textarea",
+                "possibleValues": [],
+                "value": "Bring linen",
+                "resolved": True,
+            },
+            "custom_field_9": {
+                "customFieldId": 9,
+                "value": "Unknown",
+                "resolved": False,
+            },
+        }
 
     def test_upcoming_reservations_preserve_order(self) -> None:
         """upcoming_reservations preserves input order."""

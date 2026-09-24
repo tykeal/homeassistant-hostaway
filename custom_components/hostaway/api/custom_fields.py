@@ -7,7 +7,9 @@
 
 from __future__ import annotations
 
+import json
 import logging
+from collections import Counter
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol, TypeGuard
@@ -85,6 +87,12 @@ def _possible_values(value: Any) -> list[str]:
     if value is None:
         return []
     if isinstance(value, str):
+        try:
+            decoded = json.loads(value)
+        except json.JSONDecodeError:
+            decoded = None
+        if isinstance(decoded, list):
+            return [item for item in decoded if isinstance(item, str)]
         return [part.strip() for part in value.split(",") if part.strip()]
     if isinstance(value, list):
         return [item for item in value if isinstance(item, str)]
@@ -273,6 +281,113 @@ class CustomFieldWriteGenerationRegistry:
 
 class CustomFieldMergeError(ValueError):
     """Raised when a custom-field write payload cannot be safely built."""
+
+
+class CustomFieldDefinitionError(ValueError):
+    """Raised when a custom-field definition cannot be resolved safely."""
+
+
+def _normalize_object_type(object_type: str) -> str:
+    """Validate and return a supported Hostaway custom-field object type."""
+    if object_type not in SUPPORTED_OBJECT_TYPES:
+        msg = "object_type must be listing or reservation"
+        raise CustomFieldDefinitionError(msg)
+    return object_type
+
+
+def _definition_matches(
+    definition: HostawayCustomFieldDefinition,
+    object_type: str,
+) -> bool:
+    """Return whether a definition belongs to an object type."""
+    return definition.object_type == object_type
+
+
+def lookup_definition_by_id(
+    definitions: Iterable[HostawayCustomFieldDefinition],
+    custom_field_id: int,
+    object_type: str,
+) -> HostawayCustomFieldDefinition:
+    """Return a custom-field definition by id scoped to one object type."""
+    object_type = _normalize_object_type(object_type)
+    custom_field_id = validate_identifier(custom_field_id, "customFieldId")
+    for definition in definitions:
+        if (
+            definition.custom_field_id == custom_field_id
+            and definition.object_type == object_type
+        ):
+            return definition
+    msg = f"unknown {object_type} customFieldId {custom_field_id}"
+    raise CustomFieldDefinitionError(msg)
+
+
+def resolve_var_name(
+    definitions: Iterable[HostawayCustomFieldDefinition],
+    var_name: str,
+    object_type: str,
+) -> HostawayCustomFieldDefinition:
+    """Resolve one varName to a definition scoped to one object type."""
+    object_type = _normalize_object_type(object_type)
+    if not isinstance(var_name, str) or not var_name:
+        msg = "varName must be a non-empty string"
+        raise CustomFieldDefinitionError(msg)
+    matches = [
+        definition
+        for definition in definitions
+        if _definition_matches(definition, object_type)
+        and definition.var_name == var_name
+    ]
+    if not matches:
+        msg = f"unknown {object_type} custom-field varName {var_name!r}"
+        raise CustomFieldDefinitionError(msg)
+    if len(matches) > 1:
+        msg = f"ambiguous {object_type} custom-field varName {var_name!r}"
+        raise CustomFieldDefinitionError(msg)
+    return matches[0]
+
+
+def var_name_slug_counts(
+    definitions: Iterable[HostawayCustomFieldDefinition],
+    slugifier: Callable[[str], str],
+) -> Counter[str]:
+    """Return slug occurrence counts for a definition sequence."""
+    return Counter(slugifier(definition.var_name) for definition in definitions)
+
+
+def var_name_counts(
+    definitions: Iterable[HostawayCustomFieldDefinition],
+) -> Counter[str]:
+    """Return varName occurrence counts for a definition sequence."""
+    return Counter(definition.var_name for definition in definitions)
+
+
+def validate_custom_field_value(
+    definition: HostawayCustomFieldDefinition,
+    value: Any,
+) -> Any:
+    """Validate and normalize a custom-field value for local known types."""
+    if value is None:
+        return None
+    if definition.field_type in {"text", "textarea"}:
+        if not isinstance(value, str):
+            msg = f"{definition.var_name} requires a string value"
+            raise CustomFieldDefinitionError(msg)
+        return value
+    if definition.field_type == "number":
+        if isinstance(value, bool) or not isinstance(value, int | float):
+            msg = f"{definition.var_name} requires a non-boolean number value"
+            raise CustomFieldDefinitionError(msg)
+        return value
+    if definition.field_type == "dropdown":
+        if not isinstance(value, str):
+            msg = f"{definition.var_name} requires a dropdown string value"
+            raise CustomFieldDefinitionError(msg)
+        normalized = value.strip()
+        if normalized not in definition.possible_values:
+            msg = f"{definition.var_name} must be one of possibleValues"
+            raise CustomFieldDefinitionError(msg)
+        return normalized
+    return value
 
 
 async def fetch_custom_field_definitions(

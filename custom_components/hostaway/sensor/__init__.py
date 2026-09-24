@@ -12,6 +12,11 @@ from homeassistant.components.sensor import SensorEntity
 
 from custom_components.hostaway.const import DOMAIN
 
+from .custom_fields import (
+    CustomFieldDiscoveryState,
+    ListingCustomFieldKeyAllocation,
+    extend_custom_field_entities,
+)
 from .listing import LISTING_SENSOR_DESCRIPTIONS, HostawayListingSensor
 from .reservation import HostawayReservationStatusSensor
 
@@ -37,8 +42,25 @@ async def async_setup_entry(
     reservations_coordinator: HostawayReservationsCoordinator = data[
         "reservations_coordinator"
     ]
+    custom_fields_coordinator = data.get("custom_fields_coordinator")
     entities: list[SensorEntity] = []
     known_listing_ids: set[int] = set()
+    known_custom_fields: set[tuple[int, int]] = set()
+    allocations: dict[int, ListingCustomFieldKeyAllocation] = data.setdefault(
+        "custom_field_key_allocations",
+        {},
+    )
+    custom_field_state = CustomFieldDiscoveryState(
+        hass=hass,
+        entry=entry,
+        listings_coordinator=listings_coordinator,
+        custom_fields_coordinator=custom_fields_coordinator,
+        allocations=allocations,
+        known_custom_fields=known_custom_fields,
+        reserved_keys=tuple(
+            description.key for description in LISTING_SENSOR_DESCRIPTIONS
+        ),
+    )
 
     if listings_coordinator.data:
         for listing_id in listings_coordinator.data:
@@ -58,7 +80,13 @@ async def async_setup_entry(
                     listings_coordinator,
                     listing_id,
                     entry,
+                    custom_fields_coordinator,
                 )
+            )
+            extend_custom_field_entities(
+                custom_field_state,
+                entities,
+                listing_id,
             )
 
     async_add_entities(entities)
@@ -86,8 +114,15 @@ async def async_setup_entry(
                         listings_coordinator,
                         listing_id,
                         entry,
+                        custom_fields_coordinator,
                     )
                 )
+        for listing_id in listings_coordinator.data:
+            extend_custom_field_entities(
+                custom_field_state,
+                new_entities,
+                listing_id,
+            )
         if new_entities:
             async_add_entities(new_entities)
 

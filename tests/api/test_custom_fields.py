@@ -14,6 +14,7 @@ import pytest
 
 from custom_components.hostaway.api.custom_fields import (
     CUSTOM_FIELD_PAGE_LIMIT,
+    CustomFieldDefinitionError,
     CustomFieldMergeError,
     CustomFieldWriteSafetyGates,
     HostawayCustomFieldCollection,
@@ -21,8 +22,11 @@ from custom_components.hostaway.api.custom_fields import (
     HostawayCustomFieldValue,
     build_custom_field_values_payload,
     fetch_custom_field_definitions,
+    lookup_definition_by_id,
     read_listing_with_custom_fields,
     read_reservation_with_custom_fields,
+    resolve_var_name,
+    validate_custom_field_value,
     validate_identifier,
 )
 
@@ -76,6 +80,16 @@ def test_definition_parses_listing_hidden_dropdown() -> None:
     assert parsed.possible_values == ["A", "B"]
     assert parsed.is_public is False
     assert parsed.as_service_dict()["customFieldId"] == 12
+
+
+def test_definition_decodes_json_possible_values() -> None:
+    """Definition parser decodes Hostaway JSON dropdown possibleValues."""
+    parsed = HostawayCustomFieldDefinition.from_api_dict(
+        _definition(type="dropdown", possibleValues='["A", "B"]')
+    )
+
+    assert parsed is not None
+    assert parsed.possible_values == ["A", "B"]
 
 
 def test_definition_ignores_task_and_preserves_unknown_type() -> None:
@@ -249,3 +263,90 @@ async def test_direct_reads_include_resources() -> None:
 
     assert request.await_args_list[0].kwargs["params"] == {"includeResources": 1}
     assert request.await_args_list[1].kwargs["params"] == {"includeResources": 1}
+
+
+def test_malformed_value_warning_redacts_raw_value(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Malformed value logs skip presentation while preserving raw data."""
+    raw = {"customFieldId": True, "value": "secret-gate-code"}
+
+    with caplog.at_level("WARNING"):
+        collection = HostawayCustomFieldCollection.from_object(
+            {"customFieldValues": [raw, {"customFieldId": 9, "value": "ok"}]}
+        )
+
+    assert collection.values[9].value == "ok"
+    assert collection.raw_entries[0] == raw
+    assert collection.malformed_entries == [raw]
+    assert "secret-gate-code" not in caplog.text
+
+
+def test_definition_lookup_scopes_by_object_type() -> None:
+    """Definition lookup resolves ids only for the requested object type."""
+    listing = HostawayCustomFieldDefinition.from_api_dict(_definition(id=1))
+    reservation = HostawayCustomFieldDefinition.from_api_dict(
+        _definition(id=1, objectType="reservation", varName="door_note")
+    )
+    assert listing is not None
+    assert reservation is not None
+    definitions = [listing, reservation]
+
+    assert lookup_definition_by_id(definitions, 1, "listing") is listing
+    assert lookup_definition_by_id(definitions, 1, "reservation") is reservation
+    with pytest.raises(CustomFieldDefinitionError, match="unknown"):
+        lookup_definition_by_id(definitions, 2, "listing")
+
+
+def test_resolve_var_name_rejects_ambiguous_and_unknown() -> None:
+    """varName resolution is scoped and rejects ambiguous matches."""
+    first = HostawayCustomFieldDefinition.from_api_dict(_definition(id=1))
+    second = HostawayCustomFieldDefinition.from_api_dict(_definition(id=2))
+    reservation = HostawayCustomFieldDefinition.from_api_dict(
+        _definition(id=3, objectType="reservation")
+    )
+    assert first is not None
+    assert second is not None
+    assert reservation is not None
+
+    assert resolve_var_name([first, reservation], "parking_bay", "listing") is first
+    with pytest.raises(CustomFieldDefinitionError, match="ambiguous"):
+        resolve_var_name([first, second], "parking_bay", "listing")
+    with pytest.raises(CustomFieldDefinitionError, match="unknown"):
+        resolve_var_name([reservation], "parking_bay", "listing")
+
+
+@pytest.mark.parametrize(
+    ("field_type", "possible_values", "good", "bad"),
+    [
+        ("text", [], "hello", 1),
+        ("textarea", [], "hello", 1),
+        ("number", [], 1.5, True),
+        ("dropdown", ["A", "B"], " A ", "C"),
+    ],
+)
+def test_validate_custom_field_value_known_types(
+    field_type: str,
+    possible_values: list[str],
+    good: object,
+    bad: object,
+) -> None:
+    """Known custom-field types validate locally before writes."""
+    definition = HostawayCustomFieldDefinition.from_api_dict(
+        _definition(type=field_type, possibleValues=possible_values)
+    )
+    assert definition is not None
+
+    expected = "A" if field_type == "dropdown" else good
+    assert validate_custom_field_value(definition, good) == expected
+    assert validate_custom_field_value(definition, None) is None
+    with pytest.raises(CustomFieldDefinitionError):
+        validate_custom_field_value(definition, bad)
+
+
+def test_validate_custom_field_value_future_type_passthrough() -> None:
+    """Unknown future field types pass through for Hostaway validation."""
+    definition = HostawayCustomFieldDefinition.from_api_dict(_definition(type="json"))
+    assert definition is not None
+
+    assert validate_custom_field_value(definition, {"x": 1}) == {"x": 1}

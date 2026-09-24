@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
 
     from custom_components.hostaway.coordinator import (
+        HostawayCustomFieldsCoordinator,
         HostawayListingsCoordinator,
         HostawayReservationsCoordinator,
     )
@@ -72,6 +73,7 @@ class HostawayReservationStatusSensor(
         listings_coordinator: HostawayListingsCoordinator,
         listing_id: int,
         entry: ConfigEntry,
+        custom_fields_coordinator: HostawayCustomFieldsCoordinator | None = None,
     ) -> None:
         """Initialize the reservation status sensor.
 
@@ -80,14 +82,26 @@ class HostawayReservationStatusSensor(
             listings_coordinator: Listings coordinator for device info.
             listing_id: The listing ID to monitor.
             entry: The config entry.
+            custom_fields_coordinator: Optional definitions coordinator.
         """
         super().__init__(coordinator)
         self._listing_id = listing_id
         self._listings_coordinator = listings_coordinator
+        self._custom_fields_coordinator = custom_fields_coordinator
         self._entry = entry
         self._entry_unique_id = entry.unique_id
         self._attr_unique_id = f"{entry.unique_id}_{listing_id}_reservation_status"
         self._attr_translation_key = "reservation_status"
+
+    async def async_added_to_hass(self) -> None:
+        """Subscribe to custom-field definition refreshes for attributes."""
+        await super().async_added_to_hass()
+        if self._custom_fields_coordinator is not None:
+            self.async_on_remove(
+                self._custom_fields_coordinator.async_add_listener(
+                    self.async_write_ha_state,
+                )
+            )
 
     @property
     def _filter_cancelled(self) -> bool:
@@ -159,10 +173,16 @@ class HostawayReservationStatusSensor(
         """
         reservations = self._reservations
         selected = _select_reservation(reservations)
+        definitions = (
+            self._custom_fields_coordinator.data
+            if self._custom_fields_coordinator is not None
+            else []
+        )
         return _build_reservation_attributes(
             selected,
             reservations,
             self._listing_id,
+            definitions,
         )
 
     @property

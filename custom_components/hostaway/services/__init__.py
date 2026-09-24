@@ -20,6 +20,11 @@ from homeassistant.core import (
 
 from custom_components.hostaway.const import DOMAIN
 
+from .custom_fields import (
+    async_handle_get_custom_field_values,
+    async_handle_get_custom_fields,
+    async_handle_set_custom_field,
+)
 from .lookup_handlers import async_handle_get_groups, async_handle_get_users
 from .reservation_handlers import (
     async_handle_find_reservation,
@@ -30,10 +35,13 @@ from .schemas import (
     SERVICE_CREATE_TASK_SCHEMA,
     SERVICE_DELETE_TASK_SCHEMA,
     SERVICE_FIND_RESERVATION_SCHEMA,
+    SERVICE_GET_CUSTOM_FIELD_VALUES_SCHEMA,
+    SERVICE_GET_CUSTOM_FIELDS_SCHEMA,
     SERVICE_GET_GROUPS_SCHEMA,
     SERVICE_GET_RESERVATIONS_SCHEMA,
     SERVICE_GET_TASKS_SCHEMA,
     SERVICE_GET_USERS_SCHEMA,
+    SERVICE_SET_CUSTOM_FIELD_SCHEMA,
     SERVICE_SET_DOOR_CODE_SCHEMA,
     SERVICE_UPDATE_TASK_SCHEMA,
 )
@@ -115,6 +123,24 @@ SERVICE_DEFINITIONS: tuple[ServiceDefinition, ...] = (
         async_handle_get_tasks,
         SERVICE_GET_TASKS_SCHEMA,
         SupportsResponse.ONLY,
+    ),
+    ServiceDefinition(
+        "get_custom_fields",
+        async_handle_get_custom_fields,
+        SERVICE_GET_CUSTOM_FIELDS_SCHEMA,
+        SupportsResponse.ONLY,
+    ),
+    ServiceDefinition(
+        "get_custom_field_values",
+        async_handle_get_custom_field_values,
+        SERVICE_GET_CUSTOM_FIELD_VALUES_SCHEMA,
+        SupportsResponse.ONLY,
+    ),
+    ServiceDefinition(
+        "set_custom_field",
+        async_handle_set_custom_field,
+        SERVICE_SET_CUSTOM_FIELD_SCHEMA,
+        SupportsResponse.OPTIONAL,
     ),
     ServiceDefinition(
         "get_users",

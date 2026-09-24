@@ -136,18 +136,21 @@ async def async_setup_entry(
     )
 
     hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][entry.entry_id] = {
-        "token_manager": token_manager,
-        "api_client": api_client,
-        "listings_coordinator": listings_coordinator,
-        "reservations_coordinator": reservations_coordinator,
-        "custom_fields_coordinator": custom_fields_coordinator,
-        "custom_fields_update_unsub": custom_fields_update_unsub,
-        "custom_fields_initial_refresh_unsub": custom_fields_initial_refresh_unsub,
-        "custom_field_write_safety": CustomFieldWriteSafetyGates(),
-        "custom_field_write_locks": CustomFieldWriteLockRegistry(),
-        "custom_field_write_generations": CustomFieldWriteGenerationRegistry(),
-    }
+    entry_data = hass.data[DOMAIN].setdefault(entry.entry_id, {})
+    entry_data.update(
+        {
+            "token_manager": token_manager,
+            "api_client": api_client,
+            "listings_coordinator": listings_coordinator,
+            "reservations_coordinator": reservations_coordinator,
+            "custom_fields_coordinator": custom_fields_coordinator,
+            "custom_fields_update_unsub": custom_fields_update_unsub,
+            "custom_fields_initial_refresh_unsub": custom_fields_initial_refresh_unsub,
+            "custom_field_write_safety": CustomFieldWriteSafetyGates(),
+            "custom_field_write_locks": CustomFieldWriteLockRegistry(),
+            "custom_field_write_generations": CustomFieldWriteGenerationRegistry(),
+        }
+    )
 
     # Register services (idempotent, safe for multi-entry)
     from custom_components.hostaway.services import async_setup_services
