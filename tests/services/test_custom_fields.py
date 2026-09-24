@@ -392,6 +392,44 @@ async def test_get_custom_field_values_reuses_persisted_listing_keys(
     assert allocation.field_to_key == {1: "custom_field_1"}
 
 
+async def test_get_custom_field_values_preserves_response_key_reservations(
+    hass: HomeAssistant,
+) -> None:
+    """Listing value-service suffixes collisions across one response."""
+    definitions = [_definition(1, var_name="field_2")]
+    request = AsyncMock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "status": "success",
+                "result": {
+                    "id": 123,
+                    "customFieldValues": [{"customFieldId": 2, "value": "raw"}],
+                },
+            },
+        )
+    )
+    hass.data.setdefault(DOMAIN, {})["entry-1"] = {
+        "api_client": SimpleNamespace(_request=request),
+        "custom_fields_coordinator": SimpleNamespace(data=definitions),
+    }
+
+    result = await async_handle_get_custom_field_values(
+        hass,
+        ServiceCall(
+            hass,
+            DOMAIN,
+            "get_custom_field_values",
+            {"target_type": "listing", "target_id": 123},
+        ),
+    )
+
+    result_data = cast(dict[str, Any], result)
+    custom_fields = cast(dict[str, Any], result_data["custom_fields"])
+    assert custom_fields["custom_field_2"]["customFieldId"] == 1
+    assert custom_fields["custom_field_2_2"]["customFieldId"] == 2
+
+
 async def test_get_custom_field_values_missing_target_error(
     hass: HomeAssistant,
 ) -> None:

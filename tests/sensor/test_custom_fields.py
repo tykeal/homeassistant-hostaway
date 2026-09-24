@@ -146,6 +146,7 @@ async def test_listing_custom_field_sensor_resolved_and_unresolved(
     )
 
     assert resolved.native_value == "A1"
+    assert resolved.suggested_object_id == "hostaway_beach_house_custom_parking_bay"
     assert resolved.extra_state_attributes == {
         "customFieldId": 9,
         "varName": "parking_bay",

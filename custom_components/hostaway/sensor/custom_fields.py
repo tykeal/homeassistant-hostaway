@@ -209,6 +209,11 @@ class HostawayListingCustomFieldSensor(HostawayEntity, SensorEntity):
         )
         self._attr_translation_key = "listing_custom_field"
         self._attr_name = allocated_key.replace("_", " ").title()
+        self._suggested_object_id: str | None = None
+        listing = coordinator.data.get(listing_id) if coordinator.data else None
+        if listing is not None:
+            listing_slug = slugify(listing.internal_name or listing.name)
+            self._suggested_object_id = f"hostaway_{listing_slug}_{allocated_key}"
 
     @property
     def custom_field_id(self) -> int:
@@ -219,6 +224,11 @@ class HostawayListingCustomFieldSensor(HostawayEntity, SensorEntity):
     def allocated_key(self) -> str:
         """Return the stable per-listing custom-field key."""
         return self._allocated_key
+
+    @property
+    def suggested_object_id(self) -> str | None:
+        """Return the stable suggested object id for this custom-field sensor."""
+        return self._suggested_object_id
 
     @property
     def _definition(self) -> HostawayCustomFieldDefinition | None:

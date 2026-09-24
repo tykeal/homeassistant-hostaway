@@ -44,6 +44,7 @@ class _ValueResponseContext:
     target_type: str
     target_id: int
     definitions: list[HostawayCustomFieldDefinition]
+    allocation: ListingCustomFieldKeyAllocation | None = None
 
 
 def _call_data(call: ServiceCall | dict[str, Any]) -> dict[str, Any]:
@@ -189,12 +190,12 @@ def _custom_field_values_response(
     custom_field_ids = set(definition_by_id)
     custom_field_ids.update(collection.values)
     result: dict[str, dict[str, Any]] = {}
-    context = _ValueResponseContext(
-        hass=hass,
-        entry_data=entry_data,
-        target_type=target_type,
-        target_id=target_id,
-        definitions=object_definitions,
+    context = _value_response_context(
+        hass,
+        entry_data,
+        target_type,
+        target_id,
+        object_definitions,
     )
     for custom_field_id in sorted(custom_field_ids):
         definition = definition_by_id.get(custom_field_id)
@@ -231,13 +232,38 @@ def _response_key(
     """Return a response key for listing or reservation custom-field values."""
     if context.target_type == RESERVATION_OBJECT_TYPE:
         return f"custom_field_{custom_field_id}"
-    allocation = _listing_allocation(
-        context.hass,
-        context.entry_data,
-        context.target_id,
+    if context.allocation is None:
+        raise ServiceValidationError("Listing key allocation is not available")
+    return context.allocation.allocate(
+        custom_field_id,
+        definition,
+        context.definitions,
     )
-    preview = allocation.clone()
-    return preview.allocate(custom_field_id, definition, context.definitions)
+
+
+def _value_response_context(
+    hass: HomeAssistant,
+    entry_data: dict[str, Any],
+    target_type: str,
+    target_id: int,
+    definitions: list[HostawayCustomFieldDefinition],
+) -> _ValueResponseContext:
+    """Return response context with one non-mutating listing allocation."""
+    allocation = None
+    if target_type == LISTING_OBJECT_TYPE:
+        allocation = _listing_allocation(
+            hass,
+            entry_data,
+            target_id,
+        ).clone()
+    return _ValueResponseContext(
+        hass=hass,
+        entry_data=entry_data,
+        target_type=target_type,
+        target_id=target_id,
+        definitions=definitions,
+        allocation=allocation,
+    )
 
 
 def _listing_allocation(
