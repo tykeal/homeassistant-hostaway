@@ -10,7 +10,6 @@ from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock
 
-import httpx
 import pytest
 import voluptuous as vol
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
@@ -21,6 +20,8 @@ from custom_components.hostaway.api.custom_fields import (
     CustomFieldWriteSafetyGates,
     HostawayCustomFieldDefinition,
 )
+from custom_components.hostaway.api.exceptions import HostawayResponseError
+from custom_components.hostaway.api.models import HostawayListing
 from custom_components.hostaway.const import DOMAIN
 from custom_components.hostaway.services import SERVICE_DEFINITIONS
 from custom_components.hostaway.services.custom_fields import (
@@ -59,6 +60,20 @@ def _definition(
     )
     assert parsed is not None
     return parsed
+
+
+def _listing_with_custom_fields(
+    listing_id: int,
+    custom_field_values: list[dict[str, object]],
+) -> HostawayListing:
+    """Return a parsed listing with customFieldValues."""
+    return HostawayListing.from_api_response(
+        {
+            "id": listing_id,
+            "name": "Beach House",
+            "customFieldValues": custom_field_values,
+        }
+    )
 
 
 async def test_listing_write_rejects_before_reads(hass: HomeAssistant) -> None:
@@ -281,23 +296,19 @@ async def test_get_custom_field_values_direct_read_response(
 ) -> None:
     """Value service direct reads and returns resolved/unset/unresolved fields."""
     definitions = [_definition(1), _definition(2)]
-    request = AsyncMock(
-        return_value=httpx.Response(
-            200,
-            json={
-                "status": "success",
-                "result": {
-                    "id": 123,
-                    "customFieldValues": [
-                        {"customFieldId": 1, "value": "A1"},
-                        {"customFieldId": 99, "value": "mystery"},
-                    ],
-                },
-            },
+    api_client = SimpleNamespace(
+        get_listing=AsyncMock(
+            return_value=_listing_with_custom_fields(
+                123,
+                [
+                    {"customFieldId": 1, "value": "A1"},
+                    {"customFieldId": 99, "value": "mystery"},
+                ],
+            )
         )
     )
     hass.data.setdefault(DOMAIN, {})["entry-1"] = {
-        "api_client": SimpleNamespace(_request=request),
+        "api_client": api_client,
         "custom_fields_coordinator": SimpleNamespace(data=definitions),
     }
 
@@ -311,9 +322,7 @@ async def test_get_custom_field_values_direct_read_response(
         ),
     )
 
-    request.assert_awaited_once()
-    assert request.await_args is not None
-    assert request.await_args.kwargs["params"] == {"includeResources": 1}
+    api_client.get_listing.assert_awaited_once_with(123)
     assert result == {
         "custom_fields": {
             "custom_parking_bay_1": {
@@ -356,20 +365,16 @@ async def test_get_custom_field_values_reuses_persisted_listing_keys(
         "client-id_123_custom_field_1_custom_field_1",
         suggested_object_id="hostaway_beach_custom_field_1",
     )
-    request = AsyncMock(
-        return_value=httpx.Response(
-            200,
-            json={
-                "status": "success",
-                "result": {
-                    "id": 123,
-                    "customFieldValues": [{"customFieldId": 1, "value": "A1"}],
-                },
-            },
+    api_client = SimpleNamespace(
+        get_listing=AsyncMock(
+            return_value=_listing_with_custom_fields(
+                123,
+                [{"customFieldId": 1, "value": "A1"}],
+            )
         )
     )
     hass.data.setdefault(DOMAIN, {})["entry-1"] = {
-        "api_client": SimpleNamespace(_request=request),
+        "api_client": api_client,
         "custom_fields_coordinator": SimpleNamespace(data=definitions),
         "listings_coordinator": SimpleNamespace(config_entry=entry),
     }
@@ -397,20 +402,16 @@ async def test_get_custom_field_values_preserves_response_key_reservations(
 ) -> None:
     """Listing value-service suffixes collisions across one response."""
     definitions = [_definition(1, var_name="field_2")]
-    request = AsyncMock(
-        return_value=httpx.Response(
-            200,
-            json={
-                "status": "success",
-                "result": {
-                    "id": 123,
-                    "customFieldValues": [{"customFieldId": 2, "value": "raw"}],
-                },
-            },
+    api_client = SimpleNamespace(
+        get_listing=AsyncMock(
+            return_value=_listing_with_custom_fields(
+                123,
+                [{"customFieldId": 2, "value": "raw"}],
+            )
         )
     )
     hass.data.setdefault(DOMAIN, {})["entry-1"] = {
-        "api_client": SimpleNamespace(_request=request),
+        "api_client": api_client,
         "custom_fields_coordinator": SimpleNamespace(data=definitions),
     }
 
@@ -434,14 +435,11 @@ async def test_get_custom_field_values_missing_target_error(
     hass: HomeAssistant,
 ) -> None:
     """Inaccessible targets raise clear target errors."""
-    request = AsyncMock(
-        return_value=httpx.Response(
-            404,
-            json={"status": "fail", "message": "not found"},
-        )
+    api_client = SimpleNamespace(
+        get_listing=AsyncMock(side_effect=HostawayResponseError("not found"))
     )
     hass.data.setdefault(DOMAIN, {})["entry-1"] = {
-        "api_client": SimpleNamespace(_request=request),
+        "api_client": api_client,
         "custom_fields_coordinator": SimpleNamespace(data=[]),
     }
 

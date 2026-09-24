@@ -82,6 +82,16 @@ def test_definition_parses_listing_hidden_dropdown() -> None:
     assert parsed.as_service_dict()["customFieldId"] == 12
 
 
+def test_definition_decodes_json_possible_values() -> None:
+    """Definition parser decodes Hostaway JSON dropdown possibleValues."""
+    parsed = HostawayCustomFieldDefinition.from_api_dict(
+        _definition(type="dropdown", possibleValues='["A", "B"]')
+    )
+
+    assert parsed is not None
+    assert parsed.possible_values == ["A", "B"]
+
+
 def test_definition_ignores_task_and_preserves_unknown_type() -> None:
     """Task definitions are ignored and future field types are preserved."""
     assert (

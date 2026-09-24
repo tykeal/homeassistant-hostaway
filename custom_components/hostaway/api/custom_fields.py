@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from collections import Counter
 from collections.abc import Awaitable, Callable, Iterable, Mapping
@@ -86,6 +87,12 @@ def _possible_values(value: Any) -> list[str]:
     if value is None:
         return []
     if isinstance(value, str):
+        try:
+            decoded = json.loads(value)
+        except json.JSONDecodeError:
+            decoded = None
+        if isinstance(decoded, list):
+            return [item for item in decoded if isinstance(item, str)]
         return [part.strip() for part in value.split(",") if part.strip()]
     if isinstance(value, list):
         return [item for item in value if isinstance(item, str)]

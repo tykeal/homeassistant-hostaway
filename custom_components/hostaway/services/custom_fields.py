@@ -22,8 +22,6 @@ from custom_components.hostaway.api.custom_fields import (
     HostawayCustomFieldDefinition,
     definitions_for_object_type,
     lookup_definition_by_id,
-    read_listing_with_custom_fields,
-    read_reservation_with_custom_fields,
     resolve_var_name,
     validate_custom_field_value,
     validate_identifier,
@@ -80,8 +78,7 @@ async def async_handle_get_custom_field_values(
     target_id = validate_identifier(data.get("target_id"), "target_id")
     entry_data = _resolve_entry_data(hass, data)
     definitions = _entry_definitions(entry_data)
-    raw_object = await _read_target(entry_data, target_type, target_id)
-    collection = HostawayCustomFieldCollection.from_object(raw_object)
+    collection = await _read_target_collection(entry_data, target_type, target_id)
     return cast(
         ServiceResponse,
         {
@@ -154,24 +151,35 @@ def _entry_definitions(
     return definitions
 
 
-async def _read_target(
+async def _read_target_collection(
     entry_data: dict[str, Any],
     target_type: str,
     target_id: int,
-) -> dict[str, Any]:
-    """Read one Hostaway target with custom-field resources included."""
+) -> HostawayCustomFieldCollection:
+    """Read one Hostaway target via the public client abstraction."""
     api_client = entry_data.get("api_client")
-    request = getattr(api_client, "_request", None)
-    if request is None:
+    if api_client is None:
         raise ServiceValidationError("Hostaway API client is not available")
     try:
         if target_type == LISTING_OBJECT_TYPE:
-            return await read_listing_with_custom_fields(request, target_id)
-        return await read_reservation_with_custom_fields(request, target_id)
+            listing = await api_client.get_listing(target_id)
+            collection = cast(
+                HostawayCustomFieldCollection | None,
+                listing.custom_field_collection,
+            )
+        else:
+            reservation = await api_client.get_reservation(target_id)
+            collection = cast(
+                HostawayCustomFieldCollection | None,
+                reservation.custom_field_collection,
+            )
     except HostawayApiError as exc:
         raise ServiceValidationError(
             f"Unable to read {target_type} {target_id}: {exc}"
         ) from exc
+    if collection is None:
+        return HostawayCustomFieldCollection.from_object({})
+    return collection
 
 
 def _custom_field_values_response(
