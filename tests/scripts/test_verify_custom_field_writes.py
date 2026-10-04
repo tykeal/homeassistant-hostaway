@@ -17,6 +17,7 @@ from scripts.verify_custom_field_writes import (
     compare_unrelated,
     custom_field_value,
     redact,
+    sanitize_summary,
     snapshot_path,
     validate_restore_payload,
     verify,
@@ -36,6 +37,23 @@ def test_redaction_hides_string_values() -> None:
     """Logs redact sensitive custom-field values."""
     assert redact({"customFieldValues": [{"customFieldId": 1, "value": 123}]}) == {
         "customFieldValues": [{"customFieldId": "<redacted>", "value": "<redacted>"}]
+    }
+
+
+def test_summary_sanitizer_preserves_protocol_metadata() -> None:
+    """Evidence summaries keep protocol state while redacting identifiers."""
+    assert sanitize_summary(
+        {
+            "mode": "task-canary",
+            "task_id": 42,
+            "restore_payload_keys": ["title", "customFieldValues"],
+            "indicative_not_conclusive": True,
+        }
+    ) == {
+        "mode": "task-canary",
+        "task_id": "<redacted>",
+        "restore_payload_keys": ["title", "customFieldValues"],
+        "indicative_not_conclusive": True,
     }
 
 
@@ -450,6 +468,62 @@ async def test_task_canary_rejects_noop_sentinel(
                 task_canary=True,
             )
         )
+
+
+async def test_task_canary_does_not_restore_before_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task canary does not send rollback when snapshot storage fails."""
+    before = {
+        "id": 42,
+        "customFieldValues": [
+            {"customFieldId": 1, "value": "old"},
+            {"customFieldId": 2, "value": "keep"},
+        ],
+    }
+    reads = [before]
+    calls: list[str] = []
+
+    async def fake_request(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        """Record task canary calls and return baseline data."""
+        del kwargs
+        method = args[1]
+        calls.append(method)
+        if method == "POST":
+            return {"id": 42}
+        if method == "GET":
+            return reads.pop(0)
+        return {}
+
+    def fail_snapshot(*args: Any, **kwargs: Any) -> None:
+        """Raise before a rollback snapshot is saved."""
+        del args, kwargs
+        raise OSError("snapshot failed")
+
+    monkeypatch.setenv("HOSTAWAY_ACCESS_TOKEN", "token")
+    monkeypatch.setattr("scripts.verify_custom_field_writes._request", fake_request)
+    monkeypatch.setattr(
+        "scripts.verify_custom_field_writes._write_private_snapshot",
+        fail_snapshot,
+    )
+
+    with pytest.raises(OSError, match="snapshot failed"):
+        await verify(
+            Namespace(
+                target_type="listing",
+                target_id=10,
+                custom_field_id=1,
+                value="new",
+                original_value="old",
+                unrelated_custom_field_id=2,
+                listing_map_id=None,
+                mutate=False,
+                snapshot=False,
+                task_canary=True,
+            )
+        )
+
+    assert calls == ["POST", "GET", "DELETE"]
 
 
 async def test_task_canary_requires_mutation_persistence(

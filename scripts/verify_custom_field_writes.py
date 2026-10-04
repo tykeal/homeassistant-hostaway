@@ -25,6 +25,8 @@ from custom_components.hostaway.api.custom_fields import (
 REDACTED = "<redacted>"
 BUILT_IN_EXCLUDED_KEYS = frozenset({"customFieldValues"})
 LIVE_VERIFICATION_LOG = Path("specs/007-custom-field-support/live-verification.md")
+SUMMARY_SAFE_SCALAR_KEYS = frozenset({"mode", "indicative_not_conclusive"})
+SUMMARY_SAFE_LIST_KEYS = frozenset({"restore_payload_keys"})
 
 
 def redact(value: Any) -> Any:
@@ -64,8 +66,26 @@ def append_live_verification_summary(summary: Mapping[str, Any]) -> None:
     with LIVE_VERIFICATION_LOG.open("a", encoding="utf-8") as handle:
         handle.write("\n## Verification ladder tooling evidence\n\n")
         handle.write("```json\n")
-        handle.write(json.dumps(redact(summary), indent=2, sort_keys=True))
+        handle.write(json.dumps(sanitize_summary(summary), indent=2, sort_keys=True))
         handle.write("\n```\n")
+
+
+def sanitize_summary(value: Any, key: str | None = None) -> Any:
+    """Redact evidence values while preserving protocol metadata."""
+    if isinstance(value, Mapping):
+        return {
+            item_key: sanitize_summary(item, str(item_key))
+            for item_key, item in value.items()
+        }
+    if isinstance(value, list):
+        if key in SUMMARY_SAFE_LIST_KEYS:
+            return [item for item in value if isinstance(item, str)]
+        return [sanitize_summary(item, key) for item in value]
+    if key in SUMMARY_SAFE_SCALAR_KEYS:
+        return value
+    if value is not None:
+        return REDACTED
+    return value
 
 
 def custom_field_value(data: Mapping[str, Any], field_id: int) -> Any:
@@ -183,7 +203,7 @@ async def capture_snapshot(args: argparse.Namespace) -> int:
         "canonical_summary": canonicalize_complete_snapshot(redact(before)),
     }
     append_live_verification_summary(summary)
-    print(json.dumps(redact(summary), sort_keys=True))
+    print(json.dumps(sanitize_summary(summary), sort_keys=True))
     return 0
 
 
@@ -257,12 +277,13 @@ async def run_task_canary(args: argparse.Namespace) -> int:
                 raise RuntimeError(
                     "task canary requires a populated unrelated custom field"
                 )
-            restore_payload = validate_restore_payload(before, "task")
+            validated_restore_payload = validate_restore_payload(before, "task")
             snap_path = snapshot_path("task", task_id)
             _write_private_snapshot(snap_path, before)
             mutation = build_custom_field_values_payload(
                 before, args.custom_field_id, args.value
             )
+            restore_payload = validated_restore_payload
             await _request(client, "PUT", path, token, json=mutation)
             after = await _request(
                 client, "GET", path, token, params={"includeResources": 1}
@@ -295,7 +316,7 @@ async def run_task_canary(args: argparse.Namespace) -> int:
         "indicative_not_conclusive": True,
     }
     append_live_verification_summary(summary)
-    print(json.dumps(redact(summary), sort_keys=True))
+    print(json.dumps(sanitize_summary(summary), sort_keys=True))
     return 0
 
 
