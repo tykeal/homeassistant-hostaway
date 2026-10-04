@@ -12,10 +12,12 @@ from typing import Any
 import pytest
 
 from scripts.verify_custom_field_writes import (
+    compare_complete_snapshots,
     compare_unrelated,
     custom_field_value,
     redact,
     snapshot_path,
+    validate_restore_payload,
     verify,
 )
 
@@ -73,6 +75,24 @@ def test_compare_unrelated_checks_all_built_ins() -> None:
     assert compare_unrelated(before, after, 1) == ["built-in fields changed"]
 
 
+def test_compare_complete_snapshots_normalizes_volatile_fields() -> None:
+    """Complete comparison ignores server-managed update timestamps."""
+    before = {"id": 1, "updatedAt": "old", "name": "Task"}
+    after = {"id": 1, "updatedAt": "new", "name": "Changed"}
+
+    assert compare_complete_snapshots(before, after) == ["$.name"]
+
+
+def test_validate_restore_payload_refuses_raw_get_copy() -> None:
+    """Restore validation rebuilds an allowlisted payload."""
+    snapshot = {"id": 1, "name": "Listing", "customFieldValues": []}
+
+    assert validate_restore_payload(snapshot, "listing") == {
+        "name": "Listing",
+        "customFieldValues": [],
+    }
+
+
 def test_compare_unrelated_handles_malformed_raw_entries() -> None:
     """Malformed preserved raw entries do not crash comparisons."""
     before = {"customFieldValues": ["legacy", {"customFieldId": 1, "value": "a"}]}
@@ -116,7 +136,7 @@ async def test_verify_restores_complete_snapshot_on_failure(
     )
 
     try:
-        with pytest.raises(RuntimeError, match="built-in fields changed"):
+        with pytest.raises(RuntimeError, match="complete snapshot changed"):
             await verify(
                 Namespace(
                     target_type="listing",
@@ -130,7 +150,64 @@ async def test_verify_restores_complete_snapshot_on_failure(
         shutil.rmtree(snapshot.parent.parent, ignore_errors=True)
 
     assert calls[0] == {"customFieldValues": [{"customFieldId": 1, "value": "new"}]}
-    assert calls[1] == before
+    assert calls[1] == {
+        "price": 100,
+        "customFieldValues": before["customFieldValues"],
+    }
+
+
+async def test_verify_detects_addressed_entry_metadata_loss(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Complete comparison fails when addressed raw entry metadata is lost."""
+    before = {
+        "id": 10,
+        "customFieldValues": [
+            {"customFieldId": 1, "value": "old", "metadata": "keep"},
+            {"customFieldId": 2, "value": "other"},
+        ],
+    }
+    after = {
+        "id": 10,
+        "customFieldValues": [
+            {"customFieldId": 1, "value": "new"},
+            {"customFieldId": 2, "value": "other"},
+        ],
+    }
+    calls: list[dict[str, Any]] = []
+    reads = [before, after, before]
+    snapshot = Path(".verify-test-artifacts/metadata/listing-10.json")
+
+    async def fake_request(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        """Return scripted Hostaway responses and capture writes."""
+        if args[1] == "GET":
+            return reads.pop(0)
+        calls.append(kwargs["json"])
+        return {"id": 10}
+
+    monkeypatch.setenv("HOSTAWAY_ACCESS_TOKEN", "token")
+    monkeypatch.setattr("builtins.input", lambda _prompt: "MUTATE listing 10")
+    monkeypatch.setattr("scripts.verify_custom_field_writes._request", fake_request)
+    monkeypatch.setattr(
+        "scripts.verify_custom_field_writes.snapshot_path",
+        lambda _target_type, _target_id: snapshot,
+    )
+
+    try:
+        with pytest.raises(RuntimeError, match="complete snapshot changed"):
+            await verify(
+                Namespace(
+                    target_type="listing",
+                    target_id=10,
+                    custom_field_id=1,
+                    value="new",
+                    mutate=True,
+                )
+            )
+    finally:
+        shutil.rmtree(snapshot.parent, ignore_errors=True)
+
+    assert calls[1] == {"customFieldValues": before["customFieldValues"]}
 
 
 async def test_verify_sends_no_mutation_on_preflight_error(
@@ -206,6 +283,148 @@ async def test_verify_writes_private_snapshot_permissions(
         shutil.rmtree(snapshot_root, ignore_errors=True)
 
 
+async def test_snapshot_mode_is_read_only_and_records_redacted_summary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Snapshot mode writes no mutations and logs only redacted summaries."""
+    before = {
+        "id": 10,
+        "name": "Secret Listing",
+        "customFieldValues": [{"customFieldId": 1, "value": "secret"}],
+    }
+    calls: list[str] = []
+    snapshot = Path(".verify-test-artifacts/snapshot/listing-10.json")
+    summaries: list[dict[str, Any]] = []
+
+    async def fake_request(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        """Return a listing snapshot and record methods."""
+        del kwargs
+        calls.append(args[1])
+        return before
+
+    monkeypatch.setenv("HOSTAWAY_ACCESS_TOKEN", "token")
+    monkeypatch.setattr("scripts.verify_custom_field_writes._request", fake_request)
+    monkeypatch.setattr(
+        "scripts.verify_custom_field_writes.snapshot_path",
+        lambda _target_type, _target_id: snapshot,
+    )
+    monkeypatch.setattr(
+        "scripts.verify_custom_field_writes.append_live_verification_summary",
+        summaries.append,
+    )
+
+    try:
+        result = await verify(
+            Namespace(
+                target_type="listing",
+                target_id=10,
+                custom_field_id=None,
+                value=None,
+                mutate=False,
+                snapshot=True,
+                task_canary=False,
+            )
+        )
+    finally:
+        shutil.rmtree(snapshot.parent, ignore_errors=True)
+
+    assert result == 0
+    assert calls == ["GET"]
+    assert summaries[0]["restore_payload_keys"] == ["customFieldValues", "name"]
+
+
+async def test_task_canary_uses_production_restore_and_deletes_own_task(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task canary creates, mutates, restores, verifies, and deletes its task."""
+    before = {
+        "id": 42,
+        "title": "Hostaway custom-field verification canary",
+        "updatedAt": "before",
+        "customFieldValues": [
+            {"customFieldId": 1, "value": "old"},
+            {"customFieldId": 2, "value": "keep"},
+        ],
+    }
+    after = {
+        **before,
+        "updatedAt": "after",
+        "customFieldValues": [
+            {"customFieldId": 1, "value": "new"},
+            {"customFieldId": 2, "value": "keep"},
+        ],
+    }
+    restored = {**before, "updatedAt": "restored"}
+    reads = [before, after, restored]
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    snapshot = Path(".verify-test-artifacts/task/task-42.json")
+    summaries: list[dict[str, Any]] = []
+
+    async def fake_request(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        """Return scripted task canary responses and record requests."""
+        method = args[1]
+        path = args[2]
+        calls.append((method, path, kwargs.get("json")))
+        if method == "POST":
+            return {"id": 42}
+        if method == "GET":
+            return reads.pop(0)
+        return {}
+
+    monkeypatch.setenv("HOSTAWAY_ACCESS_TOKEN", "token")
+    monkeypatch.setattr("scripts.verify_custom_field_writes._request", fake_request)
+    monkeypatch.setattr(
+        "scripts.verify_custom_field_writes.snapshot_path",
+        lambda _target_type, _target_id: snapshot,
+    )
+    monkeypatch.setattr(
+        "scripts.verify_custom_field_writes.append_live_verification_summary",
+        summaries.append,
+    )
+
+    try:
+        result = await verify(
+            Namespace(
+                target_type="listing",
+                target_id=10,
+                custom_field_id=1,
+                value="new",
+                original_value="old",
+                unrelated_custom_field_id=2,
+                listing_map_id=None,
+                mutate=False,
+                snapshot=False,
+                task_canary=True,
+            )
+        )
+    finally:
+        shutil.rmtree(snapshot.parent, ignore_errors=True)
+
+    assert result == 0
+    assert [call[0] for call in calls] == [
+        "POST",
+        "GET",
+        "PUT",
+        "GET",
+        "PUT",
+        "GET",
+        "DELETE",
+    ]
+    assert calls[2][2] == {
+        "customFieldValues": [
+            {"customFieldId": 1, "value": "new"},
+            {"customFieldId": 2, "value": "keep"},
+        ]
+    }
+    assert calls[4][2] == {
+        "title": before["title"],
+        "customFieldValues": before["customFieldValues"],
+    }
+    assert summaries == [
+        {"mode": "task-canary", "task_id": 42, "indicative_not_conclusive": True}
+    ]
+
+
 async def test_verify_restores_complete_when_target_does_not_change(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -265,7 +484,10 @@ async def test_verify_restores_complete_when_target_does_not_change(
             {"customFieldId": 2, "value": "keep"},
         ]
     }
-    assert calls[1] == before
+    assert calls[1] == {
+        "price": 100,
+        "customFieldValues": before["customFieldValues"],
+    }
 
 
 async def test_verify_restores_when_mutation_response_fails(
@@ -313,13 +535,16 @@ async def test_verify_restores_when_mutation_response_fails(
         shutil.rmtree(snapshot.parent, ignore_errors=True)
 
     assert calls[0] == {"customFieldValues": [{"customFieldId": 1, "value": "new"}]}
-    assert calls[1] == before
+    assert calls[1] == {
+        "price": 100,
+        "customFieldValues": before["customFieldValues"],
+    }
 
 
-async def test_verify_uses_minimal_restore_after_checks_pass(
+async def test_verify_uses_allowlisted_restore_after_checks_pass(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Live helper switches to minimal restore after verification passes."""
+    """Live helper restores through the allowlisted production path."""
     before = {
         "id": 10,
         "price": 100,
@@ -369,4 +594,7 @@ async def test_verify_uses_minimal_restore_after_checks_pass(
         shutil.rmtree(snapshot.parent, ignore_errors=True)
 
     assert result == 0
-    assert calls[1] == {"customFieldValues": before["customFieldValues"]}
+    assert calls[1] == {
+        "price": 100,
+        "customFieldValues": before["customFieldValues"],
+    }
