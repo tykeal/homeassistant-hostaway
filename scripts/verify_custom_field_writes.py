@@ -207,11 +207,11 @@ def _complete_differences_ignoring_addressed_value(
     field_id: int,
 ) -> list[str]:
     """Return complete-snapshot diffs while allowing one addressed value edit."""
-    normalized_after = json.loads(json.dumps(after))
-    for item in normalized_after.get("customFieldValues", []):
-        if isinstance(item, dict) and item.get("customFieldId") == field_id:
-            item["value"] = custom_field_value(before, field_id)
-    return compare_complete_snapshots(before, normalized_after)
+    expected = json.loads(json.dumps(before))
+    expected["customFieldValues"] = build_custom_field_values_payload(
+        before, field_id, custom_field_value(after, field_id)
+    )["customFieldValues"]
+    return compare_complete_snapshots(expected, after)
 
 
 async def run_task_canary(args: argparse.Namespace) -> int:
@@ -246,6 +246,8 @@ async def run_task_canary(args: argparse.Namespace) -> int:
             after = await _request(
                 client, "GET", path, token, params={"includeResources": 1}
             )
+            if custom_field_value(after, args.custom_field_id) != args.value:
+                raise RuntimeError("task canary mutation did not persist")
             if not _only_addressed_custom_field_changed(
                 before, after, args.custom_field_id
             ):
@@ -300,57 +302,13 @@ async def verify(args: argparse.Namespace) -> int:
         )
         if set(payload) != {"customFieldValues"}:
             raise RuntimeError("payload contains unsafe top-level keys")
-        snap_path = snapshot_path(args.target_type, args.target_id)
         if not args.mutate:
             print(json.dumps({"dry_run": True, "payload": redact(payload)}))
             return 0
-        _write_private_snapshot(snap_path, before)
-        answer = input(f"Type MUTATE {args.target_type} {args.target_id} to continue: ")
-        if answer != f"MUTATE {args.target_type} {args.target_id}":
-            raise RuntimeError("confirmation did not match; no mutation sent")
-        custom_field_restore_payload = validate_restore_payload(
-            before, args.target_type
+        raise RuntimeError(
+            "live listing and reservation mutation steps remain disabled; "
+            "use --snapshot or --task-canary for authorized ladder steps"
         )
-        verification_error: BaseException | None = None
-        restore_payload: dict[str, Any] = custom_field_restore_payload
-        mutation_sent = False
-        try:
-            mutation_sent = True
-            await _request(client, "PUT", path, token, json=payload)
-            after = await _request(
-                client, "GET", path, token, params={"includeResources": 1}
-            )
-            if custom_field_value(after, args.custom_field_id) != args.value:
-                raise RuntimeError("target custom field did not change")
-            problems = _complete_differences_ignoring_addressed_value(
-                before, after, args.custom_field_id
-            )
-            if problems:
-                raise RuntimeError("complete snapshot changed: " + "; ".join(problems))
-        except BaseException as exc:
-            verification_error = exc
-        finally:
-            if mutation_sent:
-                await _request(client, "PUT", path, token, json=restore_payload)
-                restored = await _request(
-                    client, "GET", path, token, params={"includeResources": 1}
-                )
-                original_target = custom_field_value(before, args.custom_field_id)
-                restored_target = custom_field_value(restored, args.custom_field_id)
-                restore_problems = compare_complete_snapshots(before, restored)
-                if restored_target != original_target or restore_problems:
-                    details = restore_problems or [
-                        "target custom field was not restored"
-                    ]
-                    raise RuntimeError(
-                        "restore verification failed: " + "; ".join(details)
-                    )
-        if verification_error is not None:
-            raise verification_error
-        print(
-            json.dumps({"verified": True, "restored": True, "snapshot": str(snap_path)})
-        )
-        return 0
 
 
 def build_parser() -> argparse.ArgumentParser:

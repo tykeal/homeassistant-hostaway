@@ -64,10 +64,16 @@ TASK_WRITABLE_RESTORE_FIELDS = frozenset(
         "listingMapId",
         "reservationId",
         "assigneeUserId",
+        "canBePickedByGroupId",
+        "supervisorUserId",
         "title",
         "description",
         "status",
         "priority",
+        "canStartFrom",
+        "shouldEndBy",
+        "categoriesMap",
+        "resolutionNote",
         "dueDate",
         "customFieldValues",
     }
@@ -637,9 +643,7 @@ def build_allowlisted_restore_payload(
         for key, value in snapshot.items()
         if key in allowlist
     }
-    if "customFieldValues" not in payload:
-        msg = "snapshot cannot reconstruct customFieldValues restore payload"
-        raise CustomFieldMergeError(msg)
+    ensure_writable_collection(HostawayCustomFieldCollection.from_object(payload))
     if payload == dict(snapshot):
         msg = "raw GET response deepcopy is not a valid restore payload"
         raise CustomFieldMergeError(msg)
@@ -691,6 +695,9 @@ def select_listing_payload_strategy(
 def select_reservation_payload_strategy(
     gates: CustomFieldWriteSafetyGates,
     evidence: ReservationCustomFieldEvidenceState | None = None,
+    *,
+    account_id: int | None = None,
+    config_entry_id: str | None = None,
 ) -> ReservationPayloadStrategy:
     """Return the enabled reservation strategy or fail closed."""
     if gates.reservation_payload_strategy != "partial":
@@ -702,30 +709,42 @@ def select_reservation_payload_strategy(
     if evidence is None or not evidence.enables_reservation_writes:
         msg = "reservation evidence is not bound to this Hostaway account"
         raise CustomFieldMergeError(msg)
+    if evidence.account_id != account_id or evidence.config_entry_id != config_entry_id:
+        msg = "reservation evidence does not match this Hostaway account"
+        raise CustomFieldMergeError(msg)
     return "partial"
 
 
 def canonicalize_complete_snapshot(value: Any) -> Any:
     """Return a canonical object snapshot for verification comparisons."""
+    return _canonicalize_complete_snapshot(value, top_level=True)
+
+
+def _canonicalize_complete_snapshot(value: Any, *, top_level: bool) -> Any:
+    """Return a canonical snapshot value with scoped volatile exclusions."""
     if isinstance(value, Mapping):
         canonical: dict[str, Any] = {}
         for key in sorted(value):
-            if key in SERVER_MANAGED_VOLATILE_FIELDS:
+            if top_level and key in SERVER_MANAGED_VOLATILE_FIELDS:
                 continue
             item = value[key]
             if key == "customFieldValues" and isinstance(item, list):
                 canonical[key] = _canonical_custom_field_values(item)
             else:
-                canonical[key] = canonicalize_complete_snapshot(item)
+                canonical[key] = _canonicalize_complete_snapshot(item, top_level=False)
         return canonical
     if isinstance(value, list):
-        return [canonicalize_complete_snapshot(item) for item in value]
+        return [
+            _canonicalize_complete_snapshot(item, top_level=False) for item in value
+        ]
     return value
 
 
 def _canonical_custom_field_values(values: list[Any]) -> list[Any]:
     """Return custom-field values in stable comparison order."""
-    canonical = [canonicalize_complete_snapshot(item) for item in values]
+    canonical = [
+        _canonicalize_complete_snapshot(item, top_level=False) for item in values
+    ]
     return sorted(canonical, key=lambda item: json.dumps(item, sort_keys=True))
 
 
