@@ -432,6 +432,23 @@ def test_restore_payload_rejects_unclassified_snapshot_fields() -> None:
         )
 
 
+def test_restore_payload_normalizes_internal_name_alias() -> None:
+    """Listing restore payloads normalize Hostaway's internalName alias."""
+    assert build_allowlisted_restore_payload(
+        {"id": 1, "internalName": "Alias", "customFieldValues": []},
+        "listing",
+    ) == {"internalListingName": "Alias", "customFieldValues": []}
+    assert build_allowlisted_restore_payload(
+        {
+            "id": 1,
+            "internalName": "Alias",
+            "internalListingName": "Canonical",
+            "customFieldValues": [],
+        },
+        "listing",
+    ) == {"internalListingName": "Canonical", "customFieldValues": []}
+
+
 def test_canonicalizer_excludes_only_volatile_server_fields() -> None:
     """Complete-snapshot comparison normalizes update timestamps only."""
     before = {

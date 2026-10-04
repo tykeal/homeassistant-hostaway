@@ -74,6 +74,7 @@ LISTING_RESTORE_EXCLUDED_FIELDS = frozenset(
         "pictures",
     }
 )
+LISTING_RESTORE_FIELD_ALIASES = {"internalName": "internalListingName"}
 TASK_WRITABLE_RESTORE_FIELDS = frozenset(
     {
         "listingMapId",
@@ -646,6 +647,16 @@ def _restore_exclusions(target_type: str) -> frozenset[str]:
     raise CustomFieldMergeError(msg)
 
 
+def _restore_aliases(target_type: str) -> Mapping[str, str]:
+    """Return read aliases normalized into writable restore fields."""
+    if target_type == "listing":
+        return LISTING_RESTORE_FIELD_ALIASES
+    if target_type == "task":
+        return {}
+    msg = "full-object restore payloads are disabled for reservations"
+    raise CustomFieldMergeError(msg)
+
+
 def _normalize_restore_value(value: Any) -> Any:
     """Return an allowlisted restore value normalized for JSON payloads."""
     if isinstance(value, Mapping):
@@ -673,7 +684,8 @@ def build_allowlisted_restore_payload(
         raise CustomFieldMergeError(msg)
     allowlist = _restore_allowlist(target_type)
     exclusions = _restore_exclusions(target_type)
-    unclassified = set(snapshot) - allowlist - exclusions
+    aliases = _restore_aliases(target_type)
+    unclassified = set(snapshot) - allowlist - exclusions - set(aliases)
     if unclassified:
         msg = "snapshot contains fields with no restore classification"
         raise CustomFieldMergeError(msg)
@@ -682,6 +694,9 @@ def build_allowlisted_restore_payload(
         for key, value in snapshot.items()
         if key in allowlist
     }
+    for source, destination in aliases.items():
+        if source in snapshot and destination not in payload:
+            payload[destination] = _normalize_restore_value(snapshot[source])
     ensure_writable_collection(HostawayCustomFieldCollection.from_object(payload))
     if payload == dict(snapshot):
         msg = "raw GET response deepcopy is not a valid restore payload"
