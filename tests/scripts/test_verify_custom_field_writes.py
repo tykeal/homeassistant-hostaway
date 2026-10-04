@@ -9,6 +9,7 @@ from argparse import Namespace
 from pathlib import Path
 from typing import Any
 
+import httpx
 import pytest
 
 from scripts.verify_custom_field_writes import (
@@ -381,6 +382,74 @@ async def test_task_canary_uses_production_restore_and_deletes_own_task(
     assert summaries == [
         {"mode": "task-canary", "task_id": 42, "indicative_not_conclusive": True}
     ]
+
+
+async def test_request_accepts_delete_array_result() -> None:
+    """DELETE cleanup accepts Hostaway's empty-array success result."""
+    from scripts.verify_custom_field_writes import _request
+
+    class Client:
+        """Minimal async client returning a DELETE response."""
+
+        async def request(self, *args: Any, **kwargs: Any) -> httpx.Response:
+            """Return a successful empty-array result response."""
+            del args, kwargs
+            return httpx.Response(
+                200,
+                json={"status": "success", "result": []},
+                request=httpx.Request("DELETE", "https://api.hostaway.com/v1/tasks/42"),
+            )
+
+    client: Any = Client()
+    assert await _request(client, "DELETE", "/v1/tasks/42", "token") == {}
+
+
+async def test_task_canary_rejects_noop_sentinel(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task canary rejects a sentinel equal to the fetched baseline."""
+    before = {
+        "id": 42,
+        "customFieldValues": [
+            {"customFieldId": 1, "value": "old"},
+            {"customFieldId": 2, "value": "keep"},
+        ],
+    }
+    reads = [before]
+    snapshot = Path(".verify-test-artifacts/task-noop/task-42.json")
+
+    async def fake_request(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        """Return a created task and unchanged baseline."""
+        del kwargs
+        method = args[1]
+        if method == "POST":
+            return {"id": 42}
+        if method == "GET":
+            return reads.pop(0)
+        return {}
+
+    monkeypatch.setenv("HOSTAWAY_ACCESS_TOKEN", "token")
+    monkeypatch.setattr("scripts.verify_custom_field_writes._request", fake_request)
+    monkeypatch.setattr(
+        "scripts.verify_custom_field_writes.snapshot_path",
+        lambda _target_type, _target_id: snapshot,
+    )
+
+    with pytest.raises(RuntimeError, match="sentinel must differ"):
+        await verify(
+            Namespace(
+                target_type="listing",
+                target_id=10,
+                custom_field_id=1,
+                value="old",
+                original_value="old",
+                unrelated_custom_field_id=2,
+                listing_map_id=None,
+                mutate=False,
+                snapshot=False,
+                task_canary=True,
+            )
+        )
 
 
 async def test_task_canary_requires_mutation_persistence(

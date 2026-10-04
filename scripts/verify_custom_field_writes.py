@@ -76,6 +76,18 @@ def custom_field_value(data: Mapping[str, Any], field_id: int) -> Any:
     return None
 
 
+def has_populated_custom_field(data: Mapping[str, Any], field_id: int) -> bool:
+    """Return whether a custom field entry has a non-null value."""
+    for item in data.get("customFieldValues", []):
+        if (
+            isinstance(item, Mapping)
+            and item.get("customFieldId") == field_id
+            and item.get("value") is not None
+        ):
+            return True
+    return False
+
+
 def compare_unrelated(
     before: Mapping[str, Any],
     after: Mapping[str, Any],
@@ -141,7 +153,7 @@ async def _request(
     if data.get("status") not in (None, "success"):
         raise RuntimeError("Hostaway returned a non-success status")
     result = data.get("result")
-    if method == "DELETE" and result is None:
+    if method == "DELETE":
         return {}
     if not isinstance(result, dict):
         raise RuntimeError("Hostaway response result is not an object")
@@ -219,6 +231,8 @@ async def run_task_canary(args: argparse.Namespace) -> int:
     token = os.environ.get("HOSTAWAY_ACCESS_TOKEN")
     if not token:
         raise RuntimeError("HOSTAWAY_ACCESS_TOKEN is required")
+    if args.unrelated_custom_field_id == args.custom_field_id:
+        raise RuntimeError("task canary requires a distinct unrelated field id")
     async with httpx.AsyncClient(timeout=30) as client:
         created = await _request(
             client,
@@ -236,6 +250,13 @@ async def run_task_canary(args: argparse.Namespace) -> int:
             before = await _request(
                 client, "GET", path, token, params={"includeResources": 1}
             )
+            original_value = custom_field_value(before, args.custom_field_id)
+            if original_value == args.value:
+                raise RuntimeError("task canary sentinel must differ from baseline")
+            if not has_populated_custom_field(before, args.unrelated_custom_field_id):
+                raise RuntimeError(
+                    "task canary requires a populated unrelated custom field"
+                )
             restore_payload = validate_restore_payload(before, "task")
             snap_path = snapshot_path("task", task_id)
             _write_private_snapshot(snap_path, before)
