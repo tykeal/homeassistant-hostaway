@@ -17,6 +17,7 @@ from scripts.verify_custom_field_writes import (
     compare_complete_snapshots,
     compare_unrelated,
     custom_field_value,
+    normalize_task_snapshot,
     redact,
     redact_payload_for_log,
     sanitize_summary,
@@ -108,6 +109,16 @@ def test_custom_field_value_reads_addressed_value() -> None:
     data = {"customFieldValues": [{"customFieldId": 7, "value": "changed"}]}
 
     assert custom_field_value(data, 7) == "changed"
+
+
+def test_normalize_task_snapshot_uses_singular_response_alias() -> None:
+    """Task reads normalize documented singular custom-field response shape."""
+    assert normalize_task_snapshot(
+        {"id": 1, "customFieldValue": [{"customFieldId": 7, "value": "changed"}]}
+    ) == {
+        "id": 1,
+        "customFieldValues": [{"customFieldId": 7, "value": "changed"}],
+    }
 
 
 def test_compare_unrelated_checks_all_built_ins() -> None:

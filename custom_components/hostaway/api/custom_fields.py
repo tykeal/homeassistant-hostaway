@@ -98,11 +98,15 @@ TASK_RESTORE_EXCLUDED_FIELDS = frozenset(
     {
         "id",
         "accountId",
+        "channelId",
+        "createdByUserId",
         "insertedOn",
         "createdAt",
         "createdOn",
+        "isUpdatedManually",
     }
 )
+TASK_RESTORE_FIELD_ALIASES = {"customFieldValue": "customFieldValues"}
 SERVER_MANAGED_VOLATILE_FIELDS = frozenset(
     {
         "updatedAt",
@@ -652,7 +656,7 @@ def _restore_aliases(target_type: str) -> Mapping[str, str]:
     if target_type == "listing":
         return LISTING_RESTORE_FIELD_ALIASES
     if target_type == "task":
-        return {}
+        return TASK_RESTORE_FIELD_ALIASES
     msg = "full-object restore payloads are disabled for reservations"
     raise CustomFieldMergeError(msg)
 

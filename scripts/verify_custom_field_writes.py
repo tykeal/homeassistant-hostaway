@@ -3,6 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Verify Hostaway custom-field write no-clobber behavior."""
 
+# aislop-ignore-file complexity/file-too-large -- cohesive live verification helper
+
 from __future__ import annotations
 
 import argparse
@@ -128,6 +130,14 @@ def has_populated_custom_field(data: Mapping[str, Any], field_id: int) -> bool:
     return False
 
 
+def normalize_task_snapshot(data: Mapping[str, Any]) -> dict[str, Any]:
+    """Normalize documented task custom-field response aliases."""
+    normalized = dict(data)
+    if "customFieldValues" not in normalized and "customFieldValue" in normalized:
+        normalized["customFieldValues"] = normalized.pop("customFieldValue")
+    return normalized
+
+
 def compare_unrelated(
     before: Mapping[str, Any],
     after: Mapping[str, Any],
@@ -208,8 +218,8 @@ async def capture_snapshot(args: argparse.Namespace) -> int:
     endpoint = "listings" if args.target_type == "listing" else "reservations"
     path = f"/v1/{endpoint}/{args.target_id}"
     async with httpx.AsyncClient(timeout=30) as client:
-        before = await _request(
-            client, "GET", path, token, params={"includeResources": 1}
+        before = normalize_task_snapshot(
+            await _request(client, "GET", path, token, params={"includeResources": 1})
         )
     restore_payload = validate_restore_payload(before, args.target_type)
     snap_path = snapshot_path(args.target_type, args.target_id)
@@ -317,8 +327,10 @@ async def run_task_canary(args: argparse.Namespace) -> int:
             )
             restore_payload = validated_restore_payload
             await _request(client, "PUT", path, token, json=mutation)
-            after = await _request(
-                client, "GET", path, token, params={"includeResources": 1}
+            after = normalize_task_snapshot(
+                await _request(
+                    client, "GET", path, token, params={"includeResources": 1}
+                )
             )
             if custom_field_value(after, args.custom_field_id) != args.value:
                 raise RuntimeError("task canary mutation did not persist")
@@ -327,8 +339,10 @@ async def run_task_canary(args: argparse.Namespace) -> int:
             ):
                 raise RuntimeError("task canary partial PUT changed unexpected data")
             await _request(client, "PUT", path, token, json=restore_payload)
-            restored = await _request(
-                client, "GET", path, token, params={"includeResources": 1}
+            restored = normalize_task_snapshot(
+                await _request(
+                    client, "GET", path, token, params={"includeResources": 1}
+                )
             )
             differences = compare_complete_snapshots(before, restored)
             if differences:

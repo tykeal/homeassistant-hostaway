@@ -449,6 +449,26 @@ def test_restore_payload_normalizes_internal_name_alias() -> None:
     ) == {"internalListingName": "Canonical", "customFieldValues": []}
 
 
+def test_task_restore_payload_normalizes_documented_response_shape() -> None:
+    """Task restore payloads accept documented response aliases and metadata."""
+    payload = build_allowlisted_restore_payload(
+        {
+            "id": 42,
+            "channelId": 7,
+            "createdByUserId": 8,
+            "isUpdatedManually": 0,
+            "title": "Task",
+            "customFieldValue": [{"customFieldId": 1, "value": "old"}],
+        },
+        "task",
+    )
+
+    assert payload == {
+        "title": "Task",
+        "customFieldValues": [{"customFieldId": 1, "value": "old"}],
+    }
+
+
 def test_canonicalizer_excludes_only_volatile_server_fields() -> None:
     """Complete-snapshot comparison normalizes update timestamps only."""
     before = {
