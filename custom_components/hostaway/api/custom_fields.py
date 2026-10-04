@@ -59,6 +59,21 @@ LISTING_WRITABLE_RESTORE_FIELDS = frozenset(
         "customFieldValues",
     }
 )
+LISTING_RESTORE_EXCLUDED_FIELDS = frozenset(
+    {
+        "id",
+        "accountId",
+        "isActive",
+        "isListed",
+        "specialStatus",
+        "countryCode",
+        "propertyType",
+        "listingUrl",
+        "thumbnailUrl",
+        "picture",
+        "pictures",
+    }
+)
 TASK_WRITABLE_RESTORE_FIELDS = frozenset(
     {
         "listingMapId",
@@ -76,6 +91,15 @@ TASK_WRITABLE_RESTORE_FIELDS = frozenset(
         "resolutionNote",
         "dueDate",
         "customFieldValues",
+    }
+)
+TASK_RESTORE_EXCLUDED_FIELDS = frozenset(
+    {
+        "id",
+        "accountId",
+        "insertedOn",
+        "createdAt",
+        "createdOn",
     }
 )
 SERVER_MANAGED_VOLATILE_FIELDS = frozenset(
@@ -612,6 +636,16 @@ def _restore_allowlist(target_type: str) -> frozenset[str]:
     raise CustomFieldMergeError(msg)
 
 
+def _restore_exclusions(target_type: str) -> frozenset[str]:
+    """Return read-only restore fields classified as safe to omit."""
+    if target_type == "listing":
+        return LISTING_RESTORE_EXCLUDED_FIELDS | SERVER_MANAGED_VOLATILE_FIELDS
+    if target_type == "task":
+        return TASK_RESTORE_EXCLUDED_FIELDS | SERVER_MANAGED_VOLATILE_FIELDS
+    msg = "full-object restore payloads are disabled for reservations"
+    raise CustomFieldMergeError(msg)
+
+
 def _normalize_restore_value(value: Any) -> Any:
     """Return an allowlisted restore value normalized for JSON payloads."""
     if isinstance(value, Mapping):
@@ -638,6 +672,11 @@ def build_allowlisted_restore_payload(
         msg = "full-object listing writes require concurrent edit detection"
         raise CustomFieldMergeError(msg)
     allowlist = _restore_allowlist(target_type)
+    exclusions = _restore_exclusions(target_type)
+    unclassified = set(snapshot) - allowlist - exclusions
+    if unclassified:
+        msg = "snapshot contains fields with no restore classification"
+        raise CustomFieldMergeError(msg)
     payload = {
         key: _normalize_restore_value(value)
         for key, value in snapshot.items()

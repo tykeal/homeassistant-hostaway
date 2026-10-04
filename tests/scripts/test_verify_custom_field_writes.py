@@ -237,6 +237,46 @@ async def test_verify_sends_no_mutation_on_preflight_error(
     assert calls == ["GET"]
 
 
+async def test_verify_dry_run_redacts_private_metadata_keys(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Dry-run output omits arbitrary metadata keys from preserved entries."""
+    before = {
+        "id": 10,
+        "customFieldValues": [
+            {
+                "customFieldId": 1,
+                "value": "old",
+                "guest@example.com": "private",
+            }
+        ],
+    }
+
+    async def fake_request(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        """Return a safe object for dry-run payload generation."""
+        del args, kwargs
+        return before
+
+    monkeypatch.setenv("HOSTAWAY_ACCESS_TOKEN", "token")
+    monkeypatch.setattr("scripts.verify_custom_field_writes._request", fake_request)
+
+    assert (
+        await verify(
+            Namespace(
+                target_type="listing",
+                target_id=10,
+                custom_field_id=1,
+                value="new",
+                mutate=False,
+            )
+        )
+        == 0
+    )
+
+    assert "guest@example.com" not in capsys.readouterr().out
+
+
 async def test_verify_writes_private_snapshot_permissions(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

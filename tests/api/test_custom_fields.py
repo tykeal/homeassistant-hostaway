@@ -423,6 +423,15 @@ def test_full_object_builder_rejects_unsafe_paths() -> None:
         )
 
 
+def test_restore_payload_rejects_unclassified_snapshot_fields() -> None:
+    """Snapshot validation fails when a field is neither writable nor excluded."""
+    with pytest.raises(CustomFieldMergeError, match="restore classification"):
+        build_allowlisted_restore_payload(
+            {"id": 1, "unexpectedField": "x", "customFieldValues": []},
+            "listing",
+        )
+
+
 def test_canonicalizer_excludes_only_volatile_server_fields() -> None:
     """Complete-snapshot comparison normalizes update timestamps only."""
     before = {
