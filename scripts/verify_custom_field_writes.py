@@ -309,8 +309,10 @@ async def run_task_canary(args: argparse.Namespace) -> int:
         path = f"/v1/tasks/{task_id}"
         restore_payload: dict[str, Any] | None = None
         try:
-            before = await _request(
-                client, "GET", path, token, params={"includeResources": 1}
+            before = normalize_task_snapshot(
+                await _request(
+                    client, "GET", path, token, params={"includeResources": 1}
+                )
             )
             original_value = custom_field_value(before, args.custom_field_id)
             if original_value == args.value:

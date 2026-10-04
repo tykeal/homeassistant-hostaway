@@ -389,19 +389,20 @@ async def test_task_canary_uses_production_restore_and_deletes_own_task(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Task canary creates, mutates, restores, verifies, and deletes its task."""
+    custom_values = [
+        {"customFieldId": 1, "value": "old"},
+        {"customFieldId": 2, "value": "keep"},
+    ]
     before = {
         "id": 42,
         "title": "Hostaway custom-field verification canary",
         "updatedAt": "before",
-        "customFieldValues": [
-            {"customFieldId": 1, "value": "old"},
-            {"customFieldId": 2, "value": "keep"},
-        ],
+        "customFieldValue": custom_values,
     }
     after = {
         **before,
         "updatedAt": "after",
-        "customFieldValues": [
+        "customFieldValue": [
             {"customFieldId": 1, "value": "new"},
             {"customFieldId": 2, "value": "keep"},
         ],
@@ -470,7 +471,7 @@ async def test_task_canary_uses_production_restore_and_deletes_own_task(
     }
     assert calls[4][2] == {
         "title": before["title"],
-        "customFieldValues": before["customFieldValues"],
+        "customFieldValues": custom_values,
     }
     assert summaries == [
         {"mode": "task-canary", "task_id": 42, "indicative_not_conclusive": True}
