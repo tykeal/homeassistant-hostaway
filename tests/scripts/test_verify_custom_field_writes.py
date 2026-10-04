@@ -48,12 +48,14 @@ def test_summary_sanitizer_preserves_protocol_metadata() -> None:
             "task_id": 42,
             "restore_payload_keys": ["title", "customFieldValues"],
             "indicative_not_conclusive": True,
+            "canonical_summary": {"guest@example.com": "private"},
         }
     ) == {
         "mode": "task-canary",
         "task_id": "<redacted>",
         "restore_payload_keys": ["title", "customFieldValues"],
         "indicative_not_conclusive": True,
+        "canonical_summary": "<redacted>",
     }
 
 
@@ -614,3 +616,72 @@ async def test_task_canary_requires_mutation_persistence(
         shutil.rmtree(snapshot.parent, ignore_errors=True)
 
     assert calls == ["POST", "GET", "PUT", "GET", "PUT", "DELETE"]
+
+
+async def test_task_canary_redacts_restore_difference_paths(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Restore failures report counts instead of sensitive path keys."""
+    before = {
+        "id": 42,
+        "customFieldValues": [
+            {"customFieldId": 1, "value": {"guest@example.com": "old"}},
+            {"customFieldId": 2, "value": "keep"},
+        ],
+    }
+    after = {
+        "id": 42,
+        "customFieldValues": [
+            {"customFieldId": 1, "value": "new"},
+            {"customFieldId": 2, "value": "keep"},
+        ],
+    }
+    restored = {
+        "id": 42,
+        "customFieldValues": [
+            {"customFieldId": 1, "value": {"guest@example.com": "changed"}},
+            {"customFieldId": 2, "value": "keep"},
+        ],
+    }
+    reads = [before, after, restored]
+    snapshot = Path(".verify-test-artifacts/task-diff/task-42.json")
+
+    async def fake_request(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        """Return scripted task canary reads with a bad restore."""
+        del kwargs
+        method = args[1]
+        if method == "POST":
+            return {"id": 42}
+        if method == "GET":
+            return reads.pop(0)
+        return {}
+
+    monkeypatch.setenv("HOSTAWAY_ACCESS_TOKEN", "token")
+    monkeypatch.setattr("scripts.verify_custom_field_writes._request", fake_request)
+    monkeypatch.setattr(
+        "scripts.verify_custom_field_writes.snapshot_path",
+        lambda _target_type, _target_id: snapshot,
+    )
+
+    try:
+        with pytest.raises(RuntimeError) as exc_info:
+            await verify(
+                Namespace(
+                    target_type="listing",
+                    target_id=10,
+                    custom_field_id=1,
+                    value="new",
+                    original_value="old",
+                    unrelated_custom_field_id=2,
+                    listing_map_id=None,
+                    mutate=False,
+                    snapshot=False,
+                    task_canary=True,
+                )
+            )
+    finally:
+        shutil.rmtree(snapshot.parent, ignore_errors=True)
+
+    message = str(exc_info.value)
+    assert "difference(s)" in message
+    assert "guest@example.com" not in message

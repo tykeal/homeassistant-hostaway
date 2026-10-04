@@ -28,6 +28,7 @@ BUILT_IN_EXCLUDED_KEYS = frozenset({"customFieldValues"})
 LIVE_VERIFICATION_LOG = Path("specs/007-custom-field-support/live-verification.md")
 SUMMARY_SAFE_SCALAR_KEYS = frozenset({"mode", "indicative_not_conclusive"})
 SUMMARY_SAFE_LIST_KEYS = frozenset({"restore_payload_keys"})
+SUMMARY_REDACT_WHOLE_KEYS = frozenset({"canonical_summary"})
 
 
 def redact(value: Any) -> Any:
@@ -73,6 +74,8 @@ def append_live_verification_summary(summary: Mapping[str, Any]) -> None:
 
 def sanitize_summary(value: Any, key: str | None = None) -> Any:
     """Redact evidence values while preserving protocol metadata."""
+    if key in SUMMARY_REDACT_WHOLE_KEYS:
+        return REDACTED
     if isinstance(value, Mapping):
         return {
             item_key: sanitize_summary(item, str(item_key))
@@ -314,7 +317,7 @@ async def run_task_canary(args: argparse.Namespace) -> int:
             if differences:
                 raise RuntimeError(
                     "task canary restore changed complete snapshot: "
-                    + ", ".join(differences)
+                    f"{len(differences)} difference(s)"
                 )
         except BaseException:
             if restore_payload is not None:
