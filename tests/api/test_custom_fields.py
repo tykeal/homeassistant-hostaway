@@ -458,6 +458,22 @@ def test_canonicalizer_preserves_absent_custom_values() -> None:
     ]
 
 
+def test_canonicalizer_preserves_nested_custom_value_order() -> None:
+    """Only the top-level customFieldValues collection is order-normalized."""
+    before = {
+        "customFieldValues": [
+            {"customFieldId": 1, "value": {"customFieldValues": ["a", "b"]}}
+        ]
+    }
+    after = {
+        "customFieldValues": [
+            {"customFieldId": 1, "value": {"customFieldValues": ["b", "a"]}}
+        ]
+    }
+
+    assert canonical_snapshot_differences(before, after)
+
+
 def test_reservation_evidence_is_account_bound_and_fail_closed() -> None:
     """Reservation evidence must be account-bound before it can enable writes."""
     assert not ReservationCustomFieldEvidenceState(

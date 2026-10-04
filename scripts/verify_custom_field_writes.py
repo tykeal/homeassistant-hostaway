@@ -20,6 +20,7 @@ from custom_components.hostaway.api.custom_fields import (
     build_custom_field_values_payload,
     canonical_snapshot_differences,
     canonicalize_complete_snapshot,
+    validate_identifier,
 )
 
 REDACTED = "<redacted>"
@@ -209,14 +210,25 @@ async def capture_snapshot(args: argparse.Namespace) -> int:
 
 def _task_canary_create_payload(args: argparse.Namespace) -> dict[str, Any]:
     """Return a disposable task payload for the canary."""
+    validate_identifier(args.custom_field_id, "customFieldId")
+    validate_identifier(args.unrelated_custom_field_id, "unrelated_custom_field_id")
+    custom_values = build_custom_field_values_payload(
+        {
+            "customFieldValues": [
+                {
+                    "customFieldId": args.unrelated_custom_field_id,
+                    "value": "preserve",
+                }
+            ]
+        },
+        args.custom_field_id,
+        args.original_value,
+    )["customFieldValues"]
     payload: dict[str, Any] = {
         "title": "Hostaway custom-field verification canary",
         "description": "Disposable task created by verification tooling.",
         "status": "pending",
-        "customFieldValues": [
-            {"customFieldId": args.custom_field_id, "value": args.original_value},
-            {"customFieldId": args.unrelated_custom_field_id, "value": "preserve"},
-        ],
+        "customFieldValues": custom_values,
     }
     listing_map_id = getattr(args, "listing_map_id", None)
     if listing_map_id is not None:

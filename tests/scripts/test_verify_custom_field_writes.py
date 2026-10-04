@@ -470,6 +470,40 @@ async def test_task_canary_rejects_noop_sentinel(
         )
 
 
+async def test_task_canary_rejects_invalid_ids_before_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task canary validates both custom-field ids before creating a task."""
+    calls: list[str] = []
+
+    async def fake_request(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        """Fail if any live request is attempted."""
+        del kwargs
+        calls.append(args[1])
+        return {}
+
+    monkeypatch.setenv("HOSTAWAY_ACCESS_TOKEN", "token")
+    monkeypatch.setattr("scripts.verify_custom_field_writes._request", fake_request)
+
+    with pytest.raises(ValueError, match="customFieldId"):
+        await verify(
+            Namespace(
+                target_type="listing",
+                target_id=10,
+                custom_field_id=0,
+                value="new",
+                original_value="old",
+                unrelated_custom_field_id=-1,
+                listing_map_id=None,
+                mutate=False,
+                snapshot=False,
+                task_canary=True,
+            )
+        )
+
+    assert calls == []
+
+
 async def test_task_canary_does_not_restore_before_snapshot(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

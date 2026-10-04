@@ -728,7 +728,7 @@ def _canonicalize_complete_snapshot(value: Any, *, top_level: bool) -> Any:
             if top_level and key in SERVER_MANAGED_VOLATILE_FIELDS:
                 continue
             item = value[key]
-            if key == "customFieldValues" and isinstance(item, list):
+            if top_level and key == "customFieldValues" and isinstance(item, list):
                 canonical[key] = _canonical_custom_field_values(item)
             else:
                 canonical[key] = _canonicalize_complete_snapshot(item, top_level=False)
