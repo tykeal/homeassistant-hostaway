@@ -35,3 +35,86 @@ ignore:
     package:
       name: cryptography
       type: python
+  # Future-dated urllib3 advisories are transitive through the
+  # Home Assistant test/runtime dependency set. Home Assistant pins the
+  # compatible urllib3 version, so this integration cannot safely
+  # override it independently. Remove when upstream ships urllib3 >=
+  # 2.8.0 or the advisories are withdrawn.
+  - vulnerability: GHSA-vxq7-64xx-v4gw
+    package:
+      name: urllib3
+      type: python
+  - vulnerability: GHSA-8988-9cw3-xx77
+    package:
+      name: urllib3
+      type: python
+  - vulnerability: GHSA-gh4c-6fx4-qh6g
+    package:
+      name: urllib3
+      type: python
+  # Future-dated cryptography advisories are likewise pinned by Home
+  # Assistant. Remove when upstream ships cryptography >= 49.0.0 or
+  # the advisories are withdrawn.
+  - vulnerability: GHSA-jwv3-5hgf-82ww
+    package:
+      name: cryptography
+      type: python
+  - vulnerability: GHSA-m2h6-j472-rp4c
+    package:
+      name: cryptography
+      type: python
+  # PyJWT is a transitive Home Assistant dependency. Home Assistant
+  # currently pins 2.13.0; remove these ignores when upstream ships a
+  # version satisfying the fixed ranges or the advisories are withdrawn.
+  - vulnerability: GHSA-w6j9-cwv2-h6wq
+    package:
+      name: PyJWT
+      type: python
+  - vulnerability: GHSA-2gx3-rcp4-g85q
+    package:
+      name: PyJWT
+      type: python
+  - vulnerability: GHSA-ffc3-869f-jxw9
+    package:
+      name: PyJWT
+      type: python
+  - vulnerability: GHSA-42vr-xj54-vc7v
+    package:
+      name: PyJWT
+      type: python
+  - vulnerability: GHSA-8wjv-2p76-3863
+    package:
+      name: PyJWT
+      type: python
+  - vulnerability: GHSA-r6x4-923q-g947
+    package:
+      name: PyJWT
+      type: python
+  - vulnerability: GHSA-gvp8-978c-rx2q
+    package:
+      name: PyJWT
+      type: python
+  - vulnerability: GHSA-w2cx-738m-mc7w
+    package:
+      name: PyJWT
+      type: python
+  - vulnerability: GHSA-9j54-fg26-wv3r
+    package:
+      name: PyJWT
+      type: python
+  - vulnerability: GHSA-p4g4-x82p-q773
+    package:
+      name: PyJWT
+      type: python
+  - vulnerability: GHSA-9v7f-9g4p-ffgj
+    package:
+      name: PyJWT
+      type: python
+  - vulnerability: GHSA-hxm8-2xgr-2p9m
+    package:
+      name: PyJWT
+      type: python
+  - vulnerability: GHSA-jwrc-g2q2-pq5p
+    package:
+      name: PyJWT
+      type: python
