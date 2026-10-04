@@ -29,6 +29,7 @@ LIVE_VERIFICATION_LOG = Path("specs/007-custom-field-support/live-verification.m
 SUMMARY_SAFE_SCALAR_KEYS = frozenset({"mode", "indicative_not_conclusive"})
 SUMMARY_SAFE_LIST_KEYS = frozenset({"restore_payload_keys"})
 SUMMARY_REDACT_WHOLE_KEYS = frozenset({"canonical_summary"})
+PAYLOAD_LOG_KEYS = frozenset({"customFieldValues", "customFieldId", "value"})
 
 
 def redact(value: Any) -> Any:
@@ -87,6 +88,21 @@ def sanitize_summary(value: Any, key: str | None = None) -> Any:
         return [sanitize_summary(item, key) for item in value]
     if key in SUMMARY_SAFE_SCALAR_KEYS:
         return value
+    if value is not None:
+        return REDACTED
+    return value
+
+
+def redact_payload_for_log(value: Any) -> Any:
+    """Redact payload values and omit arbitrary metadata keys for logs."""
+    if isinstance(value, Mapping):
+        return {
+            key: redact_payload_for_log(item)
+            for key, item in value.items()
+            if key in PAYLOAD_LOG_KEYS
+        }
+    if isinstance(value, list):
+        return [redact_payload_for_log(item) for item in value]
     if value is not None:
         return REDACTED
     return value
@@ -235,6 +251,7 @@ def _task_canary_create_payload(args: argparse.Namespace) -> dict[str, Any]:
     }
     listing_map_id = getattr(args, "listing_map_id", None)
     if listing_map_id is not None:
+        validate_identifier(listing_map_id, "listing_map_id")
         payload["listingMapId"] = listing_map_id
     return payload
 
@@ -360,7 +377,11 @@ async def verify(args: argparse.Namespace) -> int:
         if set(payload) != {"customFieldValues"}:
             raise RuntimeError("payload contains unsafe top-level keys")
         if not args.mutate:
-            print(json.dumps({"dry_run": True, "payload": redact(payload)}))
+            print(
+                json.dumps(
+                    {"dry_run": True, "payload": redact_payload_for_log(payload)}
+                )
+            )
             return 0
         raise RuntimeError(
             "live listing and reservation mutation steps remain disabled; "
@@ -398,7 +419,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--unrelated-custom-field-id",
         type=int,
-        default=999999,
+        default=None,
         help="second custom-field id used only by task-canary tests",
     )
     parser.add_argument(

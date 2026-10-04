@@ -499,6 +499,35 @@ def test_reservation_evidence_is_account_bound_and_fail_closed() -> None:
                 payload_strategy="partial",
             ),
         )
+    evidence = ReservationCustomFieldEvidenceState(
+        account_id=123,
+        config_entry_id="entry",
+        custom_field_values_round_trip_verified=True,
+        payload_strategy="partial",
+    )
+    assert (
+        select_reservation_payload_strategy(
+            gates,
+            evidence,
+            account_id=123,
+            config_entry_id="entry",
+        )
+        == "partial"
+    )
+    with pytest.raises(CustomFieldMergeError, match="does not match"):
+        select_reservation_payload_strategy(
+            gates,
+            evidence,
+            account_id=456,
+            config_entry_id="entry",
+        )
+    with pytest.raises(CustomFieldMergeError, match="does not match"):
+        select_reservation_payload_strategy(
+            gates,
+            evidence,
+            account_id=123,
+            config_entry_id="other",
+        )
 
 
 def test_strategy_selection_fails_closed_without_evidence() -> None:

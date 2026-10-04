@@ -4,6 +4,7 @@
 
 # aislop-ignore-file ai-slop/hallucinated-import -- HA runtime provides these packages
 
+import json
 import shutil
 from argparse import Namespace
 from pathlib import Path
@@ -17,6 +18,7 @@ from scripts.verify_custom_field_writes import (
     compare_unrelated,
     custom_field_value,
     redact,
+    redact_payload_for_log,
     sanitize_summary,
     snapshot_path,
     validate_restore_payload,
@@ -56,6 +58,26 @@ def test_summary_sanitizer_preserves_protocol_metadata() -> None:
         "restore_payload_keys": ["title", "customFieldValues"],
         "indicative_not_conclusive": True,
         "canonical_summary": "<redacted>",
+    }
+
+
+def test_payload_log_redaction_omits_private_metadata_keys() -> None:
+    """Dry-run payload logging does not expose arbitrary metadata keys."""
+    payload = {
+        "customFieldValues": [
+            {
+                "customFieldId": 1,
+                "value": {"guest@example.com": "private"},
+                "guest@example.com": "metadata",
+            }
+        ]
+    }
+
+    redacted = redact_payload_for_log(payload)
+
+    assert "guest@example.com" not in json.dumps(redacted)
+    assert redacted == {
+        "customFieldValues": [{"customFieldId": "<redacted>", "value": {}}]
     }
 
 
@@ -497,6 +519,55 @@ async def test_task_canary_rejects_invalid_ids_before_request(
                 original_value="old",
                 unrelated_custom_field_id=-1,
                 listing_map_id=None,
+                mutate=False,
+                snapshot=False,
+                task_canary=True,
+            )
+        )
+
+    assert calls == []
+
+
+async def test_task_canary_requires_unrelated_id_and_valid_listing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task canary validates optional listing and required unrelated ids."""
+    calls: list[str] = []
+
+    async def fake_request(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        """Fail if validation allows a live request."""
+        del kwargs
+        calls.append(args[1])
+        return {}
+
+    monkeypatch.setenv("HOSTAWAY_ACCESS_TOKEN", "token")
+    monkeypatch.setattr("scripts.verify_custom_field_writes._request", fake_request)
+
+    with pytest.raises(ValueError, match="unrelated_custom_field_id"):
+        await verify(
+            Namespace(
+                target_type="listing",
+                target_id=10,
+                custom_field_id=1,
+                value="new",
+                original_value="old",
+                unrelated_custom_field_id=None,
+                listing_map_id=None,
+                mutate=False,
+                snapshot=False,
+                task_canary=True,
+            )
+        )
+    with pytest.raises(ValueError, match="listing_map_id"):
+        await verify(
+            Namespace(
+                target_type="listing",
+                target_id=10,
+                custom_field_id=1,
+                value="new",
+                original_value="old",
+                unrelated_custom_field_id=2,
+                listing_map_id=0,
                 mutate=False,
                 snapshot=False,
                 task_canary=True,
