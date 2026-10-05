@@ -14,6 +14,7 @@ import httpx
 import pytest
 
 from scripts.verify_custom_field_writes import (
+    build_parser,
     compare_complete_snapshots,
     compare_unrelated,
     custom_field_value,
@@ -88,6 +89,121 @@ def test_snapshot_path_is_outside_git() -> None:
 
     assert ".hostaway" in path.parts
     assert "custom-field-write-snapshots" in path.parts
+
+
+def test_parser_accepts_task_canary_without_target() -> None:
+    """Task canary mode requires no listing or reservation target."""
+    args = build_parser().parse_args(
+        [
+            "task-canary",
+            "--custom-field-id",
+            "1",
+            "--unrelated-custom-field-id",
+            "2",
+            "--value",
+            "sentinel",
+        ]
+    )
+
+    assert args.task_canary is True
+    assert args.target_type == "task"
+    assert args.target_id is None
+    assert args.custom_field_id == 1
+    assert args.unrelated_custom_field_id == 2
+    assert args.value == "sentinel"
+
+
+def test_parser_rejects_task_canary_target(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Task canary mode fails fast when a target is supplied."""
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(
+            [
+                "task-canary",
+                "--custom-field-id",
+                "1",
+                "--unrelated-custom-field-id",
+                "2",
+                "--value",
+                "sentinel",
+                "listing",
+                "123",
+            ]
+        )
+
+    assert "disposable task it creates itself" in capsys.readouterr().err
+
+
+def test_parser_rejects_legacy_target_with_task_canary(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Legacy target plus --task-canary is rejected with a safety message."""
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(
+            [
+                "listing",
+                "123",
+                "--task-canary",
+                "--custom-field-id",
+                "1",
+                "--unrelated-custom-field-id",
+                "2",
+                "--value",
+                "sentinel",
+            ]
+        )
+
+    assert "do not pass listing or reservation target" in capsys.readouterr().err
+
+
+def test_parser_requires_unrelated_task_canary_id(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Missing unrelated task field id is an argparse-level error."""
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(
+            ["task-canary", "--custom-field-id", "1", "--value", "sentinel"]
+        )
+
+    assert "--unrelated-custom-field-id" in capsys.readouterr().err
+
+
+def test_parser_rejects_task_canary_listing_map_id(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Task canary mode rejects listing target ids."""
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(
+            [
+                "task-canary",
+                "--custom-field-id",
+                "1",
+                "--unrelated-custom-field-id",
+                "2",
+                "--value",
+                "sentinel",
+                "--listing-map-id",
+                "123",
+            ]
+        )
+
+    assert "do not pass listing or reservation target" in capsys.readouterr().err
+
+
+def test_parser_accepts_listing_and_reservation_modes() -> None:
+    """Existing listing and reservation verification invocations still parse."""
+    listing = build_parser().parse_args(["listing", "123", "--snapshot"])
+    reservation = build_parser().parse_args(["reservation", "456", "7", "sentinel"])
+
+    assert listing.target_type == "listing"
+    assert listing.target_id == 123
+    assert listing.snapshot is True
+    assert listing.task_canary is False
+    assert reservation.target_type == "reservation"
+    assert reservation.target_id == 456
+    assert reservation.custom_field_id == 7
+    assert reservation.value == "sentinel"
 
 
 def test_compare_unrelated_detects_changes() -> None:
@@ -580,10 +696,10 @@ async def test_task_canary_rejects_invalid_ids_before_request(
     assert calls == []
 
 
-async def test_task_canary_requires_unrelated_id_and_valid_listing(
+async def test_task_canary_requires_unrelated_id(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Task canary validates optional listing and required unrelated ids."""
+    """Task canary validates required unrelated ids before creating a task."""
     calls: list[str] = []
 
     async def fake_request(*args: Any, **kwargs: Any) -> dict[str, Any]:
@@ -610,22 +726,6 @@ async def test_task_canary_requires_unrelated_id_and_valid_listing(
                 task_canary=True,
             )
         )
-    with pytest.raises(ValueError, match="listing_map_id"):
-        await verify(
-            Namespace(
-                target_type="listing",
-                target_id=10,
-                custom_field_id=1,
-                value="new",
-                original_value="old",
-                unrelated_custom_field_id=2,
-                listing_map_id=0,
-                mutate=False,
-                snapshot=False,
-                task_canary=True,
-            )
-        )
-
     assert calls == []
 
 

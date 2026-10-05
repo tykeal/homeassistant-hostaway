@@ -1,7 +1,17 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2026 Andrew Grimberg <tykeal@bardicgrove.org>
 # SPDX-License-Identifier: Apache-2.0
-"""Verify Hostaway custom-field write no-clobber behavior."""
+"""Verify Hostaway custom-field write no-clobber behavior.
+
+Examples:
+  verify_custom_field_writes.py listing LISTING_ID --snapshot
+  verify_custom_field_writes.py listing LISTING_ID CUSTOM_FIELD_ID SENTINEL
+  verify_custom_field_writes.py task-canary --custom-field-id FIELD_ID
+    --unrelated-custom-field-id OTHER_FIELD_ID --value SENTINEL
+
+The task canary never accepts a listing or reservation target. It creates,
+mutates, restores, verifies, and deletes only its own disposable Hostaway task.
+"""
 
 # aislop-ignore-file complexity/file-too-large -- cohesive live verification helper
 
@@ -11,9 +21,10 @@ import argparse
 import asyncio
 import json
 import os
-from collections.abc import Mapping
+import sys
+from collections.abc import Iterable, Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar, overload
 
 import httpx
 
@@ -32,6 +43,68 @@ SUMMARY_SAFE_SCALAR_KEYS = frozenset({"mode", "indicative_not_conclusive"})
 SUMMARY_SAFE_LIST_KEYS = frozenset({"restore_payload_keys"})
 SUMMARY_REDACT_WHOLE_KEYS = frozenset({"canonical_summary"})
 PAYLOAD_LOG_KEYS = frozenset({"customFieldValues", "customFieldId", "value"})
+
+_N = TypeVar("_N")
+
+
+class VerificationArgumentParser(argparse.ArgumentParser):
+    """Argument parser with cross-mode safety validation."""
+
+    @overload
+    def parse_args(
+        self,
+        args: Iterable[str] | None = None,
+        namespace: None = None,
+    ) -> argparse.Namespace:
+        """Parse arguments into a new namespace."""
+        ...
+
+    @overload
+    def parse_args(self, args: Iterable[str] | None, namespace: _N) -> _N:
+        """Parse arguments into an existing namespace."""
+        ...
+
+    @overload
+    def parse_args(self, *, namespace: _N) -> _N:
+        """Parse runtime arguments into an existing namespace."""
+        ...
+
+    def parse_args(
+        self,
+        args: Iterable[str] | None = None,
+        namespace: Any = None,
+    ) -> Any:
+        """Parse arguments and reject unsafe mixed-mode invocations."""
+        raw_args = sys.argv[1:] if args is None else list(args)
+        if (
+            len(raw_args) > 1
+            and raw_args[0] == "task-canary"
+            and not raw_args[1].startswith("-")
+        ):
+            self.error(
+                "task canary only operates on a disposable task it creates "
+                "itself; do not pass listing or reservation target arguments"
+            )
+        if raw_args and raw_args[0] == "task-canary" and "--listing-map-id" in raw_args:
+            self.error(
+                "task canary only operates on a disposable task it creates "
+                "itself; do not pass listing or reservation target arguments"
+            )
+        parsed = super().parse_args(raw_args if args is not None else None, namespace)
+        if getattr(parsed, "legacy_task_canary", False):
+            self.error(
+                "task canary only operates on a disposable task it creates "
+                "itself; do not pass listing or reservation target arguments "
+                "with task-canary mode"
+            )
+        if getattr(parsed, "task_canary", False) and getattr(
+            parsed, "target_arguments", []
+        ):
+            self.error(
+                "task canary only operates on a disposable task it creates "
+                "itself; do not pass listing or reservation target arguments"
+            )
+        return parsed
 
 
 def redact(value: Any) -> Any:
@@ -259,10 +332,6 @@ def _task_canary_create_payload(args: argparse.Namespace) -> dict[str, Any]:
         "status": "pending",
         "customFieldValues": custom_values,
     }
-    listing_map_id = getattr(args, "listing_map_id", None)
-    if listing_map_id is not None:
-        validate_identifier(listing_map_id, "listing_map_id")
-        payload["listingMapId"] = listing_map_id
     return payload
 
 
@@ -294,7 +363,10 @@ async def run_task_canary(args: argparse.Namespace) -> int:
     if not token:
         raise RuntimeError("HOSTAWAY_ACCESS_TOKEN is required")
     if args.unrelated_custom_field_id == args.custom_field_id:
-        raise RuntimeError("task canary requires a distinct unrelated field id")
+        raise RuntimeError(
+            "task canary requires two distinct objectType: task custom field "
+            "definitions"
+        )
     async with httpx.AsyncClient(timeout=30) as client:
         created = await _request(
             client,
@@ -319,7 +391,9 @@ async def run_task_canary(args: argparse.Namespace) -> int:
                 raise RuntimeError("task canary sentinel must differ from baseline")
             if not has_populated_custom_field(before, args.unrelated_custom_field_id):
                 raise RuntimeError(
-                    "task canary requires a populated unrelated custom field"
+                    "task canary requires a populated unrelated task custom "
+                    "field; create two objectType: task definitions and leave "
+                    "the unrelated field populated for preservation evidence"
                 )
             validated_restore_payload = validate_restore_payload(before, "task")
             snap_path = snapshot_path("task", task_id)
@@ -401,47 +475,120 @@ async def verify(args: argparse.Namespace) -> int:
             return 0
         raise RuntimeError(
             "live listing and reservation mutation steps remain disabled; "
-            "use --snapshot or --task-canary for authorized ladder steps"
+            "use --snapshot or the task-canary subcommand for authorized "
+            "ladder steps"
         )
 
 
-def build_parser() -> argparse.ArgumentParser:
-    """Build the command-line parser."""
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("target_type", choices=("listing", "reservation"))
-    parser.add_argument("target_id", type=int)
-    parser.add_argument("custom_field_id", type=int, nargs="?")
-    parser.add_argument("value", nargs="?")
-    parser.add_argument(
+def positive_int(value: str) -> int:
+    """Parse a positive integer argument."""
+    parsed = int(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return parsed
+
+
+def non_empty_string(value: str) -> str:
+    """Parse a non-empty string argument."""
+    if value == "":
+        raise argparse.ArgumentTypeError("must not be empty")
+    return value
+
+
+def _add_target_parser(
+    subparsers: Any,
+    target_type: str,
+) -> None:
+    """Add a listing or reservation verification subcommand."""
+    target = subparsers.add_parser(
+        target_type,
+        help=f"verify {target_type} snapshots and dry-run payloads",
+    )
+    target.set_defaults(
+        target_type=target_type,
+        task_canary=False,
+        legacy_task_canary=False,
+    )
+    target.add_argument("target_id", type=positive_int)
+    target.add_argument("custom_field_id", type=positive_int, nargs="?")
+    target.add_argument("value", nargs="?")
+    target.add_argument(
         "--mutate",
         action="store_true",
         help="perform the guarded live mutation; default is dry-run",
     )
-    parser.add_argument(
+    target.add_argument(
         "--snapshot",
         action="store_true",
         help="capture and validate a read-only restore snapshot",
     )
-    parser.add_argument(
+    target.add_argument(
         "--task-canary",
         action="store_true",
-        help="create, mutate, restore, verify, and delete a disposable task",
+        dest="legacy_task_canary",
+        help=argparse.SUPPRESS,
     )
-    parser.add_argument(
+    target.add_argument("--unrelated-custom-field-id", help=argparse.SUPPRESS)
+    target.add_argument("--custom-field-id", help=argparse.SUPPRESS)
+    target.add_argument("--original-value", help=argparse.SUPPRESS)
+    target.add_argument("--value", dest="canary_value", help=argparse.SUPPRESS)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Build the command-line parser."""
+    parser = VerificationArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    subparsers = parser.add_subparsers(dest="mode", required=True)
+    _add_target_parser(subparsers, "listing")
+    _add_target_parser(subparsers, "reservation")
+
+    canary = subparsers.add_parser(
+        "task-canary",
+        help="create, mutate, restore, verify, and delete a disposable task",
+        description=(
+            "Run a disposable Hostaway task canary. This mode never accepts "
+            "a listing or reservation id and can never target a pre-existing "
+            "task."
+        ),
+    )
+    canary.set_defaults(
+        target_type="task",
+        target_id=None,
+        mutate=False,
+        snapshot=False,
+        task_canary=True,
+        legacy_task_canary=False,
+    )
+    canary.add_argument(
+        "--custom-field-id",
+        type=positive_int,
+        required=True,
+        help="task custom field id to mutate with the sentinel value",
+    )
+    canary.add_argument(
+        "--value",
+        type=non_empty_string,
+        required=True,
+        help="sentinel value for the addressed task custom field",
+    )
+    canary.add_argument(
+        "--unrelated-custom-field-id",
+        type=positive_int,
+        required=True,
+        help=(
+            "second populated objectType: task custom field id used to prove "
+            "unrelated values survive"
+        ),
+    )
+    canary.add_argument(
         "--original-value",
         default="original",
         help="initial addressed custom-field value for task canary",
     )
-    parser.add_argument(
-        "--unrelated-custom-field-id",
-        type=int,
-        default=None,
-        help="second custom-field id used only by task-canary tests",
-    )
-    parser.add_argument(
-        "--listing-map-id",
-        type=int,
-        help="optional listingMapId for the disposable task canary",
+    canary.add_argument(
+        "target_arguments", nargs=argparse.REMAINDER, help=argparse.SUPPRESS
     )
     return parser
 
