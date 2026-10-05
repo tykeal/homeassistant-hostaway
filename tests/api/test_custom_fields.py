@@ -20,12 +20,19 @@ from custom_components.hostaway.api.custom_fields import (
     HostawayCustomFieldCollection,
     HostawayCustomFieldDefinition,
     HostawayCustomFieldValue,
+    ReservationCustomFieldEvidenceState,
+    build_allowlisted_restore_payload,
     build_custom_field_values_payload,
+    build_full_object_custom_field_payload,
+    canonical_snapshot_differences,
+    canonicalize_complete_snapshot,
     fetch_custom_field_definitions,
     lookup_definition_by_id,
     read_listing_with_custom_fields,
     read_reservation_with_custom_fields,
     resolve_var_name,
+    select_listing_payload_strategy,
+    select_reservation_payload_strategy,
     validate_custom_field_value,
     validate_identifier,
 )
@@ -53,7 +60,9 @@ def test_write_safety_gates_default_off() -> None:
     gates = CustomFieldWriteSafetyGates()
 
     assert gates.listing_partial_put_verified is False
+    assert gates.listing_payload_strategy is None
     assert gates.reservation_no_clobber_verified is False
+    assert gates.reservation_payload_strategy is None
 
 
 @pytest.mark.parametrize("bad", [True, False, 0, -1, "1", 1.2])
@@ -214,6 +223,26 @@ def test_payload_builder_preserves_unaddressed_and_exact_keys() -> None:
     ]
 
 
+def test_payload_builder_preserves_addressed_entry_metadata() -> None:
+    """Merge updates only the addressed value in a valid raw entry."""
+    payload = build_custom_field_values_payload(
+        {
+            "customFieldValues": [
+                {"customFieldId": 1, "value": "old", "metadata": "keep"},
+                {"customFieldId": 2, "value": "other"},
+            ]
+        },
+        1,
+        "new",
+    )
+
+    assert payload["customFieldValues"][0] == {
+        "customFieldId": 1,
+        "value": "new",
+        "metadata": "keep",
+    }
+
+
 def test_payload_builder_appends_to_empty_collection() -> None:
     """A present empty customFieldValues list is writable."""
     assert build_custom_field_values_payload({"customFieldValues": []}, 7, "x") == {
@@ -350,3 +379,218 @@ def test_validate_custom_field_value_future_type_passthrough() -> None:
     assert definition is not None
 
     assert validate_custom_field_value(definition, {"x": 1}) == {"x": 1}
+
+
+def test_full_object_builder_uses_allowlist_and_merges_values() -> None:
+    """Listing full-object payloads use allowlists instead of raw deep copies."""
+    payload = build_full_object_custom_field_payload(
+        {
+            "id": 10,
+            "name": "Listing",
+            "updatedAt": "volatile",
+            "customFieldValues": [
+                {"customFieldId": 1, "value": "old"},
+                {"customFieldId": 2, "value": "keep"},
+            ],
+        },
+        1,
+        "new",
+        concurrent_edit_detection_available=True,
+    )
+
+    assert payload == {
+        "name": "Listing",
+        "customFieldValues": [
+            {"customFieldId": 1, "value": "new"},
+            {"customFieldId": 2, "value": "keep"},
+        ],
+    }
+
+
+def test_full_object_builder_rejects_unsafe_paths() -> None:
+    """Full-object payloads reject raw copies, reservations, and no versioning."""
+    raw_only_allowlisted = {"name": "Listing", "customFieldValues": []}
+    with pytest.raises(CustomFieldMergeError, match="raw GET response"):
+        build_allowlisted_restore_payload(raw_only_allowlisted, "listing")
+    with pytest.raises(CustomFieldMergeError, match="reservations"):
+        build_allowlisted_restore_payload({"customFieldValues": []}, "reservation")
+    with pytest.raises(CustomFieldMergeError, match="concurrent edit"):
+        build_full_object_custom_field_payload(
+            {"id": 1, "customFieldValues": []},
+            1,
+            "value",
+            concurrent_edit_detection_available=False,
+        )
+
+
+def test_restore_payload_rejects_unclassified_snapshot_fields() -> None:
+    """Snapshot validation fails when a field is neither writable nor excluded."""
+    with pytest.raises(CustomFieldMergeError, match="restore classification"):
+        build_allowlisted_restore_payload(
+            {"id": 1, "unexpectedField": "x", "customFieldValues": []},
+            "listing",
+        )
+
+
+def test_restore_payload_normalizes_internal_name_alias() -> None:
+    """Listing restore payloads normalize Hostaway's internalName alias."""
+    assert build_allowlisted_restore_payload(
+        {"id": 1, "internalName": "Alias", "customFieldValues": []},
+        "listing",
+    ) == {"internalListingName": "Alias", "customFieldValues": []}
+    assert build_allowlisted_restore_payload(
+        {
+            "id": 1,
+            "internalName": "Alias",
+            "internalListingName": "Canonical",
+            "customFieldValues": [],
+        },
+        "listing",
+    ) == {"internalListingName": "Canonical", "customFieldValues": []}
+
+
+def test_task_restore_payload_normalizes_documented_response_shape() -> None:
+    """Task restore payloads accept documented response aliases and metadata."""
+    payload = build_allowlisted_restore_payload(
+        {
+            "id": 42,
+            "channelId": 7,
+            "createdByUserId": 8,
+            "isUpdatedManually": 0,
+            "title": "Task",
+            "customFieldValue": [{"customFieldId": 1, "value": "old"}],
+        },
+        "task",
+    )
+
+    assert payload == {
+        "title": "Task",
+        "customFieldValues": [{"customFieldId": 1, "value": "old"}],
+    }
+
+
+def test_canonicalizer_excludes_only_volatile_server_fields() -> None:
+    """Complete-snapshot comparison normalizes update timestamps only."""
+    before = {
+        "id": 1,
+        "updatedAt": "old",
+        "name": "Listing",
+        "customFieldValues": [
+            {"customFieldId": 2, "value": "two"},
+            {"customFieldId": 1, "value": "one"},
+        ],
+    }
+    after = {
+        "id": 1,
+        "updatedAt": "new",
+        "name": "Changed",
+        "customFieldValues": [
+            {"customFieldId": 1, "value": "one"},
+            {"customFieldId": 2, "value": "two"},
+        ],
+    }
+
+    assert canonicalize_complete_snapshot(before)["customFieldValues"] == [
+        {"customFieldId": 1, "value": "one"},
+        {"customFieldId": 2, "value": "two"},
+    ]
+    assert canonical_snapshot_differences(before, after) == ["$.name"]
+
+
+def test_canonicalizer_preserves_absent_custom_values() -> None:
+    """Absent customFieldValues are not treated as an empty collection."""
+    assert canonical_snapshot_differences({}, {"customFieldValues": []}) == [
+        "$.customFieldValues"
+    ]
+
+
+def test_canonicalizer_preserves_nested_custom_value_order() -> None:
+    """Only the top-level customFieldValues collection is order-normalized."""
+    before = {
+        "customFieldValues": [
+            {"customFieldId": 1, "value": {"customFieldValues": ["a", "b"]}}
+        ]
+    }
+    after = {
+        "customFieldValues": [
+            {"customFieldId": 1, "value": {"customFieldValues": ["b", "a"]}}
+        ]
+    }
+
+    assert canonical_snapshot_differences(before, after)
+
+
+def test_reservation_evidence_is_account_bound_and_fail_closed() -> None:
+    """Reservation evidence must be account-bound before it can enable writes."""
+    assert not ReservationCustomFieldEvidenceState(
+        custom_field_values_round_trip_verified=True,
+        payload_strategy="partial",
+    ).enables_reservation_writes
+    assert ReservationCustomFieldEvidenceState(
+        account_id=123,
+        config_entry_id="entry",
+        custom_field_values_round_trip_verified=True,
+        payload_strategy="partial",
+    ).enables_reservation_writes
+    gates = CustomFieldWriteSafetyGates()
+    object.__setattr__(gates, "reservation_payload_strategy", "partial")
+    object.__setattr__(gates, "reservation_no_clobber_verified", True)
+    with pytest.raises(CustomFieldMergeError, match="account"):
+        select_reservation_payload_strategy(gates)
+    with pytest.raises(CustomFieldMergeError, match="account"):
+        select_reservation_payload_strategy(
+            gates,
+            ReservationCustomFieldEvidenceState(
+                custom_field_values_round_trip_verified=True,
+                payload_strategy="partial",
+            ),
+        )
+    evidence = ReservationCustomFieldEvidenceState(
+        account_id=123,
+        config_entry_id="entry",
+        custom_field_values_round_trip_verified=True,
+        payload_strategy="partial",
+    )
+    assert (
+        select_reservation_payload_strategy(
+            gates,
+            evidence,
+            account_id=123,
+            config_entry_id="entry",
+        )
+        == "partial"
+    )
+    with pytest.raises(CustomFieldMergeError, match="does not match"):
+        select_reservation_payload_strategy(
+            gates,
+            evidence,
+            account_id=456,
+            config_entry_id="entry",
+        )
+    with pytest.raises(CustomFieldMergeError, match="does not match"):
+        select_reservation_payload_strategy(
+            gates,
+            evidence,
+            account_id=123,
+            config_entry_id="other",
+        )
+
+
+def test_strategy_selection_fails_closed_without_evidence() -> None:
+    """Explicit strategy state is required before writes can dispatch."""
+    gates = CustomFieldWriteSafetyGates()
+
+    with pytest.raises(CustomFieldMergeError, match="listing"):
+        select_listing_payload_strategy(gates)
+    with pytest.raises(CustomFieldMergeError, match="reservation"):
+        select_reservation_payload_strategy(gates)
+
+
+def test_strategy_selection_keeps_full_object_separate() -> None:
+    """Full-object listing evidence cannot be represented as partial PUT."""
+    gates = CustomFieldWriteSafetyGates()
+    object.__setattr__(gates, "listing_payload_strategy", "full_object")
+    object.__setattr__(gates, "listing_partial_put_verified", True)
+
+    with pytest.raises(CustomFieldMergeError, match="masquerade"):
+        select_listing_payload_strategy(gates)

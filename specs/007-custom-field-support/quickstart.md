@@ -97,14 +97,37 @@ Authorized now:
   private before snapshot outside git, and verify an allowlisted restore
   payload is reconstructable from that snapshot without deep-copying the GET
   response.
+
+  ```bash
+  HOSTAWAY_ACCESS_TOKEN=... scripts/verify_custom_field_writes.py \
+    listing LISTING_ID --snapshot
+  ```
+
 - Step 2: Inspect the generated dry-run payload. The verification script must
   default to dry-run, so this step sends no mutation.
+
+  ```bash
+  HOSTAWAY_ACCESS_TOKEN=... scripts/verify_custom_field_writes.py \
+    listing LISTING_ID CUSTOM_FIELD_ID SENTINEL_VALUE
+  ```
+
 - Step 3: Run a disposable task canary: create a throwaway Hostaway task,
   snapshot it, send partial `PUT /v1/tasks/{id}`, verify unrelated task fields
   survive, apply the allowlisted restore payload built by the same production
   restore-path code that listing Steps 4 and 5 would use, re-read, confirm the
   task matches its pre-mutation snapshot, and delete the task. Treat the
   server-accepted task restore as indicative, not conclusive, for listings.
+  Before running this step, create two throwaway Hostaway custom-field
+  definitions with `objectType: task`; one is the addressed field and the other
+  is the unrelated populated field used for preservation evidence. The command
+  intentionally accepts no listing, reservation, or existing task id:
+
+  ```bash
+  HOSTAWAY_ACCESS_TOKEN=... scripts/verify_custom_field_writes.py task-canary \
+    --custom-field-id TASK_FIELD_ID \
+    --unrelated-custom-field-id OTHER_TASK_FIELD_ID \
+    --value SENTINEL_VALUE
+  ```
 
 Requires a disposable listing or the allowlisted restore path from Step 1 plus
 the server-accepted restore demonstrated by Step 3, and a separate explicit
