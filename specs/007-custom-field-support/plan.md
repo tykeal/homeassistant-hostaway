@@ -268,10 +268,14 @@ table-driven.
   use different controllers. Steps 0 through 3 are authorized first. Step 4
   performs a listing no-op self-write and expects an empty whole-object diff.
   Step 5 writes a distinct listing sentinel value, verifies exactly one field
-  changed, restores the original value, and verifies the object matches the
-  pre-write snapshot exactly. Steps 4 and 5 require a disposable listing or
-  the allowlisted restore path from Step 1 plus the server-accepted restore
-  demonstrated by Step 3, and a separate explicit owner decision.
+  changed, and restores the original value only through a verified
+  target-specific recovery path that can preserve concurrent external edits
+  with conditional/version protection. If that conflict-safe recovery path is
+  not available, Step 5 must raise or stop without another mutation. Steps 4
+  and 5 require a disposable listing or the allowlisted restore path from Step
+  1 plus the server-accepted restore demonstrated by Step 3,
+  conditional/version protection for the listing recovery write, and a separate
+  explicit owner decision.
 - Treat the written Hostaway confirmation as satisfying listing omitted
   top-level field preservation. Continue to require full-array
   read-modify-write payloads because array fields are observed, not
@@ -289,12 +293,14 @@ table-driven.
   successful FR-035 evidence, including the 2026-10-04 authoritative support
   confirmation for omitted top-level field preservation.
 - If partial listing PUT is destructive, keep listing writes disabled or switch
-  to a verified full-object payload strategy for this feature. Restore on
-  failure must be attempted automatically, but the evidence must document that
-  restoration depends on cleared built-in fields being writable. The no-op,
-  sentinel, and restore live steps must exercise the selected listing payload
-  strategy; if full-object is selected for any reason, those steps must run
-  with the reconstructed full-object payload before listing writes are enabled.
+  to a verified full-object payload strategy for this feature. Recovery from a
+  pre-write state may be attempted only through a verified target-specific
+  recovery path that preserves concurrent external edits with
+  conditional/version protection; otherwise the service must raise or stop
+  without another mutation. The no-op, sentinel, and restore live steps must
+  exercise the selected listing payload strategy; if full-object is selected
+  for any reason, those steps must run with the reconstructed full-object
+  payload before listing writes are enabled.
   Full-object dispatch must also define and test a per-target writable-field
   allowlist and
   normalization rules; deep-copying a `GET` response into a full-object `PUT`

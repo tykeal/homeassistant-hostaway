@@ -135,11 +135,10 @@ owner decision:
   with `includeResources=1`, and confirm the canonicalized whole-object diff
   is empty.
 - Step 5: Send a distinct sentinel value, confirm exactly one field changed,
-  restore the original value, and confirm the final object matches the
-  pre-write snapshot exactly using the same complete-snapshot comparison.
-  Attempt automatic restore from the complete private snapshot if any
-  unexpected mutation is detected, and document that restore depends on any
-  cleared built-in fields being writable.
+  and restore the original value only when the recovery path is verified to be
+  conflict-safe for the target and can preserve concurrent external edits with
+  conditional/version protection. Otherwise, record the failure and raise
+  without another mutation.
 
 If optional corroboration fails, the implementation must make
 `hostaway.set_custom_field` fail closed for `target_type: listing` with an
@@ -270,9 +269,11 @@ After every successful-looking custom-field `PUT`, re-read the target with
 volatile-field normalization helpers as the verification code. Raise an
 actionable error if the addressed value did not persist, and reference the
 known Hostaway reservation issue where the endpoint can return success without
-updating a custom field. If unrelated custom values or built-in fields changed,
-raise and attempt automatic restore from the pre-write state already held by
-the service. Never log-and-ignore read-back failures.
+updating a custom field. If unrelated custom values or built-in fields changed, raise. Attempt recovery
+from the pre-write state only when a verified target-specific recovery path can
+preserve concurrent external edits with conditional/version protection. If the
+change cannot safely be attributed to this write, raise without another
+mutation. Never log-and-ignore read-back failures.
 
 ## User-facing behavior to verify
 

@@ -362,7 +362,8 @@ service call
   -> PUT target
   -> re-read target with includeResources=1
   -> compare canonicalized complete pre/post snapshots
-  -> raise and attempt restore on non-persistence or unrelated changes
+  -> raise on non-persistence
+  -> recover unrelated changes only with conflict-safe verified recovery
   -> update local coordinator data
   -> advance target generation and post-write override
   -> release lock
@@ -372,5 +373,8 @@ service call
 Any failure before the `PUT` sends no mutation. Any Hostaway API failure after
 the `PUT`, read-back failure, addressed-value non-persistence, or unrelated
 data change raises an actionable Home Assistant error and does not publish
-local success state. Unrelated data changes also trigger an automatic restore
-attempt from the pre-write state already held by the service.
+local success state. Addressed-value non-persistence stays on the error-only
+path. Unrelated data changes may trigger recovery from the pre-write state only
+when a verified target-specific recovery path can preserve concurrent external
+edits with conditional/version protection; otherwise the service raises without
+another mutation.

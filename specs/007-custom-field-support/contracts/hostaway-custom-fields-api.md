@@ -247,7 +247,7 @@ Content-Type: application/json
   listing with `includeResources=1` and verifies the addressed value persisted
   using a canonicalized complete-snapshot comparison. Read-back failures,
   unrelated custom-value changes, and built-in-field changes are raised and
-  handled per FR-056.
+  recovered only when FR-056's conflict-safe recovery requirements are met.
 - If a raw malformed entry carries the addressed `customFieldId`, the write
   fails before `PUT`; it is not replaced, dropped, or duplicated.
 - Duplicate raw entries for the addressed `customFieldId` fail before `PUT`.
@@ -504,7 +504,10 @@ Exactly one of `customFieldId` or `varName` is required.
 - Post-write read-back shows the addressed value did not persist, including
   the known Hostaway reservation success-without-persistence issue.
 - Post-write read-back shows unrelated custom values or built-in fields
-  changed; the service raises and attempts automatic restore.
+  changed; the service raises, and recovers only through a verified
+  target-specific recovery path with conditional/version protection. If the
+  change cannot safely be attributed to this write, it raises without another
+  mutation.
 
 ## Rate limits
 

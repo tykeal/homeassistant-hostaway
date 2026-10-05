@@ -154,8 +154,8 @@ write destroys live property data.
 **Independent Test**: On a listing with one populated custom variable, first
 self-write that variable's current value and confirm the whole listing object
 diff is empty. Then write a distinct sentinel value, confirm exactly that one
-field changed, restore the original value, and confirm the final object
-matches the pre-write snapshot exactly.
+field changed, and restore the original value only through a verified
+conflict-safe recovery path that preserves concurrent external edits.
 
 **Acceptance Scenarios**:
 
@@ -709,14 +709,17 @@ field they operate on and cross-reference each other.
   restore path from FR-051 plus the server-accepted restore demonstrated by the
   task canary in FR-052. Step 4 performs the no-op self-write and expects an
   empty whole-object diff. Step 5 writes the sentinel value, verifies exactly
-  one field changed, restores the original value, and verifies the target
-  matches the pre-write snapshot exactly. Restore-on-failure MUST be attempted
-  automatically using the allowlisted restore payload. If no allowlisted
-  restore path exists for the target, or if the task canary has not
-  demonstrated that the live API accepts and persists the reconstructed restore
-  payload, optional live listing corroboration MUST stop before listing
-  mutation; that absence MUST NOT invalidate the authoritative 2026-10-04
-  omitted-top-level-field evidence. Step 4 and Step 5, when run, MUST use the
+  one field changed, and restores the original value only through a verified
+  target-specific recovery path that can preserve concurrent external edits
+  with conditional/version protection. Restore-on-failure MUST NOT send another
+  mutation unless that same conflict-safe recovery path is available; otherwise
+  optional live listing corroboration MUST stop and record the failure without
+  attempting a stale-snapshot restore. If no verified conflict-safe restore
+  path exists for the target, or if the task canary has not demonstrated that
+  the live API accepts and persists the reconstructed restore payload, optional
+  live listing corroboration MUST stop before listing mutation; that absence
+  MUST NOT invalidate the authoritative 2026-10-04 omitted-top-level-field
+  evidence. Step 4 and Step 5, when run, MUST use the
   selected listing payload strategy. If a full-object strategy is selected for
   any reason, Step 4 and Step 5 MUST run with the reconstructed full-object
   payload before that full-object strategy is enabled.
@@ -760,9 +763,12 @@ field they operate on and cross-reference each other.
   success, and that error MUST reference the known Hostaway issue where the
   reservation update endpoint can return success without updating a custom
   field. If unrelated custom values or built-in fields changed, the service
-  MUST raise an error and MUST attempt automatic restore from the pre-write
-  state it already holds. Read-back failures MUST NOT be silently swallowed or
-  logged-and-ignored.
+  MUST raise an error. It MAY attempt automatic recovery from the pre-write
+  state it already holds only when a verified target-specific recovery path can
+  preserve concurrent external edits, including conditional/version protection
+  for recovery writes. When the change cannot safely be attributed to this
+  write, the service MUST raise without sending another mutation. Read-back
+  failures MUST NOT be silently swallowed or logged-and-ignored.
 
 ### Key Entities
 
@@ -817,9 +823,10 @@ field they operate on and cross-reference each other.
   verification. The verifier MUST first perform a no-op self-write of one
   populated custom variable's current value and confirm the whole-object diff
   is empty. It MUST then write a distinct sentinel value and confirm exactly
-  one field changed, then restore the original value and confirm the object
-  matches the pre-write snapshot exactly using a canonicalized complete-snapshot
-  comparison. This verification does not require any minimum number of
+  one field changed, then restore the original value only through a verified
+  conflict-safe recovery path and confirm the object has the expected final
+  state using a canonicalized complete-snapshot comparison. This verification
+  does not require any minimum number of
   populated custom variables: the no-op empty-diff check uses the entire
   object, including every built-in field and every present or absent custom
   variable, as the control group. A deviation anywhere in the object is a
