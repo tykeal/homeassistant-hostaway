@@ -127,18 +127,19 @@ Optional corroboration steps:
   server-accepted task restore as indicative, not conclusive, for listings.
 
 Requires a disposable listing or the allowlisted restore path from Step 1 plus
-the server-accepted restore demonstrated by Step 3, and a separate explicit
-owner decision:
+the server-accepted restore demonstrated by Step 3, a verified conflict-safe
+recovery path with conditional/version protection for the listing recovery
+write, and a separate explicit owner decision before any listing mutation in
+Step 4 or Step 5:
 
 - Step 4: Send a listing no-op self-write of the populated custom variable's
   current value through the production payload strategy, re-read the listing
   with `includeResources=1`, and confirm the canonicalized whole-object diff
   is empty.
-- Step 5: Send a distinct sentinel value, confirm exactly one field changed,
-  and restore the original value only when the recovery path is verified to be
-  conflict-safe for the target and can preserve concurrent external edits with
-  conditional/version protection. Otherwise, record the failure and raise
-  without another mutation.
+- Step 5: After confirming the prerequisite conflict-safe recovery path is
+  available, send a distinct sentinel value, confirm exactly one field changed,
+  and restore the original value through that path. If recovery becomes unsafe
+  after the write, record the failure and raise without another mutation.
 
 If optional corroboration fails, the implementation must make
 `hostaway.set_custom_field` fail closed for `target_type: listing` with an

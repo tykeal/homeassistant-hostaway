@@ -181,13 +181,13 @@ variable.
   different controllers.
 - Steps 4 and 5 are optional corroboration for listing top-level partial-body
   preservation, not a blocker now that authoritative written confirmation is
-  available. If run, Step 4 self-writes one populated listing custom variable's
-  current value and re-reads with `includeResources=1`; Step 5 writes a
-  distinct sentinel value, re-reads, asserts exactly one field changed, and
-  restores the original value only through a verified target-specific recovery
-  path that preserves concurrent external edits with conditional/version
-  protection. If that path is unavailable, Step 5 records the failure and sends
-  no additional mutation.
+  available. They MUST NOT run unless a verified target-specific recovery path
+  with conditional/version protection is available before any listing mutation.
+  If run, Step 4 self-writes one populated listing custom variable's current
+  value and re-reads with `includeResources=1`; Step 5 writes a distinct
+  sentinel value, re-reads, asserts exactly one field changed, and restores the
+  original value through that conflict-safe path. If recovery becomes unsafe
+  after the write, Step 5 records the failure and sends no additional mutation.
 
 This protocol does not require three populated custom variables. The no-op
 self-write uses the entire listing object as the control group; any custom

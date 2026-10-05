@@ -246,8 +246,11 @@ Content-Type: application/json
 - After every successful-looking listing write, the service re-reads the
   listing with `includeResources=1` and verifies the addressed value persisted
   using a canonicalized complete-snapshot comparison. Read-back failures,
-  unrelated custom-value changes, and built-in-field changes are raised and
-  recovered only when FR-056's conflict-safe recovery requirements are met.
+  addressed-value non-persistence, unrelated custom-value changes, and
+  built-in-field changes always raise. Recovery is considered only for
+  attributable unrelated-data changes and only when FR-056's conflict-safe
+  recovery requirements are met; failed read-backs and non-persistence never
+  trigger recovery.
 - If a raw malformed entry carries the addressed `customFieldId`, the write
   fails before `PUT`; it is not replaced, dropped, or duplicated.
 - Duplicate raw entries for the addressed `customFieldId` fail before `PUT`.
