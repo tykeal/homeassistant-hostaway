@@ -225,12 +225,14 @@ Content-Type: application/json
   no-op, sentinel, and restore steps are optional corroboration for that
   top-level preservation evidence path.
 - Listing mutation steps, when run for optional corroboration, require a
-  separate explicit owner decision and either a disposable listing or an
+  separate explicit owner decision, either a disposable listing or an
   allowlisted restore path plus task-canary evidence that the live API accepted
   and persisted a reconstructed restore payload built by the same production
-  restore-path code. Task restore evidence remains indicative, not conclusive,
-  for listing semantics because task and listing endpoints may use different
-  controllers.
+  restore-path code, and a verified target-specific conflict-safe recovery path
+  with conditional/version protection before any listing mutation. If that
+  recovery path is unavailable, corroboration stops before Step 4. Task restore
+  evidence remains indicative, not conclusive, for listing semantics because
+  task and listing endpoints may use different controllers.
 - The executable safety state records payload strategy separately from partial
   `PUT` verification. A full-object listing strategy must not set
   `listing_partial_put_verified` to true.
