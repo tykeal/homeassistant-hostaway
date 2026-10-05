@@ -197,8 +197,8 @@ Per-config-entry executable gates for live no-clobber verification.
 |----------|------|---------|-------------|
 | `listing_partial_put_verified` | `bool` | `False` | FR-035 listing partial-PUT verification passed. |
 | `listing_payload_strategy` | `"partial"` / `"full_object"` / `None` | `None` | Verified listing payload strategy selected from recorded evidence. |
-| `reservation_no_clobber_verified` | `bool` | `False` | FR-055 reservation `customFieldValues` no-op/sentinel/restore evidence or authoritative contract passed. |
-| `reservation_payload_strategy` | `"partial"` / `None` | `None` | Verified reservation payload strategy selected from recorded evidence; full-object reservation writes are out of scope until a separate protocol exists. |
+| `reservation_no_clobber_verified` | `bool` | `False` | FR-055 reservation owner acceptance and FR-056 read-back mitigation passed. |
+| `reservation_payload_strategy` | `"partial"` / `None` | `None` | Verified reservation payload strategy selected from recorded evidence and read-back protection; full-object reservation writes are out of scope until a separate protocol exists. |
 
 **Storage**: The gate object lives under
 `hass.data[DOMAIN][entry.entry_id]["custom_field_write_safety"]` and is seeded
@@ -210,16 +210,24 @@ must be bound to the verified Hostaway account/config entry.
 
 **Enablement rule**: A target type's flag may be changed to `True` only in an
 implementation change that records matching evidence in
-`specs/007-custom-field-support/live-verification.md`. Listing evidence must
-come from the verification ladder, and `listing_partial_put_verified` remains
-strictly tied to partial-PUT evidence. If the selected listing strategy is
-`full_object`, the implementation must record that strategy separately instead
-of setting `listing_partial_put_verified` to true. Reservation production `doorCode` evidence may be recorded as top-level merge
-evidence for the verified Hostaway account/config entry, but it does not enable
-`reservation_no_clobber_verified`. Both target types also require a non-`None`
-payload strategy before dispatch. Until then, `hostaway.set_custom_field`
-rejects that target type before reading, merging, or sending a mutating
-request.
+`specs/007-custom-field-support/live-verification.md`. Listing partial
+strategy evidence may come from authoritative written Hostaway confirmation of
+omitted top-level field preservation dated 2026-10-04; live listing Steps 4 and
+5 are optional corroboration for that point. `listing_partial_put_verified`
+remains strictly tied to partial-PUT top-level evidence. If the selected
+listing strategy is `full_object`, the implementation must record that strategy
+separately instead of setting `listing_partial_put_verified` to true. The
+`customFieldValues` array remains governed by observed, non-contractual array
+replacement behaviour, so dispatch must use the full-array read-modify-write
+payload and never only the changed entry. Reservation production `doorCode`
+evidence may be recorded as top-level merge evidence for the verified Hostaway
+account/config entry, but Hostaway has explicitly not confirmed reservation
+`customFieldValues` semantics and has a known success-without-persistence bug.
+`reservation_no_clobber_verified` may be enabled only with mandatory post-write
+read-back verification that detects that bug and owner acceptance of residual
+risk. Both target types also require a non-`None` payload strategy before
+dispatch. Until then, `hostaway.set_custom_field` rejects that target type
+before reading, merging, or sending a mutating request.
 
 ### CustomFieldWriteLockRegistry
 
@@ -352,6 +360,9 @@ service call
   -> reject duplicate raw entries for the addressed customFieldId
   -> merge raw customFieldValues
   -> PUT target
+  -> re-read target with includeResources=1
+  -> compare canonicalized complete pre/post snapshots
+  -> raise and attempt restore on non-persistence or unrelated changes
   -> update local coordinator data
   -> advance target generation and post-write override
   -> release lock
@@ -359,5 +370,7 @@ service call
 ```
 
 Any failure before the `PUT` sends no mutation. Any Hostaway API failure after
-the `PUT` raises an actionable Home Assistant error and does not publish local
-success state.
+the `PUT`, read-back failure, addressed-value non-persistence, or unrelated
+data change raises an actionable Home Assistant error and does not publish
+local success state. Unrelated data changes also trigger an automatic restore
+attempt from the pre-write state already held by the service.
