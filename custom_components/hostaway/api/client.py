@@ -431,17 +431,21 @@ class HostawayApiClient:
         retry_ambiguous: bool = True,
     ) -> dict[str, Any]:
         """Return a successful mutation payload that must be an object."""
-        result = _responses.ensure_success(
-            _responses.parse_response(
-                await self._request(
-                    method,
-                    path,
-                    json=data,
-                    retry_ambiguous=retry_ambiguous,
-                )
-            ),
-            error_prefix,
+        response = await self._request(
+            method,
+            path,
+            json=data,
+            retry_ambiguous=retry_ambiguous,
         )
+        try:
+            result = _responses.ensure_success(
+                _responses.parse_response(response),
+                error_prefix,
+            )
+        except HostawayResponseError as exc:
+            if not retry_ambiguous:
+                raise HostawayMutationResultError(f"{missing_result}: {exc}") from exc
+            raise
         if not isinstance(result, dict):
             raise HostawayMutationResultError(missing_result)
         return result

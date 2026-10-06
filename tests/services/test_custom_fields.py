@@ -794,6 +794,50 @@ async def test_set_custom_field_rejects_account_id_mismatch(
     api_client.update_listing_custom_fields.assert_not_called()
 
 
+async def test_set_custom_field_rejects_missing_account_id(
+    hass: HomeAssistant,
+) -> None:
+    """Any definition without accountId keeps writes fail-closed."""
+    bound = _definition(1)
+    unbound = HostawayCustomFieldDefinition(
+        custom_field_id=2,
+        account_id=None,
+        name="Other",
+        var_name="other",
+        field_type="text",
+        object_type="listing",
+        possible_values=[],
+        is_public=False,
+        sort_order=2,
+    )
+    api_client = SimpleNamespace(
+        get_listing_payload=AsyncMock(),
+        update_listing_custom_fields=AsyncMock(),
+    )
+    hass.data.setdefault(DOMAIN, {})["entry-1"] = {
+        "api_client": api_client,
+        "custom_fields_coordinator": SimpleNamespace(
+            data=[bound, unbound],
+            last_refresh_succeeded=True,
+        ),
+        "custom_field_write_safety": _enabled_listing_gates(),
+        **_listing_write_identity(),
+    }
+
+    with pytest.raises(ServiceValidationError, match="does not match"):
+        await async_handle_set_custom_field(
+            hass,
+            {
+                "target_type": "listing",
+                "target_id": 123,
+                "customFieldId": 1,
+                "value": "new",
+            },
+        )
+
+    api_client.update_listing_custom_fields.assert_not_called()
+
+
 async def test_set_custom_field_writes_listing_and_verifies_readback(
     hass: HomeAssistant,
 ) -> None:

@@ -643,11 +643,9 @@ def _entry_account_id(entry_data: dict[str, Any]) -> int | None:
     if isinstance(value, bool) or not isinstance(value, int):
         return None
     observed_ids = {
-        definition.account_id
-        for definition in _entry_definitions(entry_data)
-        if definition.account_id is not None
+        definition.account_id for definition in _entry_definitions(entry_data)
     }
-    if observed_ids != {value}:
+    if None in observed_ids or observed_ids != {value}:
         return None
     return value
 

@@ -17,6 +17,7 @@ from custom_components.hostaway.api.const import DEFAULT_PAGE_LIMIT
 from custom_components.hostaway.api.exceptions import (
     HostawayAuthError,
     HostawayConnectionError,
+    HostawayMutationResultError,
     HostawayRateLimitError,
     HostawayReservationLockedError,
     HostawayResponseError,
@@ -582,6 +583,25 @@ class TestHttpClientCore:
             )
 
         tm.invalidate.assert_called_once()
+        assert route.call_count == 1
+
+    async def test_custom_field_put_malformed_2xx_is_ambiguous(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Custom-field PUTs classify malformed 2xx responses as ambiguous."""
+        route = respx.put(f"{FAKE_BASE_URL}/v1/listings/123").mock(
+            return_value=httpx.Response(200, text="not-json")
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with pytest.raises(HostawayMutationResultError):
+            await client.update_listing_custom_fields(
+                123,
+                {"customFieldValues": [{"customFieldId": 1, "value": "new"}]},
+            )
+
         assert route.call_count == 1
 
     async def test_network_error_raises_connection_error(
