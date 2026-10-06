@@ -3,8 +3,8 @@
 set_door_code:
   name: Set door code
   description: >-
-    Set built-in Hostaway reservation door-code fields. These are not
-    custom variables; use set_custom_field only for Hostaway custom
+    Set built-in Hostaway reservation door-code fields.
+    These are not custom variables; use set_custom_field only for Hostaway custom
     variables.
   fields:
     reservation_id:
@@ -470,7 +470,8 @@ get_custom_fields:
   name: Get custom fields
   description: >-
     Return cached Hostaway custom variable definitions for listing and
-    reservation objects. Task definitions are not returned.
+    reservation objects. Hidden fields are included in reads.
+    Task definitions are not returned. Response: {"custom_fields": [...]}.
   fields:
     config_entry_id:
       name: Config entry ID
@@ -487,7 +488,8 @@ get_custom_field_values:
   description: >-
     Return Hostaway custom variable values for one listing or reservation.
     The service reads the target directly from Hostaway and includes
-    defined-but-unset fields with a null value.
+    hidden and defined-but-unset fields with a null value. Response:
+    {"custom_fields": {...}}.
   fields:
     target_type:
       name: Target type
@@ -522,9 +524,12 @@ set_custom_field:
   name: Set custom field
   description: >-
     Validate a request to set one Hostaway custom variable on a listing or
-    reservation. Writes remain disabled until target-specific safety
-    evidence is recorded; built-in fields such as doorCode are not custom
-    variables. Use set_door_code for built-in reservation door-code fields.
+    reservation by exactly one of varName or customFieldId. Use null to
+    clear. Response when requested: target_type, target_id, customFieldId,
+    varName, addressed_by, and result. Writes remain disabled until
+    target-specific safety evidence is recorded; built-in fields such as
+    doorCode are not custom variables. Use set_door_code for built-in
+    reservation door-code fields.
   fields:
     target_type:
       name: Target type

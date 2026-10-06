@@ -105,13 +105,23 @@ class HostawayApiClient:
 
     async def get_listing(self, listing_id: int) -> HostawayListing:
         """Return one listing with custom-field resources included."""
-        data = await read_listing_with_custom_fields(self._request, listing_id)
-        return HostawayListing.from_api_response(data)
+        return HostawayListing.from_api_response(
+            await self.get_listing_payload(listing_id)
+        )
 
     async def get_reservation(self, reservation_id: int) -> HostawayReservation:
         """Return one reservation with custom-field resources included."""
-        data = await read_reservation_with_custom_fields(self._request, reservation_id)
-        return HostawayReservation.from_api_response(data)
+        return HostawayReservation.from_api_response(
+            await self.get_reservation_payload(reservation_id)
+        )
+
+    async def get_listing_payload(self, listing_id: int) -> dict[str, Any]:
+        """Return one raw listing payload with custom-field resources included."""
+        return await read_listing_with_custom_fields(self._request, listing_id)
+
+    async def get_reservation_payload(self, reservation_id: int) -> dict[str, Any]:
+        """Return one raw reservation payload with custom-field resources included."""
+        return await read_reservation_with_custom_fields(self._request, reservation_id)
 
     async def create_task(self, data: dict[str, Any]) -> dict[str, Any]:
         """Create a task."""
@@ -165,6 +175,18 @@ class HostawayApiClient:
         return await self._mutate(
             "PUT",
             f"/v1/reservations/{reservation_id}",
+            data,
+            "Update failed",
+            "Update response missing 'result' object",
+        )
+
+    async def update_listing(
+        self, listing_id: int, data: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Update a listing."""
+        return await self._mutate(
+            "PUT",
+            f"/v1/listings/{listing_id}",
             data,
             "Update failed",
             "Update response missing 'result' object",

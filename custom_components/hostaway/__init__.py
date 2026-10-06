@@ -134,6 +134,9 @@ async def async_setup_entry(
         1,
         _initial_custom_fields_refresh,
     )
+    write_safety = CustomFieldWriteSafetyGates()
+    object.__setattr__(write_safety, "listing_partial_put_verified", True)
+    object.__setattr__(write_safety, "listing_payload_strategy", "partial")
 
     hass.data.setdefault(DOMAIN, {})
     entry_data = hass.data[DOMAIN].setdefault(entry.entry_id, {})
@@ -146,7 +149,8 @@ async def async_setup_entry(
             "custom_fields_coordinator": custom_fields_coordinator,
             "custom_fields_update_unsub": custom_fields_update_unsub,
             "custom_fields_initial_refresh_unsub": custom_fields_initial_refresh_unsub,
-            "custom_field_write_safety": CustomFieldWriteSafetyGates(),
+            "config_entry_id": entry.entry_id,
+            "custom_field_write_safety": write_safety,
             "custom_field_write_locks": CustomFieldWriteLockRegistry(),
             "custom_field_write_generations": CustomFieldWriteGenerationRegistry(),
         }

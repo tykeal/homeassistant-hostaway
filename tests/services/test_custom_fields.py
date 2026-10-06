@@ -19,6 +19,7 @@ from homeassistant.helpers import entity_registry as er
 from custom_components.hostaway.api.custom_fields import (
     CustomFieldWriteSafetyGates,
     HostawayCustomFieldDefinition,
+    ReservationCustomFieldEvidenceState,
 )
 from custom_components.hostaway.api.exceptions import HostawayResponseError
 from custom_components.hostaway.api.models import HostawayListing, HostawayReservation
@@ -92,6 +93,22 @@ def _reservation_with_custom_fields(
             "customFieldValues": custom_field_values,
         }
     )
+
+
+def _enabled_listing_gates() -> CustomFieldWriteSafetyGates:
+    """Return listing write gates for the verified partial strategy."""
+    gates = CustomFieldWriteSafetyGates()
+    object.__setattr__(gates, "listing_partial_put_verified", True)
+    object.__setattr__(gates, "listing_payload_strategy", "partial")
+    return gates
+
+
+def _enabled_reservation_gates() -> CustomFieldWriteSafetyGates:
+    """Return reservation write gates for the verified partial strategy."""
+    gates = CustomFieldWriteSafetyGates()
+    object.__setattr__(gates, "reservation_no_clobber_verified", True)
+    object.__setattr__(gates, "reservation_payload_strategy", "partial")
+    return gates
 
 
 async def test_listing_write_rejects_before_reads(hass: HomeAssistant) -> None:
@@ -676,3 +693,239 @@ async def test_set_custom_field_value_validation(
                 "value": value,
             },
         )
+
+
+async def test_set_custom_field_writes_listing_and_verifies_readback(
+    hass: HomeAssistant,
+) -> None:
+    """Verified listing writes send merged arrays and return exact success."""
+    before = {
+        "id": 123,
+        "name": "Beach House",
+        "description": "unmodeled field",
+        "customFieldValues": [
+            {"customFieldId": 1, "value": "old"},
+            {"customFieldId": 2, "value": "keep"},
+        ],
+    }
+    after = {
+        **before,
+        "customFieldValues": [
+            {"customFieldId": 1, "value": "new"},
+            {"customFieldId": 2, "value": "keep"},
+        ],
+    }
+    api_client = SimpleNamespace(
+        get_listing_payload=AsyncMock(side_effect=[before, after]),
+        update_listing=AsyncMock(return_value={}),
+    )
+    coordinator_listing = _listing_with_custom_fields(
+        123,
+        [{"customFieldId": 1, "value": "old"}],
+    )
+    hass.data.setdefault(DOMAIN, {})["entry-1"] = {
+        "api_client": api_client,
+        "custom_fields_coordinator": SimpleNamespace(
+            data=[_definition(1)],
+            last_refresh_succeeded=True,
+        ),
+        "custom_field_write_safety": _enabled_listing_gates(),
+        "listings_coordinator": SimpleNamespace(data={123: coordinator_listing}),
+    }
+
+    result = await async_handle_set_custom_field(
+        hass,
+        {
+            "target_type": "listing",
+            "target_id": 123,
+            "customFieldId": 1,
+            "value": "new",
+        },
+    )
+
+    api_client.update_listing.assert_awaited_once_with(
+        123,
+        {
+            "customFieldValues": [
+                {"customFieldId": 1, "value": "new"},
+                {"customFieldId": 2, "value": "keep"},
+            ]
+        },
+    )
+    assert result == {
+        "target_type": "listing",
+        "target_id": 123,
+        "customFieldId": 1,
+        "varName": "parking_bay",
+        "addressed_by": "customFieldId",
+        "result": "success",
+    }
+    patched = hass.data[DOMAIN]["entry-1"]["listings_coordinator"].data[123]
+    assert patched.custom_fields[1] == "new"
+
+
+async def test_set_custom_field_rejects_silent_non_persistence(
+    hass: HomeAssistant,
+) -> None:
+    """Read-back detects Hostaway success without custom-value persistence."""
+    before = {
+        "id": 456,
+        "listingMapId": 123,
+        "guestName": "Guest",
+        "arrivalDate": "2026-01-01",
+        "departureDate": "2026-01-02",
+        "status": "confirmed",
+        "customFieldValues": [{"customFieldId": 1, "value": "old"}],
+    }
+    after = {**before}
+    api_client = SimpleNamespace(
+        get_reservation_payload=AsyncMock(side_effect=[before, after]),
+        update_reservation=AsyncMock(return_value={}),
+    )
+    hass.data.setdefault(DOMAIN, {})["entry-1"] = {
+        "api_client": api_client,
+        "account_id": 99,
+        "config_entry_id": "entry-1",
+        "custom_fields_coordinator": SimpleNamespace(
+            data=[_definition(1, "reservation")],
+            last_refresh_succeeded=True,
+        ),
+        "custom_field_write_safety": _enabled_reservation_gates(),
+        "reservation_custom_field_evidence": ReservationCustomFieldEvidenceState(
+            account_id=99,
+            config_entry_id="entry-1",
+            custom_field_values_round_trip_verified=True,
+            payload_strategy="partial",
+        ),
+    }
+
+    with pytest.raises(
+        ServiceValidationError,
+        match="success-without-custom-field-persistence bug",
+    ):
+        await async_handle_set_custom_field(
+            hass,
+            {
+                "target_type": "reservation",
+                "target_id": 456,
+                "customFieldId": 1,
+                "value": "new",
+            },
+        )
+
+
+async def test_set_custom_field_rejects_unrelated_readback_change(
+    hass: HomeAssistant,
+) -> None:
+    """Read-back rejects unrelated data changes without blind recovery."""
+    before = {
+        "id": 123,
+        "name": "Beach House",
+        "description": "keep",
+        "customFieldValues": [{"customFieldId": 1, "value": "old"}],
+    }
+    after = {
+        **before,
+        "description": "clobbered",
+        "customFieldValues": [{"customFieldId": 1, "value": "new"}],
+    }
+    api_client = SimpleNamespace(
+        get_listing_payload=AsyncMock(side_effect=[before, after]),
+        update_listing=AsyncMock(return_value={}),
+    )
+    hass.data.setdefault(DOMAIN, {})["entry-1"] = {
+        "api_client": api_client,
+        "custom_fields_coordinator": SimpleNamespace(
+            data=[_definition(1)],
+            last_refresh_succeeded=True,
+        ),
+        "custom_field_write_safety": _enabled_listing_gates(),
+    }
+
+    with pytest.raises(ServiceValidationError, match="recovery was not attempted"):
+        await async_handle_set_custom_field(
+            hass,
+            {
+                "target_type": "listing",
+                "target_id": 123,
+                "customFieldId": 1,
+                "value": "new",
+            },
+        )
+
+
+async def test_reservation_write_evidence_is_account_bound(
+    hass: HomeAssistant,
+) -> None:
+    """Reservation write enablement does not cross account boundaries."""
+    api_client = SimpleNamespace(
+        get_reservation=AsyncMock(),
+        update_reservation=AsyncMock(),
+    )
+    hass.data.setdefault(DOMAIN, {})["entry-1"] = {
+        "api_client": api_client,
+        "account_id": 99,
+        "config_entry_id": "entry-1",
+        "custom_fields_coordinator": SimpleNamespace(
+            data=[_definition(1, "reservation")],
+            last_refresh_succeeded=True,
+        ),
+        "custom_field_write_safety": _enabled_reservation_gates(),
+        "reservation_custom_field_evidence": ReservationCustomFieldEvidenceState(
+            account_id=100,
+            config_entry_id="entry-1",
+            custom_field_values_round_trip_verified=True,
+            payload_strategy="partial",
+        ),
+    }
+
+    with pytest.raises(ServiceValidationError, match="does not match"):
+        await async_handle_set_custom_field(
+            hass,
+            {
+                "target_type": "reservation",
+                "target_id": 456,
+                "customFieldId": 1,
+                "value": "new",
+            },
+        )
+
+    api_client.get_reservation.assert_not_called()
+    api_client.update_reservation.assert_not_called()
+
+
+def test_service_documentation_covers_custom_field_contracts() -> None:
+    """services.yaml documents the custom-field service contracts."""
+    text = (
+        __import__("pathlib")
+        .Path("custom_components/hostaway/services.yaml")
+        .read_text()
+    )
+
+    for definition in SERVICE_DEFINITIONS:
+        assert f"{definition.name}:" in text
+    for phrase in (
+        "get_custom_fields:",
+        "get_custom_field_values:",
+        "set_custom_field:",
+        "customFieldId",
+        "varName",
+        "Use null to clear",
+        "hidden",
+        "Task definitions are not returned",
+        "multiple accounts",
+    ):
+        assert phrase in text
+
+
+def test_door_code_documentation_distinguishes_built_ins() -> None:
+    """set_door_code docs distinguish built-ins from custom variables."""
+    text = (
+        __import__("pathlib")
+        .Path("custom_components/hostaway/services.yaml")
+        .read_text()
+    )
+
+    assert "Set built-in Hostaway reservation door-code fields" in text
+    assert "These are not custom variables" in text
+    assert "set_custom_field" in text

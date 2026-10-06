@@ -262,9 +262,12 @@ class TestCustomFieldRuntimeData:
             data["custom_field_write_safety"],
             CustomFieldWriteSafetyGates,
         )
-        assert data["custom_field_write_safety"].listing_partial_put_verified is False
+        assert data["custom_field_write_safety"].listing_partial_put_verified is True
+        assert data["custom_field_write_safety"].listing_payload_strategy == "partial"
         assert (
             data["custom_field_write_safety"].reservation_no_clobber_verified is False
         )
+        assert data["custom_field_write_safety"].reservation_payload_strategy is None
+        assert data["config_entry_id"] == entry.entry_id
         assert "custom_field_write_locks" in data
         assert "custom_field_write_generations" in data

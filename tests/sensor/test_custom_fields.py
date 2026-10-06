@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock
@@ -202,3 +203,21 @@ async def test_listing_custom_field_sensor_listens_for_definition_refresh(
 
     assert listeners == [sensor.async_write_ha_state]
     await coordinator.async_shutdown()
+
+
+def test_custom_fields_do_not_create_writable_entities() -> None:
+    """Custom fields expose service-only writes, not text/number/select entities."""
+    root = Path("custom_components/hostaway")
+    entity_code = "\n".join(
+        path.read_text()
+        for pattern in ("text/**/*.py", "number/**/*.py", "select/**/*.py")
+        for path in root.glob(pattern)
+    )
+    custom_field_code = Path(
+        "custom_components/hostaway/services/custom_fields.py"
+    ).read_text()
+
+    assert "custom_field" not in entity_code
+    assert "create_custom_field" not in custom_field_code
+    assert "update_custom_field_definition" not in custom_field_code
+    assert "delete_custom_field" not in custom_field_code

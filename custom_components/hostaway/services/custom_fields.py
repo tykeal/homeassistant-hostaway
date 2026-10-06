@@ -3,9 +3,11 @@
 """Service handlers for Hostaway custom field support."""
 
 # aislop-ignore-file ai-slop/hallucinated-import -- HA runtime provides these packages
+# aislop-ignore-file complexity/file-too-large -- cohesive custom-field services
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -17,16 +19,23 @@ from custom_components.hostaway.api.custom_fields import (
     RESERVATION_OBJECT_TYPE,
     SUPPORTED_OBJECT_TYPES,
     CustomFieldDefinitionError,
+    CustomFieldMergeError,
     CustomFieldWriteSafetyGates,
     HostawayCustomFieldCollection,
     HostawayCustomFieldDefinition,
+    ReservationCustomFieldEvidenceState,
+    build_custom_field_values_payload,
+    canonical_snapshot_differences,
     definitions_for_object_type,
     lookup_definition_by_id,
     resolve_var_name,
+    select_listing_payload_strategy,
+    select_reservation_payload_strategy,
     validate_custom_field_value,
     validate_identifier,
 )
 from custom_components.hostaway.api.exceptions import HostawayApiError
+from custom_components.hostaway.api.models import HostawayListing, HostawayReservation
 from custom_components.hostaway.sensor.custom_fields import (
     ListingCustomFieldKeyAllocation,
 )
@@ -97,12 +106,11 @@ async def async_handle_get_custom_field_values(
 async def async_handle_set_custom_field(
     hass: HomeAssistant, call: ServiceCall | dict[str, Any]
 ) -> ServiceResponse:
-    """Reject custom-field writes until live safety verification passes."""
+    """Set one verified Hostaway custom-field value without clobbering others."""
     data = _call_data(call)
     target_type = _validate_target_type(data.get("target_type"))
     entry_data = _resolve_entry_data(hass, data)
     target_id = validate_identifier(data.get("target_id"), "target_id")
-    del target_id
     coordinator = entry_data.get("custom_fields_coordinator")
     if coordinator is not None and not getattr(
         coordinator,
@@ -113,25 +121,57 @@ async def async_handle_set_custom_field(
             "custom field definitions refresh failed; writes are disabled "
             "until the next successful refresh"
         )
-    _validate_set_request(data, entry_data, target_type)
+    definition = _validate_set_request(data, entry_data, target_type)
+    if definition is None:
+        raise ServiceValidationError("custom field definition is required")
     gates = entry_data.get("custom_field_write_safety")
     if not isinstance(gates, CustomFieldWriteSafetyGates):
         gates = CustomFieldWriteSafetyGates()
-    if target_type == LISTING_OBJECT_TYPE and not gates.listing_partial_put_verified:
+    try:
+        if target_type == LISTING_OBJECT_TYPE:
+            strategy = select_listing_payload_strategy(gates)
+        else:
+            strategy = select_reservation_payload_strategy(
+                gates,
+                _reservation_evidence(entry_data),
+                account_id=_entry_account_id(entry_data),
+                config_entry_id=_entry_config_entry_id(entry_data),
+            )
+    except CustomFieldMergeError as exc:
+        target = "listing" if target_type == LISTING_OBJECT_TYPE else "reservation"
         raise ServiceValidationError(
-            "listing custom-field writes are disabled until live safety "
-            "verification passes"
+            f"{target} custom-field writes are disabled until live safety "
+            f"verification passes: {exc}"
+        ) from exc
+    lock = _write_lock(entry_data, target_type, target_id)
+    async with lock:
+        value = validate_custom_field_value(definition, data["value"])
+        result = await _write_custom_field(
+            entry_data,
+            target_type,
+            target_id,
+            definition.custom_field_id,
+            value,
+            strategy,
         )
-    if (
-        target_type == RESERVATION_OBJECT_TYPE
-        and not gates.reservation_no_clobber_verified
-    ):
-        raise ServiceValidationError(
-            "reservation custom-field writes are disabled until live safety "
-            "verification passes"
-        )
-    raise ServiceValidationError(
-        "custom-field writes are disabled until the write path ships"
+    _patch_local_state(
+        entry_data,
+        target_type,
+        target_id,
+        result,
+    )
+    _advance_generation(entry_data, target_type, target_id)
+    addressed_by = "customFieldId" if "customFieldId" in data else "varName"
+    return cast(
+        ServiceResponse,
+        {
+            "target_type": target_type,
+            "target_id": target_id,
+            "customFieldId": definition.custom_field_id,
+            "varName": definition.var_name,
+            "addressed_by": addressed_by,
+            "result": "success",
+        },
     )
 
 
@@ -184,6 +224,143 @@ async def _read_target_collection(
     if collection is None:
         return HostawayCustomFieldCollection.from_object({})
     return collection
+
+
+async def _read_target_model(
+    entry_data: dict[str, Any],
+    target_type: str,
+    target_id: int,
+) -> HostawayListing | HostawayReservation:
+    """Read one target object for write merge or post-write verification."""
+    api_client = entry_data.get("api_client")
+    if api_client is None:
+        raise ServiceValidationError("Hostaway API client is not available")
+    try:
+        if target_type == LISTING_OBJECT_TYPE:
+            listing: HostawayListing = await api_client.get_listing(target_id)
+            result: HostawayListing | HostawayReservation = listing
+        else:
+            result = await api_client.get_reservation(target_id)
+    except HostawayApiError as exc:
+        raise ServiceValidationError(
+            f"Unable to read {target_type} {target_id}: {exc}"
+        ) from exc
+    return result
+
+
+async def _write_custom_field(
+    entry_data: dict[str, Any],
+    target_type: str,
+    target_id: int,
+    custom_field_id: int,
+    value: Any,
+    strategy: str,
+) -> HostawayListing | HostawayReservation:
+    """Run read-modify-write and mandatory read-back verification."""
+    before_snapshot, _before = await _read_target_snapshot(
+        entry_data,
+        target_type,
+        target_id,
+    )
+    try:
+        if strategy != "partial":
+            raise CustomFieldMergeError("full-object writes are not enabled")
+        payload = build_custom_field_values_payload(
+            before_snapshot,
+            custom_field_id,
+            value,
+        )
+    except CustomFieldMergeError as exc:
+        raise ServiceValidationError(str(exc)) from exc
+    api_client = entry_data.get("api_client")
+    if api_client is None:
+        raise ServiceValidationError("Hostaway API client is not available")
+    try:
+        if target_type == LISTING_OBJECT_TYPE:
+            await api_client.update_listing(target_id, payload)
+        else:
+            await api_client.update_reservation(target_id, payload)
+    except (AttributeError, HostawayApiError) as exc:
+        raise ServiceValidationError(
+            f"Unable to update {target_type} {target_id}: {exc}"
+        ) from exc
+    after_snapshot, after = await _read_target_snapshot(
+        entry_data,
+        target_type,
+        target_id,
+    )
+    _verify_post_write_readback(
+        target_type,
+        custom_field_id,
+        value,
+        before_snapshot,
+        payload,
+        after_snapshot,
+    )
+    return after
+
+
+async def _read_target_snapshot(
+    entry_data: dict[str, Any],
+    target_type: str,
+    target_id: int,
+) -> tuple[dict[str, Any], HostawayListing | HostawayReservation]:
+    """Read one raw target snapshot and parsed model for verification."""
+    api_client = entry_data.get("api_client")
+    if api_client is None:
+        raise ServiceValidationError("Hostaway API client is not available")
+    try:
+        if target_type == LISTING_OBJECT_TYPE:
+            snapshot: dict[str, Any] = await api_client.get_listing_payload(target_id)
+            result: HostawayListing | HostawayReservation = (
+                HostawayListing.from_api_response(snapshot)
+            )
+        else:
+            snapshot = await api_client.get_reservation_payload(target_id)
+            result = HostawayReservation.from_api_response(snapshot)
+    except (AttributeError, HostawayApiError, ValueError) as exc:
+        raise ServiceValidationError(
+            f"Unable to read {target_type} {target_id}: {exc}"
+        ) from exc
+    return snapshot, result
+
+
+def _verify_post_write_readback(
+    target_type: str,
+    custom_field_id: int,
+    value: Any,
+    before_snapshot: dict[str, Any],
+    payload: dict[str, Any],
+    after_snapshot: dict[str, Any],
+) -> None:
+    """Verify Hostaway persisted only the requested custom-field change."""
+    if _snapshot_value(after_snapshot, custom_field_id) != value:
+        raise ServiceValidationError(
+            f"Hostaway reported success updating {target_type} {custom_field_id}, "
+            "but the mandatory read-back did not show the custom-field value. "
+            "This matches the known Hostaway success-without-custom-field-"
+            "persistence bug; no success was reported."
+        )
+    expected = dict(before_snapshot)
+    expected["customFieldValues"] = payload["customFieldValues"]
+    differences = canonical_snapshot_differences(expected, after_snapshot)
+    if differences:
+        raise ServiceValidationError(
+            f"Hostaway {target_type} {custom_field_id} read-back changed unrelated "
+            f"data at {', '.join(differences)}; recovery was not attempted because "
+            "no verified conditional/version-protected recovery path is available"
+        )
+
+
+def _snapshot_value(snapshot: dict[str, Any], custom_field_id: int) -> Any:
+    """Return one custom-field value from a snapshot."""
+    values = snapshot.get("customFieldValues")
+    if not isinstance(values, list):
+        return None
+    for item in values:
+        if isinstance(item, dict) and item.get("customFieldId") == custom_field_id:
+            return item.get("value")
+    return None
 
 
 def _custom_field_values_response(
@@ -299,6 +476,113 @@ def _listing_allocation_preview(
         entry,
         listing_id,
     )
+
+
+def _write_lock(
+    entry_data: dict[str, Any],
+    target_type: str,
+    target_id: int,
+) -> asyncio.Lock:
+    """Return the per-entry, per-target write lock."""
+    registry = entry_data.setdefault("custom_field_write_locks", None)
+    if registry is None:
+        locks: dict[tuple[str, int], asyncio.Lock] = {}
+        entry_data["custom_field_write_locks"] = type(
+            "_RuntimeWriteLocks",
+            (),
+            {"locks": locks},
+        )()
+        registry = entry_data["custom_field_write_locks"]
+    locks = cast(dict[tuple[str, int], asyncio.Lock], registry.locks)
+    return locks.setdefault((target_type, target_id), asyncio.Lock())
+
+
+def _advance_generation(
+    entry_data: dict[str, Any],
+    target_type: str,
+    target_id: int,
+) -> None:
+    """Advance the write generation counter when available."""
+    registry = entry_data.get("custom_field_write_generations")
+    if registry is not None and hasattr(registry, "advance"):
+        registry.advance(target_type, target_id)
+
+
+def _reservation_evidence(
+    entry_data: dict[str, Any],
+) -> ReservationCustomFieldEvidenceState | None:
+    """Return account-bound reservation evidence for this entry if present."""
+    evidence = entry_data.get("reservation_custom_field_evidence")
+    if isinstance(evidence, ReservationCustomFieldEvidenceState):
+        return evidence
+    return None
+
+
+def _entry_account_id(entry_data: dict[str, Any]) -> int | None:
+    """Return the verified account id associated with runtime data."""
+    value = entry_data.get("account_id")
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value
+
+
+def _entry_config_entry_id(entry_data: dict[str, Any]) -> str | None:
+    """Return the config entry id associated with runtime data."""
+    entry = getattr(entry_data.get("listings_coordinator"), "config_entry", None)
+    entry_id = getattr(entry, "entry_id", None)
+    if isinstance(entry_id, str):
+        return entry_id
+    value = entry_data.get("config_entry_id")
+    if isinstance(value, str):
+        return value
+    return None
+
+
+def _patch_local_state(
+    entry_data: dict[str, Any],
+    target_type: str,
+    target_id: int,
+    target: HostawayListing | HostawayReservation,
+) -> None:
+    """Patch coordinator data after a verified write read-back."""
+    if target_type == LISTING_OBJECT_TYPE and isinstance(target, HostawayListing):
+        coordinator = entry_data.get("listings_coordinator")
+        data = getattr(coordinator, "data", None)
+        if isinstance(data, dict) and target_id in data:
+            updated = dict(data)
+            updated[target_id] = target
+            _publish_coordinator_data(coordinator, updated)
+        return
+    if target_type != RESERVATION_OBJECT_TYPE or not isinstance(
+        target,
+        HostawayReservation,
+    ):
+        return
+    coordinator = entry_data.get("reservations_coordinator")
+    data = getattr(coordinator, "data", None)
+    if not isinstance(data, dict):
+        return
+    updated_reservations: dict[int, list[HostawayReservation]] = {}
+    changed = False
+    for listing_id, reservations in data.items():
+        patched: list[HostawayReservation] = []
+        for reservation in reservations:
+            if reservation.id == target_id:
+                patched.append(target)
+                changed = True
+            else:
+                patched.append(reservation)
+        updated_reservations[listing_id] = patched
+    if changed:
+        _publish_coordinator_data(coordinator, updated_reservations)
+
+
+def _publish_coordinator_data(coordinator: Any, data: Any) -> None:
+    """Publish coordinator data using HA helper when available."""
+    if hasattr(coordinator, "async_set_updated_data"):
+        coordinator.async_set_updated_data(data)
+    else:
+        coordinator.data = data
 
 
 def _validate_set_request(
