@@ -672,7 +672,7 @@ def _patch_local_state(
     if target_type == LISTING_OBJECT_TYPE and isinstance(target, HostawayListing):
         coordinator = entry_data.get("listings_coordinator")
         data = getattr(coordinator, "data", None)
-        if isinstance(data, dict) and target_id in data:
+        if isinstance(data, dict):
             updated = dict(data)
             updated[target_id] = target
             _publish_coordinator_data(coordinator, updated)
@@ -697,6 +697,9 @@ def _patch_local_state(
             else:
                 patched.append(reservation)
         updated_reservations[listing_id] = patched
+    if not changed:
+        updated_reservations.setdefault(target.listing_id, []).append(target)
+        changed = True
     if changed:
         _publish_coordinator_data(coordinator, updated_reservations)
 

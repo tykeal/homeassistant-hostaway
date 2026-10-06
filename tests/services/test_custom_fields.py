@@ -1078,7 +1078,8 @@ async def test_set_custom_field_succeeds_without_local_listing_entity(
         {"customFieldValues": [{"customFieldId": 1, "value": "new"}]},
     )
     assert api_client.get_listing_payload.await_count == 2
-    assert hass.data[DOMAIN]["entry-1"]["listings_coordinator"].data == {}
+    patched = hass.data[DOMAIN]["entry-1"]["listings_coordinator"].data[123]
+    assert patched.custom_fields[1] == "new"
 
 
 async def test_set_custom_field_verifies_malformed_success_response(
@@ -1351,6 +1352,59 @@ async def test_set_custom_field_patches_verified_reservation(
         "addressed_by": "customFieldId",
         "result": "success",
     }
+
+
+async def test_set_custom_field_patches_absent_reservation(
+    hass: HomeAssistant,
+) -> None:
+    """Verified reservation writes patch data even when absent from cache."""
+    before = {
+        "id": 456,
+        "listingMapId": 123,
+        "guestName": "Guest",
+        "arrivalDate": "2026-01-01",
+        "departureDate": "2026-01-02",
+        "status": "confirmed",
+        "customFieldValues": [{"customFieldId": 1, "value": "old"}],
+    }
+    after = {
+        **before,
+        "customFieldValues": [{"customFieldId": 1, "value": "new"}],
+    }
+    api_client = SimpleNamespace(
+        get_reservation_payload=AsyncMock(side_effect=[before, after]),
+        update_reservation_custom_fields=AsyncMock(return_value={}),
+    )
+    coordinator = SimpleNamespace(data={123: []})
+    hass.data.setdefault(DOMAIN, {})["entry-1"] = {
+        "api_client": api_client,
+        "account_id": 1,
+        "config_entry_id": "entry-1",
+        "custom_fields_coordinator": SimpleNamespace(
+            data=[_definition(1, "reservation")],
+            last_refresh_succeeded=True,
+        ),
+        "custom_field_write_safety": _enabled_reservation_gates(),
+        "reservation_custom_field_evidence": ReservationCustomFieldEvidenceState(
+            account_id=1,
+            config_entry_id="entry-1",
+            custom_field_values_round_trip_verified=True,
+            payload_strategy="partial",
+        ),
+        "reservations_coordinator": coordinator,
+    }
+
+    await async_handle_set_custom_field(
+        hass,
+        {
+            "target_type": "reservation",
+            "target_id": 456,
+            "customFieldId": 1,
+            "value": "new",
+        },
+    )
+
+    assert coordinator.data[123][0].custom_fields[1] == "new"
 
 
 async def test_set_custom_field_pre_write_read_failure_is_clear(
