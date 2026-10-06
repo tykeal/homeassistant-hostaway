@@ -317,6 +317,7 @@ class TestCustomFieldRuntimeData:
                 "listing_custom_field_writes_enabled": True,
                 "reservation_custom_field_writes_enabled": True,
                 "reservation_custom_field_residual_risk_accepted": True,
+                "reservation_custom_field_risk_accepted_account_id": 1,
             },
         )
         entry.add_to_hass(hass)

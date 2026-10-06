@@ -32,3 +32,6 @@ CONF_RESERVATION_CUSTOM_FIELD_WRITES_ENABLED: str = (
 CONF_RESERVATION_CUSTOM_FIELD_RESIDUAL_RISK_ACCEPTED: str = (
     "reservation_custom_field_residual_risk_accepted"
 )
+CONF_RESERVATION_CUSTOM_FIELD_RISK_ACCEPTED_ACCOUNT_ID: str = (
+    "reservation_custom_field_risk_accepted_account_id"
+)

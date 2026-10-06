@@ -42,6 +42,7 @@ from custom_components.hostaway.const import (
     CONF_CUSTOM_FIELD_WRITE_ACCOUNT_ID,
     CONF_LISTING_CUSTOM_FIELD_WRITES_ENABLED,
     CONF_RESERVATION_CUSTOM_FIELD_RESIDUAL_RISK_ACCEPTED,
+    CONF_RESERVATION_CUSTOM_FIELD_RISK_ACCEPTED_ACCOUNT_ID,
     CONF_RESERVATION_CUSTOM_FIELD_WRITES_ENABLED,
     DOMAIN,
     PLATFORMS,
@@ -85,6 +86,8 @@ def _custom_field_write_safety(
         has_account
         and options.get(CONF_RESERVATION_CUSTOM_FIELD_WRITES_ENABLED) is True
         and options.get(CONF_RESERVATION_CUSTOM_FIELD_RESIDUAL_RISK_ACCEPTED) is True
+        and options.get(CONF_RESERVATION_CUSTOM_FIELD_RISK_ACCEPTED_ACCOUNT_ID)
+        == account_id
     )
     gates = CustomFieldWriteSafetyGates()
     listing_evidence = None

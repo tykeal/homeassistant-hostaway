@@ -42,6 +42,7 @@ from custom_components.hostaway.const import (
     CONF_FILTER_CANCELLED,
     CONF_LISTING_CUSTOM_FIELD_WRITES_ENABLED,
     CONF_RESERVATION_CUSTOM_FIELD_RESIDUAL_RISK_ACCEPTED,
+    CONF_RESERVATION_CUSTOM_FIELD_RISK_ACCEPTED_ACCOUNT_ID,
     CONF_RESERVATION_CUSTOM_FIELD_WRITES_ENABLED,
     CONF_RESERVATION_SCAN_INTERVAL,
     CONF_SCAN_INTERVAL,
@@ -399,6 +400,12 @@ class HostawayOptionsFlow(OptionsFlow):
                 CONF_RESERVATION_CUSTOM_FIELD_RESIDUAL_RISK_ACCEPTED,
                 False,
             )
+            accepted_account_id = self._config_entry.options.get(
+                CONF_RESERVATION_CUSTOM_FIELD_RISK_ACCEPTED_ACCOUNT_ID,
+                self._config_entry.data.get(
+                    CONF_RESERVATION_CUSTOM_FIELD_RISK_ACCEPTED_ACCOUNT_ID
+                ),
+            )
 
             if (
                 scan < MIN_SCAN_INTERVAL
@@ -410,7 +417,12 @@ class HostawayOptionsFlow(OptionsFlow):
                 listing_writes_enabled or reservation_writes_enabled
             ) and write_account_id is None:
                 errors["base"] = "missing_write_account_id"
-            elif reservation_writes_enabled and not reservation_risk_accepted:
+            elif (reservation_writes_enabled and not reservation_risk_accepted) or (
+                reservation_writes_enabled
+                and reservation_risk_accepted
+                and accepted_account_id is not None
+                and accepted_account_id != write_account_id
+            ):
                 errors["base"] = "reservation_risk_not_accepted"
             else:
                 return self.async_create_entry(
@@ -429,6 +441,9 @@ class HostawayOptionsFlow(OptionsFlow):
                         ),
                         CONF_RESERVATION_CUSTOM_FIELD_RESIDUAL_RISK_ACCEPTED: (
                             reservation_risk_accepted
+                        ),
+                        CONF_RESERVATION_CUSTOM_FIELD_RISK_ACCEPTED_ACCOUNT_ID: (
+                            write_account_id if reservation_risk_accepted else None
                         ),
                     },
                 )
@@ -472,6 +487,16 @@ class HostawayOptionsFlow(OptionsFlow):
                 CONF_RESERVATION_CUSTOM_FIELD_RESIDUAL_RISK_ACCEPTED,
                 False,
             ),
+        )
+        current_accepted_account_id = self._config_entry.options.get(
+            CONF_RESERVATION_CUSTOM_FIELD_RISK_ACCEPTED_ACCOUNT_ID,
+            self._config_entry.data.get(
+                CONF_RESERVATION_CUSTOM_FIELD_RISK_ACCEPTED_ACCOUNT_ID
+            ),
+        )
+        current_reservation_risk_accepted = (
+            current_reservation_risk_accepted
+            and current_accepted_account_id == current_write_account_id
         )
 
         schema = vol.Schema(
