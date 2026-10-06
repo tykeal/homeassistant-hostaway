@@ -278,6 +278,7 @@ async def _read_target_model(
     return result
 
 
+# aislop-ignore-next-line complexity/function-too-long -- cohesive write transaction
 async def _write_custom_field(
     entry_data: dict[str, Any],
     target_type: str,
@@ -328,11 +329,19 @@ async def _write_custom_field(
             await asyncio.sleep(_rate_limit_retry_delay(exc.retry_after))
             continue
         except HostawayConnectionError:
-            after_snapshot, after = await _read_target_snapshot(
-                entry_data,
-                target_type,
-                target_id,
-            )
+            try:
+                after_snapshot, after = await _read_target_snapshot(
+                    entry_data,
+                    target_type,
+                    target_id,
+                )
+            except ServiceValidationError as exc:
+                raise ServiceValidationError(
+                    f"Hostaway {target_type} {target_id} custom-field write "
+                    "had an ambiguous transport/server result, and mandatory "
+                    f"read-back failed: {exc}. Do not retry until the target "
+                    "is manually verified or a fresh read succeeds."
+                ) from exc
             _verify_post_write_readback(
                 _PostWriteVerification(
                     target_type=target_type,
@@ -354,11 +363,18 @@ async def _write_custom_field(
         raise ServiceValidationError(
             f"Unable to update {target_type} {target_id}: retry loop exhausted"
         )
-    after_snapshot, after = await _read_target_snapshot(
-        entry_data,
-        target_type,
-        target_id,
-    )
+    try:
+        after_snapshot, after = await _read_target_snapshot(
+            entry_data,
+            target_type,
+            target_id,
+        )
+    except ServiceValidationError as exc:
+        raise ServiceValidationError(
+            f"Hostaway {target_type} {target_id} custom-field write response "
+            f"was received, but mandatory read-back failed: {exc}. No success "
+            "was reported; verify current Hostaway state before retrying."
+        ) from exc
     _verify_post_write_readback(
         _PostWriteVerification(
             target_type=target_type,

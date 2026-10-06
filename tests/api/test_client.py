@@ -267,6 +267,27 @@ class TestHttpClientCore:
         tm.invalidate.assert_not_called()
         assert route.call_count == 1
 
+    async def test_403_listing_non_auth_raises_forbidden(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Listing 403 responses are not reported as reservation locks."""
+        body = '{"status":"fail","result":"Listing update forbidden"}'
+        route = respx.put(f"{FAKE_BASE_URL}/v1/listings/123").mock(
+            return_value=httpx.Response(403, text=body)
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with pytest.raises(HostawayResponseError, match="Forbidden"):
+            await client.update_listing_custom_fields(
+                123,
+                {"customFieldValues": [{"customFieldId": 1, "value": "new"}]},
+            )
+
+        tm.invalidate.assert_not_called()
+        assert route.call_count == 1
+
     async def test_403_auth_body_still_refreshes_and_retries(
         self, mock_httpx_client: httpx.AsyncClient
     ) -> None:

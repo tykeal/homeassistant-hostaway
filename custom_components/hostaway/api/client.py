@@ -336,6 +336,10 @@ class HostawayApiClient:
                 path,
                 body,
             )
+            if not path.startswith("/v1/reservations/"):
+                raise HostawayResponseError(
+                    f"Forbidden: {method} {path} returned 403; body: {body}"
+                )
             raise HostawayReservationLockedError(
                 f"Reservation locked: {method} {path} returned 403; body: {body}"
             )
