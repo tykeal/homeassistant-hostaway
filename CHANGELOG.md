@@ -31,6 +31,10 @@ Initial development — will become 0.1.0 on first release.
   reservation door codes
 - `hostaway.get_reservations` service firing
   `hostaway_reservations_retrieved` event
+- Custom variable read and write service support with
+  no-clobber merged `customFieldValues` writes, mandatory
+  post-write read-back verification, and built-in/custom
+  field documentation
 - Automatic retry with exponential backoff on API
   rate limits and server errors
 - HACS compatibility
