@@ -418,8 +418,7 @@ class HostawayOptionsFlow(OptionsFlow):
             ) and write_account_id is None:
                 errors["base"] = "missing_write_account_id"
             elif (reservation_writes_enabled and not reservation_risk_accepted) or (
-                reservation_writes_enabled
-                and reservation_risk_accepted
+                reservation_risk_accepted
                 and accepted_account_id is not None
                 and accepted_account_id != write_account_id
             ):
