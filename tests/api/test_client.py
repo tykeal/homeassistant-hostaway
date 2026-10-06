@@ -604,6 +604,28 @@ class TestHttpClientCore:
 
         assert route.call_count == 1
 
+    async def test_custom_field_put_explicit_fail_is_not_ambiguous(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Explicit Hostaway failure statuses are not malformed successes."""
+        route = respx.put(f"{FAKE_BASE_URL}/v1/listings/123").mock(
+            return_value=httpx.Response(
+                200,
+                json={"status": "fail", "result": "rejected"},
+            )
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with pytest.raises(HostawayResponseError):
+            await client.update_listing_custom_fields(
+                123,
+                {"customFieldValues": [{"customFieldId": 1, "value": "new"}]},
+            )
+
+        assert route.call_count == 1
+
     async def test_network_error_raises_connection_error(
         self, mock_httpx_client: httpx.AsyncClient
     ) -> None:

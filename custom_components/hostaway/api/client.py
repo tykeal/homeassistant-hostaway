@@ -438,14 +438,12 @@ class HostawayApiClient:
             retry_ambiguous=retry_ambiguous,
         )
         try:
-            result = _responses.ensure_success(
-                _responses.parse_response(response),
-                error_prefix,
-            )
+            parsed = _responses.parse_response(response)
         except HostawayResponseError as exc:
             if not retry_ambiguous:
                 raise HostawayMutationResultError(f"{missing_result}: {exc}") from exc
             raise
+        result = _responses.ensure_success(parsed, error_prefix)
         if not isinstance(result, dict):
             raise HostawayMutationResultError(missing_result)
         return result
