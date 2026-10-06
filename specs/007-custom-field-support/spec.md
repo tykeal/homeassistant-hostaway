@@ -154,8 +154,8 @@ write destroys live property data.
 **Independent Test**: On a listing with one populated custom variable, first
 self-write that variable's current value and confirm the whole listing object
 diff is empty. Then write a distinct sentinel value, confirm exactly that one
-field changed, restore the original value, and confirm the final object
-matches the pre-write snapshot exactly.
+field changed, and restore the original value only through a verified
+conflict-safe recovery path that preserves concurrent external edits.
 
 **Acceptance Scenarios**:
 
@@ -276,10 +276,14 @@ field they operate on and cross-reference each other.
   ambiguous and require numeric `customFieldId` addressing instead.
 - **Task-type definitions present**: the account defines `objectType: task`
   custom fields. They MUST be ignored entirely by this feature.
-- **Partial-payload rejection**: Hostaway turns out to treat
-  `PUT /v1/listings/{id}` as a full replacement and drops omitted custom values.
-  Listing writes MUST NOT ship until they can be performed without silently
-  destroying data.
+- **Array replacement on listing update**: Hostaway Technical Support
+  confirmed on 2026-10-04 that omitted top-level listing fields are preserved
+  by `PUT /v1/listings/{id}`, but array merge semantics are not documented.
+  Support reports observed behaviour that array fields are replaced wholesale
+  per array, based on the `listingImages` precedent. The write path MUST
+  therefore continue sending the complete read-modify-write
+  `customFieldValues` array and MUST NOT implement Option A, where only the
+  changed entry is sent.
 - **Concurrent external edit**: a user changes the same Hostaway object in the
   dashboard after Home Assistant reads current custom values but before the
   write reaches Hostaway. This feature only guarantees preservation of values
@@ -554,30 +558,50 @@ field they operate on and cross-reference each other.
   canonicalized pre-write snapshot plus the conditional/version check; without
   such detection, full-object strategies that can overwrite post-read external
   edits MUST remain disabled.
-- **FR-035**: Listing partial-`PUT /v1/listings/{id}` semantics MUST remain
-  untrusted until the Step 0 through Step 5 verification ladder in FR-051
-  through FR-054 passes for the listing endpoint. The integration MUST
-  implement both a partial-payload
-  builder and a full-object payload builder. Full-object strategy selection is
-  listing-only for this feature; reservation full-object writes remain disabled
-  until a separate reservation protocol defines and verifies them. The
-  executable state MUST record the selected payload strategy separately from
-  whether partial `PUT` semantics were verified; a full-object listing strategy
-  MUST NOT be represented by setting
-  `listing_partial_put_verified` to true. The no-op, sentinel, and restore
-  steps MUST exercise whichever listing payload strategy will be enabled; if
-  a full-object listing strategy is selected for any reason, those steps MUST
-  run with the reconstructed full-object payload before listing writes are
+- **FR-035**: Listing partial-`PUT /v1/listings/{id}` preservation of
+  omitted top-level fields MAY be satisfied by authoritative written Hostaway
+  confirmation or by the live Step 0 through Step 5 verification ladder in
+  FR-051 through FR-054. Hostaway Technical Support stated definitively on
+  2026-10-04 that sending a body containing only `customFieldValues` updates
+  only included fields and leaves omitted listing fields such as `doorCode`,
+  pricing, and availability untouched; Option C is therefore not correct. This
+  confirmation covers preservation of omitted top-level listing fields only.
+  It does NOT document whether the `customFieldValues` array is merged per
+  entry or replaced wholesale. Live listing Steps 4 and 5 are now optional
+  corroboration for top-level partial-`PUT` preservation rather than a
+  precondition for that specific evidence path. The integration MUST implement
+  both a partial-payload builder and a full-object payload builder.
+  Full-object strategy selection is listing-only for this feature;
+  reservation full-object writes remain disabled until a separate reservation
+  protocol defines and verifies them. The executable state MUST record the
+  selected payload strategy separately from whether partial `PUT` semantics
+  were verified; a full-object listing strategy MUST NOT be represented by
+  setting `listing_partial_put_verified` to true. The no-op, sentinel, and
+  restore steps, when used as corroboration or for full-object strategy
+  evidence, MUST exercise whichever listing payload strategy will be enabled.
+  If a full-object listing strategy is selected for any reason, those steps
+  MUST run with the reconstructed full-object payload before listing writes are
   enabled. A full-object payload strategy MUST remain disabled until the
   implementation defines a per-target writable-field allowlist and
   normalization rules; deep-copying a `GET` response into a `PUT` payload is
-  prohibited. The existing `update_reservation` partial
-  payload
-  (`{"doorCode": ...}`) is supporting evidence for reservation top-level merge
-  semantics, but it is not verification for the listing endpoint. If listing
-  partial verification fails, listing write support MUST use a verified
-  full-object payload strategy, another verified safe endpoint, or remain
-  disabled before it ships.
+  prohibited. The existing `update_reservation` partial payload
+  (`{"doorCode": ...}`) is supporting evidence for reservation top-level
+  merge semantics, but it is not verification for the listing endpoint.
+  If listing partial evidence fails or is insufficient for the selected
+  strategy, listing write support MUST use a verified full-object payload
+  strategy, another verified safe endpoint, or remain disabled before it ships.
+
+  Hostaway Technical Support also stated on 2026-10-04 that public
+  documentation does not define `customFieldValues` merge-versus-replace
+  semantics. Their observed behaviour on the same endpoint is that array
+  fields are replaced as a whole, based on `listingImages`, and replacement
+  appears to apply per array rather than to the whole record. This observed,
+  non-contractual finding validates the existing read-modify-write design: the
+  service MUST send the complete `customFieldValues` array, including entries
+  it is not changing. Option A, sending only the changed entry, is explicitly
+  unsafe and MUST NOT be implemented because omitted entries may be deleted.
+  The existing `build_custom_field_values_payload` already sends the full
+  array, so this finding does not require a code change to that builder.
 - **FR-036**: The write service MUST validate submitted values against the
   field's declared type where practical. `text` and `textarea` fields require
   strings; `number` fields accept numeric values but MUST reject booleans;
@@ -648,73 +672,103 @@ field they operate on and cross-reference each other.
   FR-032; the addressed malformed entry MUST NOT be replaced, dropped, or
   duplicated because the integration cannot safely determine Hostaway's
   intended value.
-- **FR-051**: Listing verification MUST follow the gated ladder in order.
-  Step 0 asks Hostaway support for authoritative `PUT /v1/listings/{id}`
-  semantics and remains incomplete until an authoritative answer is documented
-  in the redacted evidence log; an unanswered or non-authoritative support
-  request is not evidence. Step 1 captures a complete pre-write snapshot of
-  the target
-  object outside git and verifies that the write payload needed to reconstruct
-  the target is reconstructable from that snapshot using allowlisted writable
-  fields and normalization rules. A raw `deepcopy` of a `GET` response is not a
-  valid restore payload. All later object comparisons MUST compare
-  canonicalized complete snapshots, not only unrelated fields or addressed
-  custom-field values. The canonicalizer MUST define and test normalization or
-  exclusion for server-managed volatile fields such as update timestamps before
-  the comparison can be used as evidence. Step 2 inspects the generated
-  dry-run payload and sends no mutation.
-- **FR-052**: Step 3 MUST run a disposable task canary before listing
-  mutation: create a throwaway Hostaway task, capture a canonicalized complete
-  pre-mutation task snapshot, send a partial `PUT /v1/tasks/{id}`, re-read the
-  task and compare canonicalized complete snapshots to verify unrelated task
-  fields survive, then apply the allowlisted restore payload built by the same
-  production restore-path code that Steps 4 and 5 would use, re-read again,
-  confirm the task matches its pre-mutation snapshot, and delete the task.
-  Tasks are disposable, do not sync to sales channels, and
+- **FR-051**: Listing evidence MUST preserve the distinction between the
+  authoritative written Hostaway answer and optional live corroboration. Step 0
+  records Hostaway Technical Support's authoritative 2026-10-04 answer that a
+  `PUT /v1/listings/{id}` body containing only `customFieldValues` preserves
+  omitted top-level listing fields; an unanswered or non-authoritative support
+  request is not evidence. When live corroboration is run, it MUST follow the
+  gated ladder in order. Step 1 captures a complete pre-write snapshot of the
+  target object outside git and verifies that the write payload needed to
+  reconstruct the target is reconstructable from that snapshot using
+  allowlisted writable fields and normalization rules. A raw `deepcopy` of a
+  `GET` response is not a valid restore payload. All later object comparisons
+  MUST compare canonicalized complete snapshots, not only unrelated fields or
+  addressed custom-field values. The canonicalizer MUST define and test
+  normalization or exclusion for server-managed volatile fields such as update
+  timestamps before the comparison can be used as evidence. Step 2 inspects the
+  generated dry-run payload and sends no mutation.
+- **FR-052**: When optional live listing corroboration proceeds beyond the
+  read-only and dry-run steps, Step 3 MUST run a disposable task canary before
+  listing mutation: create a throwaway Hostaway task, capture a canonicalized
+  complete pre-mutation task snapshot, send a partial `PUT /v1/tasks/{id}`,
+  re-read the task and compare canonicalized complete snapshots to verify
+  unrelated task fields survive, then apply the allowlisted restore payload
+  built by the same production restore-path code that Steps 4 and 5 would use,
+  re-read again, confirm the task matches its pre-mutation snapshot, and delete
+  the task. Tasks are disposable, do not sync to sales channels, and
   `HostawayApiClient.update_task` already targets `PUT /v1/tasks/{id}`. The
   canary MUST exercise the real restore code path end-to-end against the live
   API rather than a bespoke restore path. A successful task canary restore is
   indicative evidence that the account's write path accepts reconstructed
   payloads, not conclusive proof for listing semantics, because Hostaway may
   implement task and listing updates in different controllers.
-- **FR-053**: Steps 4 and 5 are listing mutations and MUST NOT run without a
-  separate explicit owner decision and either a disposable listing or the
-  allowlisted restore path from FR-051 plus the server-accepted restore
-  demonstrated by the task canary in FR-052. Step 4 performs the no-op
-  self-write and expects an empty whole-object diff. Step 5 writes the
-  sentinel value, verifies exactly one field changed, restores the original
-  value, and verifies the target matches the pre-write snapshot exactly.
-  Restore-on-failure MUST be attempted automatically using the allowlisted
-  restore payload. If no allowlisted restore path exists for the target, or if
-  the task canary has not demonstrated that the live API accepts and persists
-  the reconstructed restore payload, the ladder MUST stop at Step 3 and
-  listing writes MUST remain disabled. Step 4 and Step 5 MUST use the selected
-  listing payload strategy. If a full-object strategy is selected for any
-  reason, Step 4 and Step 5 MUST run with the reconstructed full-object payload
-  before listing writes are enabled.
-- **FR-054**: Verification evidence for each completed ladder step MUST be
-  recorded in `specs/007-custom-field-support/live-verification.md` with
-  redacted values before any write-safety gate is enabled. Steps 0 through 3
-  are authorized now; Steps 4 and 5 require the separate explicit owner
-  decision required by FR-053.
+- **FR-053**: Steps 4 and 5 are optional listing-mutation corroboration for the
+  written-confirmation evidence path and MUST NOT run without a separate
+  explicit owner decision and either a disposable listing or the allowlisted
+  restore path from FR-051 plus the server-accepted restore demonstrated by the
+  task canary in FR-052. Step 4 performs the no-op self-write and expects an
+  empty whole-object diff. Step 5 writes the sentinel value, verifies exactly
+  one field changed, and restores the original value only through a verified
+  target-specific recovery path that can preserve concurrent external edits
+  with conditional/version protection. Restore-on-failure MUST NOT send another
+  mutation unless that same conflict-safe recovery path is available; otherwise
+  optional live listing corroboration MUST stop and record the failure without
+  attempting a stale-snapshot restore. If no verified conflict-safe restore
+  path exists for the target, or if the task canary has not demonstrated that
+  the live API accepts and persists the reconstructed restore payload, optional
+  live listing corroboration MUST stop before listing mutation; that absence
+  MUST NOT invalidate the authoritative 2026-10-04 omitted-top-level-field
+  evidence. Step 4 and Step 5, when run, MUST use the
+  selected listing payload strategy. If a full-object strategy is selected for
+  any reason, Step 4 and Step 5 MUST run with the reconstructed full-object
+  payload before that full-object strategy is enabled.
+- **FR-054**: Verification evidence for each completed authoritative or live
+  corroboration step MUST be recorded in
+  `specs/007-custom-field-support/live-verification.md` with redacted values
+  before any write-safety gate is enabled. Steps 1 through 3 are authorized
+  for optional live corroboration now; Steps 4 and 5 require the separate
+  explicit owner decision required by FR-053.
 - **FR-055**: The production reservation `doorCode` evidence MAY be recorded
   for the verified Hostaway account/config entry as top-level merge evidence,
-  but it MUST NOT by itself enable reservation custom-field writes. The
+  but it does not prove reservation `customFieldValues` array behaviour. The
   existing `hostaway.set_door_code` handler sends a partial
   `PUT /v1/reservations/{id}` containing only `doorCode` plus optional
   `doorCodeVendor` and `doorCodeInstruction`, through
   `HostawayApiClient.update_reservation`. Owner-provided external account
   history MAY be recorded separately as empirical evidence, but this repository
   does not substantiate a v0.4.0 production release or no-data-loss history.
-  The residual gap MUST be recorded honestly: this does not prove that
-  reservation `customFieldValues` specifically round-trips. With zero
-  reservation custom variables in the owner's account today, the evidence
-  documents only the residual gap for top-level built-in fields.
-  Reservation `customFieldValues` no-op, sentinel, and restore evidence, or an
-  authoritative Hostaway contract covering `customFieldValues`, MUST be
-  recorded for the account before `reservation_no_clobber_verified` is enabled.
+  Hostaway Technical Support explicitly did NOT confirm merge-versus-replace
+  behaviour for the reservation `customFieldValues` array, and reported a
+  known tracked case where the reservation update endpoint returned success
+  while a custom field value was not updated. Reservation custom-field writes
+  MAY be enabled only when mandatory post-write read-back verification per
+  FR-056 is implemented. That read-back is the specific mitigation that makes
+  enablement defensible: a success response without persistence becomes a
+  loud, actionable service error. The owner accepts the residual reservation
+  risk on the basis that the verified account has zero reservation custom
+  variables today, so the current custom-variable clobber surface is minimal.
   Other Hostaway accounts/config entries MUST remain disabled until their own
-  account-bound evidence is recorded.
+  account-bound evidence or owner acceptance is recorded and FR-056 protection
+  is in place.
+
+- **FR-056**: After every successful-looking custom-field write for a listing
+  or reservation, the service MUST re-read the target with `includeResources=1`
+  and verify that the addressed value actually persisted before reporting
+  success. The verification MUST compare canonicalized complete snapshots using
+  the same canonicalization and volatile-field-normalization helpers required
+  by FR-051, so it detects both silent non-persistence and unintended changes
+  to unrelated custom values or built-in fields. If the addressed value did not
+  persist, the service MUST raise an actionable error rather than reporting
+  success, and that error MUST reference the known Hostaway issue where the
+  reservation update endpoint can return success without updating a custom
+  field. If unrelated custom values or built-in fields changed, the service
+  MUST raise an error. It MAY attempt automatic recovery from the pre-write
+  state it already holds only when a verified target-specific recovery path can
+  preserve concurrent external edits, including conditional/version protection
+  for recovery writes. When the change cannot safely be attributed to this
+  write, the service MUST raise without sending another mutation. Read-back
+  failures MUST NOT be silently swallowed or logged-and-ignored.
 
 ### Key Entities
 
@@ -764,25 +818,30 @@ field they operate on and cross-reference each other.
   refresh, without requiring a Home Assistant restart.
 - **SC-003**: Setting a single custom variable via `hostaway.set_custom_field`
   leaves 100% of that object's other custom variables and all built-in fields
-  unchanged, verified by an empty-diff protocol for each target type that needs
-  live verification. The verifier MUST first perform a no-op self-write of one
+  unchanged, verified by mandatory post-write read-back and, where still
+  required, an empty-diff protocol for each target type that needs live
+  verification. The verifier MUST first perform a no-op self-write of one
   populated custom variable's current value and confirm the whole-object diff
   is empty. It MUST then write a distinct sentinel value and confirm exactly
-  one field changed, then restore the original value and confirm the object
-  matches the pre-write snapshot exactly using a canonicalized complete-snapshot
-  comparison. This verification does not require any minimum number of
+  one field changed, then restore the original value only through a verified
+  conflict-safe recovery path and confirm the object has the expected final
+  state using a canonicalized complete-snapshot comparison. This verification
+  does not require any minimum number of
   populated custom variables: the no-op empty-diff check uses the entire
   object, including every built-in field and every present or absent custom
   variable, as the control group. A deviation anywhere in the object is a
   failure. When the live object has only one populated custom variable, the
   evidence MUST record that live endpoint preservation of additional populated
-  custom values could not be observed, and it MUST NOT enable any listing
-  write strategy for custom-field preservation. Multi-entry
-  preservation MUST be proven either by live evidence with multiple populated
-  custom values or by an authoritative Hostaway contract; automated tests still
-  cover only the local merge/payload builder. A single-entry no-op/sentinel
-  result may remain evidence for built-in-field preservation and exact restore
-  behavior.
+  custom values could not be observed. That single-entry live result MUST NOT
+  be represented as multi-entry live evidence. Listing custom-field
+  preservation may instead rely on the 2026-10-04 authoritative evidence for
+  omitted top-level listing fields plus the observed-only per-array replacement
+  finding, but only when the write path sends the complete merged
+  `customFieldValues` array, records that the array behaviour is not documented
+  contract, and FR-056 post-write read-back protection is implemented.
+  Automated tests still cover only the local merge/payload builder. A
+  single-entry no-op/sentinel result may remain evidence for built-in-field
+  preservation and exact restore behavior.
 - **SC-004**: An automation author can write a custom variable using `varName`,
   without knowing any numeric id, when the `varName` is unique for the target
   object type; ambiguous same-object-type `varName`s require `customFieldId`.
@@ -838,14 +897,18 @@ field they operate on and cross-reference each other.
   implementation and owner-provided external account history. This repository's
   release history does not itself substantiate any v0.4.0 production claim, so
   that history must be recorded as external evidence if used. This provides
-  top-level merge evidence only; it does not enable reservation custom-field
-  writes. FR-055 requires reservation `customFieldValues` no-op/sentinel/restore
-  evidence or an authoritative Hostaway contract before the reservation write
-  gate can be enabled.
-- Listing update behaviour is unverified. FR-035 requires the verification
-  ladder to pass before relying on a listing partial payload, and the
-  implementation must also carry a full-object payload strategy so listing
-  writes can choose a safer strategy when evidence requires it.
+  top-level merge evidence only. Hostaway has explicitly not confirmed
+  reservation `customFieldValues` array semantics, and a known tracked
+  Hostaway issue can return success without persisting a reservation custom
+  field. FR-055 allows reservation writes only with FR-056 read-back
+  verification in place and owner acceptance of the residual risk.
+- Listing omitted top-level field preservation is supported by authoritative
+  Hostaway Technical Support confirmation dated 2026-10-04. Listing array
+  merge-versus-replace semantics remain undocumented; observed array
+  replacement validates the full-array read-modify-write design and makes
+  sending only the changed entry unsafe. Live listing Steps 4 and 5 are
+  optional corroboration for top-level preservation, not a precondition for the
+  written-confirmation evidence path.
 - A read-modify-write merge is performed immediately before each write rather
   than relying on possibly stale coordinator data. Strategies that can
   overwrite concurrent dashboard edits made after that read remain disabled

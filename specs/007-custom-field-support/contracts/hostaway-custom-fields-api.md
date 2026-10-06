@@ -194,7 +194,7 @@ Accept: application/json
 
 Update a listing through Hostaway's whole-object listing endpoint.
 
-**Partial strategy request shape after FR-035 passes**:
+**Partial strategy request shape after FR-035 evidence is recorded**:
 
 ```http
 PUT /v1/listings/67890 HTTP/1.1
@@ -218,27 +218,47 @@ Content-Type: application/json
 
 **Safety contract**:
 
-- Listing writes are disabled until the FR-035 verification ladder records
-  evidence for the selected payload strategy. Partial payloads remain untrusted
-  for listings until the no-op, sentinel, and restore steps pass.
-- Listing mutation steps require a separate explicit owner decision and either
-  a disposable listing or an allowlisted restore path plus task-canary evidence
-  that the live API accepted and persisted a reconstructed restore payload
-  built by the same production restore-path code. Task restore evidence remains
-  indicative, not conclusive, for listing semantics because task and listing
-  endpoints may use different controllers.
+- Listing writes are disabled until FR-035 records evidence for the selected
+  payload strategy. Hostaway Technical Support gave authoritative written
+  confirmation on 2026-10-04 that partial listing bodies preserve omitted
+  top-level fields, including `doorCode`, pricing, and availability. Live
+  no-op, sentinel, and restore steps are optional corroboration for that
+  top-level preservation evidence path.
+- Listing mutation steps, when run for optional corroboration, require a
+  separate explicit owner decision, either a disposable listing or an
+  allowlisted restore path plus task-canary evidence that the live API accepted
+  and persisted a reconstructed restore payload built by the same production
+  restore-path code, and a verified target-specific conflict-safe recovery path
+  with conditional/version protection before any listing mutation. If that
+  recovery path is unavailable, corroboration stops before Step 4. Task restore
+  evidence remains indicative, not conclusive, for listing semantics because
+  task and listing endpoints may use different controllers.
 - The executable safety state records payload strategy separately from partial
   `PUT` verification. A full-object listing strategy must not set
   `listing_partial_put_verified` to true.
 - The outgoing `customFieldValues` array is based on the current raw listing
-  values read immediately before the write.
-- Unaddressed values are preserved.
+  values read immediately before the write. Hostaway documentation does not
+  define array merge-versus-replace semantics; Technical Support reported
+  observed, non-contractual behaviour that arrays are replaced wholesale per
+  array based on the `listingImages` precedent.
+- Unaddressed values are preserved by sending the complete merged
+  `customFieldValues` array. Sending only the changed entry is unsafe and must
+  not be implemented.
 - Raw malformed entries are included unchanged.
+- After every successful-looking listing write, the service re-reads the
+  listing with `includeResources=1` and verifies the addressed value persisted
+  using a canonicalized complete-snapshot comparison. Read-back failures,
+  addressed-value non-persistence, unrelated custom-value changes, and
+  built-in-field changes always raise. Recovery is considered only for
+  attributable unrelated-data changes and only when FR-056's conflict-safe
+  recovery requirements are met; failed read-backs and non-persistence never
+  trigger recovery.
 - If a raw malformed entry carries the addressed `customFieldId`, the write
   fails before `PUT`; it is not replaced, dropped, or duplicated.
 - Duplicate raw entries for the addressed `customFieldId` fail before `PUT`.
-- If partial PUT verification fails, this endpoint cannot use partial listing
-  writes until a safe full-object strategy or another safe endpoint is proven.
+- If partial PUT evidence fails or is insufficient for the selected strategy,
+  this endpoint cannot use partial listing writes until a safe full-object
+  strategy or another safe endpoint is proven.
 - The executable gate is the combination of recorded listing safety evidence
   and an explicit `listing_payload_strategy`, stored per config entry under
   `hass.data[DOMAIN][entry.entry_id]`. When `listing_payload_strategy` is
@@ -287,9 +307,9 @@ Content-Type: application/json
 
 **Safety contract**:
 
-- Reservation custom-field writes are disabled until reservation
-  `customFieldValues` no-op/sentinel/restore evidence or an authoritative
-  Hostaway contract is recorded for that payload.
+- Reservation custom-field writes are disabled until mandatory post-write
+  read-back verification is implemented and FR-055 owner acceptance/evidence is
+  recorded for that payload.
 - Custom-field writes still read current reservation values first and submit a
   merged `customFieldValues` collection.
 - Unaddressed values and unaddressed raw malformed entries are preserved.
@@ -298,6 +318,9 @@ Content-Type: application/json
 - Duplicate raw entries for the addressed `customFieldId` fail before `PUT`.
 - Built-in fields visible before the write, including `doorCode`, must remain
   unchanged.
+- After every successful-looking write, the service re-reads the reservation
+  with `includeResources=1` and verifies the addressed value persisted using a
+  canonicalized complete-snapshot comparison.
 - The existing `hostaway.set_door_code` service sends a partial
   `PUT /v1/reservations/{id}` containing only `doorCode` plus optional
   `doorCodeVendor` and `doorCodeInstruction`, through
@@ -306,26 +329,29 @@ Content-Type: application/json
   does not substantiate a v0.4.0 production release or no-data-loss history.
   This is top-level merge evidence for built-in fields, but not
   `customFieldValues` round-tripping.
-- Until reservation `customFieldValues` no-op/sentinel/restore evidence or an
-  authoritative Hostaway contract is recorded, reservation custom-field writes
-  fail closed.
-- Production `doorCode` evidence may be recorded as account-bound top-level
-  merge evidence, but it does not enable reservation custom-field writes by
-  itself. Other accounts stay disabled until their own account-bound evidence
-  is recorded.
+- Hostaway explicitly did not confirm reservation `customFieldValues`
+  merge-versus-replace behaviour and reported a tracked case where the
+  reservation update endpoint returned success without persisting a custom
+  field value.
+- Reservation custom-field writes may be enabled with mandatory read-back
+  verification; the owner accepts residual risk for the verified account
+  because it has zero reservation custom variables today. Other accounts stay
+  disabled until their own account-bound evidence or owner acceptance is
+  recorded with read-back protection in place.
 - The executable gate is
   `custom_field_write_safety.reservation_no_clobber_verified`, stored per
   config entry under `hass.data[DOMAIN][entry.entry_id]`, plus
   `reservation_payload_strategy`, which defaults to `None` and may become
-  `"partial"` only after reservation `customFieldValues` evidence or an
-  authoritative contract is recorded. While missing,
+  `"partial"` only after FR-055 evidence and FR-056 read-back protection are
+  recorded. While missing,
   `hostaway.set_custom_field` rejects reservation writes with
-  `reservation custom-field writes are disabled until customFieldValues safety
-  evidence is recorded` before reading the target or sending any mutation.
+  `reservation custom-field writes are disabled until FR-055 evidence and
+  FR-056 read-back protection are recorded` before reading the target or sending any mutation.
 - The API layer provides both partial and full-object payload builders. The
   partial `PUT` body contains exactly one top-level key,
   `customFieldValues`; reservation writes may select only the partial strategy
-  in this feature and must be supported by recorded evidence. The selected
+  in this feature and must be supported by recorded evidence and read-back
+  verification. The selected
   strategy is explicit gate state, not inferred from a partial-verification
   boolean. Reservation full-object writes remain out of scope unless a future
   protocol defines and verifies them explicitly.
@@ -474,10 +500,19 @@ Exactly one of `customFieldId` or `varName` is required.
   duplicate.
 - Duplicate raw entries carry the addressed `customFieldId`.
 - Hostaway rejects the update.
-- Listing write attempted before the verification ladder records passing
-  evidence.
-- Reservation write attempted before reservation `customFieldValues` evidence
-  or an authoritative contract is recorded.
+- Post-write read-back fails, does not show the addressed value persisted, or
+  shows unrelated data changed.
+- Listing write attempted before FR-035 evidence records support for the
+  selected strategy.
+- Reservation write attempted before FR-055 evidence and FR-056 read-back
+  verification are recorded.
+- Post-write read-back shows the addressed value did not persist, including
+  the known Hostaway reservation success-without-persistence issue.
+- Post-write read-back shows unrelated custom values or built-in fields
+  changed; the service raises, and recovers only through a verified
+  target-specific recovery path with conditional/version protection. If the
+  change cannot safely be attributed to this write, it raises without another
+  mutation.
 
 ## Rate limits
 
