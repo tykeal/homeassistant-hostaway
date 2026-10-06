@@ -15,6 +15,7 @@ from typing import Any, cast
 from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse
 from homeassistant.exceptions import ServiceValidationError
 
+from custom_components.hostaway.api.const import INITIAL_BACKOFF, MAX_BACKOFF
 from custom_components.hostaway.api.custom_fields import (
     LISTING_OBJECT_TYPE,
     RESERVATION_OBJECT_TYPE,
@@ -24,6 +25,7 @@ from custom_components.hostaway.api.custom_fields import (
     CustomFieldWriteSafetyGates,
     HostawayCustomFieldCollection,
     HostawayCustomFieldDefinition,
+    ListingCustomFieldEvidenceState,
     ReservationCustomFieldEvidenceState,
     build_custom_field_values_payload,
     canonical_snapshot_differences,
@@ -37,7 +39,9 @@ from custom_components.hostaway.api.custom_fields import (
 )
 from custom_components.hostaway.api.exceptions import (
     HostawayApiError,
+    HostawayConnectionError,
     HostawayMutationResultError,
+    HostawayRateLimitError,
 )
 from custom_components.hostaway.api.models import HostawayListing, HostawayReservation
 from custom_components.hostaway.sensor.custom_fields import (
@@ -71,6 +75,7 @@ class _PostWriteVerification:
     before_snapshot: dict[str, Any]
     payload: dict[str, Any]
     after_snapshot: dict[str, Any]
+    ambiguous_result: bool = False
 
 
 def _call_data(call: ServiceCall | dict[str, Any]) -> dict[str, Any]:
@@ -148,7 +153,12 @@ async def async_handle_set_custom_field(
         gates = CustomFieldWriteSafetyGates()
     try:
         if target_type == LISTING_OBJECT_TYPE:
-            strategy = select_listing_payload_strategy(gates)
+            strategy = select_listing_payload_strategy(
+                gates,
+                _listing_evidence(entry_data),
+                account_id=_entry_account_id(entry_data),
+                config_entry_id=_entry_config_entry_id(entry_data),
+            )
         else:
             strategy = select_reservation_payload_strategy(
                 gates,
@@ -276,41 +286,73 @@ async def _write_custom_field(
     strategy: str,
 ) -> HostawayListing | HostawayReservation:
     """Run read-modify-write and mandatory read-back verification."""
-    before_snapshot, _before = await _read_target_snapshot(
-        entry_data,
-        target_type,
-        target_id,
-    )
-    try:
-        if strategy != "partial":
-            raise CustomFieldMergeError("full-object writes are not enabled")
-        payload = build_custom_field_values_payload(
-            before_snapshot,
-            custom_field_id,
-            value,
-        )
-    except CustomFieldMergeError as exc:
-        raise ServiceValidationError(str(exc)) from exc
-    api_client = entry_data.get("api_client")
-    if api_client is None:
-        raise ServiceValidationError("Hostaway API client is not available")
-    try:
-        if target_type == LISTING_OBJECT_TYPE:
-            await api_client.update_listing(target_id, payload)
-        else:
-            await api_client.update_reservation(target_id, payload)
-    except HostawayMutationResultError as exc:
-        _LOGGER.warning(
-            "Hostaway returned a successful but malformed mutation response "
-            "for %s %s; continuing with mandatory read-back: %s",
+    if strategy != "partial":
+        raise ServiceValidationError("full-object writes are not enabled")
+    for attempt in range(2):
+        before_snapshot, _before = await _read_target_snapshot(
+            entry_data,
             target_type,
             target_id,
-            exc,
         )
-    except (AttributeError, HostawayApiError) as exc:
+        try:
+            payload = build_custom_field_values_payload(
+                before_snapshot,
+                custom_field_id,
+                value,
+            )
+        except CustomFieldMergeError as exc:
+            raise ServiceValidationError(str(exc)) from exc
+        try:
+            await _send_custom_field_update(
+                entry_data,
+                target_type,
+                target_id,
+                payload,
+            )
+            break
+        except HostawayMutationResultError as exc:
+            _LOGGER.warning(
+                "Hostaway returned a successful but malformed mutation response "
+                "for %s %s; continuing with mandatory read-back: %s",
+                target_type,
+                target_id,
+                exc,
+            )
+            break
+        except HostawayRateLimitError as exc:
+            if attempt >= 1:
+                raise ServiceValidationError(
+                    f"Unable to update {target_type} {target_id}: {exc}"
+                ) from exc
+            await asyncio.sleep(_rate_limit_retry_delay(exc.retry_after))
+            continue
+        except HostawayConnectionError:
+            after_snapshot, after = await _read_target_snapshot(
+                entry_data,
+                target_type,
+                target_id,
+            )
+            _verify_post_write_readback(
+                _PostWriteVerification(
+                    target_type=target_type,
+                    target_id=target_id,
+                    custom_field_id=custom_field_id,
+                    value=value,
+                    before_snapshot=before_snapshot,
+                    payload=payload,
+                    after_snapshot=after_snapshot,
+                    ambiguous_result=True,
+                )
+            )
+            return after
+        except (AttributeError, HostawayApiError) as exc:
+            raise ServiceValidationError(
+                f"Unable to update {target_type} {target_id}: {exc}"
+            ) from exc
+    else:  # pragma: no cover
         raise ServiceValidationError(
-            f"Unable to update {target_type} {target_id}: {exc}"
-        ) from exc
+            f"Unable to update {target_type} {target_id}: retry loop exhausted"
+        )
     after_snapshot, after = await _read_target_snapshot(
         entry_data,
         target_type,
@@ -328,6 +370,29 @@ async def _write_custom_field(
         )
     )
     return after
+
+
+async def _send_custom_field_update(
+    entry_data: dict[str, Any],
+    target_type: str,
+    target_id: int,
+    payload: dict[str, Any],
+) -> None:
+    """Send one no-retry custom-field update mutation."""
+    api_client = entry_data.get("api_client")
+    if api_client is None:
+        raise ServiceValidationError("Hostaway API client is not available")
+    if target_type == LISTING_OBJECT_TYPE:
+        await api_client.update_listing_custom_fields(target_id, payload)
+    else:
+        await api_client.update_reservation_custom_fields(target_id, payload)
+
+
+def _rate_limit_retry_delay(retry_after: float | None) -> float:
+    """Return a bounded service-level 429 retry delay."""
+    if retry_after is None:
+        return INITIAL_BACKOFF
+    return min(max(retry_after, INITIAL_BACKOFF), MAX_BACKOFF)
 
 
 async def _read_target_snapshot(
@@ -364,6 +429,14 @@ def _verify_post_write_readback(verification: _PostWriteVerification) -> None:
         )
         != verification.value
     ):
+        if verification.ambiguous_result:
+            raise ServiceValidationError(
+                f"Hostaway {verification.target_type} {verification.target_id} "
+                f"customFieldId {verification.custom_field_id} write returned an "
+                "ambiguous transport/server result, and mandatory read-back did "
+                "not show the custom-field value. No retry was attempted because "
+                "the original whole-array mutation outcome is unknown."
+            )
         raise ServiceValidationError(
             f"Hostaway reported success updating {verification.target_type} "
             f"{verification.target_id} customFieldId "
@@ -554,10 +627,27 @@ def _reservation_evidence(
     return None
 
 
+def _listing_evidence(
+    entry_data: dict[str, Any],
+) -> ListingCustomFieldEvidenceState | None:
+    """Return account-bound listing evidence for this entry if present."""
+    evidence = entry_data.get("listing_custom_field_evidence")
+    if isinstance(evidence, ListingCustomFieldEvidenceState):
+        return evidence
+    return None
+
+
 def _entry_account_id(entry_data: dict[str, Any]) -> int | None:
     """Return the verified account id associated with runtime data."""
     value = entry_data.get("account_id")
     if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    observed_ids = {
+        definition.account_id
+        for definition in _entry_definitions(entry_data)
+        if definition.account_id is not None
+    }
+    if observed_ids != {value}:
         return None
     return value
 
@@ -648,7 +738,7 @@ def _validate_set_request(
         else:
             definition = resolve_var_name(
                 definitions,
-                str(data.get("varName")),
+                data.get("varName"),
                 target_type,
             )
         validate_custom_field_value(definition, data["value"])

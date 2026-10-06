@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 from typing import Any, cast
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import voluptuous as vol
@@ -22,10 +22,13 @@ from custom_components.hostaway.api.custom_fields import (
     CustomFieldWriteGenerationRegistry,
     CustomFieldWriteSafetyGates,
     HostawayCustomFieldDefinition,
+    ListingCustomFieldEvidenceState,
     ReservationCustomFieldEvidenceState,
 )
 from custom_components.hostaway.api.exceptions import (
+    HostawayConnectionError,
     HostawayMutationResultError,
+    HostawayRateLimitError,
     HostawayResponseError,
 )
 from custom_components.hostaway.api.models import HostawayListing, HostawayReservation
@@ -117,9 +120,25 @@ def _enabled_reservation_gates() -> CustomFieldWriteSafetyGates:
     return gates
 
 
+def _listing_write_identity() -> dict[str, object]:
+    """Return account-bound listing write evidence for tests."""
+    return {
+        "account_id": 1,
+        "config_entry_id": "entry-1",
+        "listing_custom_field_evidence": ListingCustomFieldEvidenceState(
+            account_id=1,
+            config_entry_id="entry-1",
+            partial_put_verified=True,
+            payload_strategy="partial",
+        ),
+    }
+
+
 async def test_listing_write_rejects_before_reads(hass: HomeAssistant) -> None:
     """Listing writes reject while live safety gate is false."""
-    api_client = SimpleNamespace(get_listing=AsyncMock(), update_listing=AsyncMock())
+    api_client = SimpleNamespace(
+        get_listing=AsyncMock(), update_listing_custom_fields=AsyncMock()
+    )
     hass.data.setdefault(DOMAIN, {})["entry-1"] = {
         "api_client": api_client,
         "custom_fields_coordinator": SimpleNamespace(
@@ -141,14 +160,14 @@ async def test_listing_write_rejects_before_reads(hass: HomeAssistant) -> None:
         )
 
     api_client.get_listing.assert_not_called()
-    api_client.update_listing.assert_not_called()
+    api_client.update_listing_custom_fields.assert_not_called()
 
 
 async def test_reservation_write_rejects_before_reads(hass: HomeAssistant) -> None:
     """Reservation writes reject while live safety gate is false."""
     api_client = SimpleNamespace(
         get_reservation=AsyncMock(),
-        update_reservation=AsyncMock(),
+        update_reservation_custom_fields=AsyncMock(),
     )
     hass.data.setdefault(DOMAIN, {})["entry-1"] = {
         "api_client": api_client,
@@ -171,7 +190,7 @@ async def test_reservation_write_rejects_before_reads(hass: HomeAssistant) -> No
         )
 
     api_client.get_reservation.assert_not_called()
-    api_client.update_reservation.assert_not_called()
+    api_client.update_reservation_custom_fields.assert_not_called()
 
 
 async def test_failed_definitions_refresh_rejects_before_gate(
@@ -658,7 +677,9 @@ async def test_set_custom_field_identifier_validation(
     data: dict[str, object],
 ) -> None:
     """set_custom_field rejects bad identifier combinations before reads."""
-    api_client = SimpleNamespace(get_listing=AsyncMock(), update_listing=AsyncMock())
+    api_client = SimpleNamespace(
+        get_listing=AsyncMock(), update_listing_custom_fields=AsyncMock()
+    )
     hass.data.setdefault(DOMAIN, {})["entry-1"] = {
         "api_client": api_client,
         "custom_fields_coordinator": SimpleNamespace(data=[_definition(1)]),
@@ -669,7 +690,7 @@ async def test_set_custom_field_identifier_validation(
         await async_handle_set_custom_field(hass, data)
 
     api_client.get_listing.assert_not_called()
-    api_client.update_listing.assert_not_called()
+    api_client.update_listing_custom_fields.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -704,6 +725,75 @@ async def test_set_custom_field_value_validation(
         )
 
 
+async def test_set_custom_field_var_name_rejects_bool(
+    hass: HomeAssistant,
+) -> None:
+    """Boolean varName input is not coerced into an identifier string."""
+    definition = _definition(1, var_name="True")
+    hass.data.setdefault(DOMAIN, {})["entry-1"] = {
+        "custom_fields_coordinator": SimpleNamespace(data=[definition]),
+        "custom_field_write_safety": _enabled_listing_gates(),
+        **_listing_write_identity(),
+    }
+
+    with pytest.raises(ServiceValidationError, match="varName must"):
+        await async_handle_set_custom_field(
+            hass,
+            {
+                "target_type": "listing",
+                "target_id": 123,
+                "varName": True,
+                "value": "new",
+            },
+        )
+
+
+async def test_set_custom_field_rejects_account_id_mismatch(
+    hass: HomeAssistant,
+) -> None:
+    """Configured write evidence must match the API-observed account id."""
+    definition = HostawayCustomFieldDefinition.from_api_dict(
+        {
+            "id": 1,
+            "accountId": 2,
+            "name": "Parking Bay",
+            "varName": "parking_bay",
+            "possibleValues": [],
+            "type": "text",
+            "objectType": "listing",
+            "isPublic": 0,
+            "sortOrder": 1,
+        }
+    )
+    assert definition is not None
+    api_client = SimpleNamespace(
+        get_listing_payload=AsyncMock(),
+        update_listing_custom_fields=AsyncMock(),
+    )
+    hass.data.setdefault(DOMAIN, {})["entry-1"] = {
+        "api_client": api_client,
+        "custom_fields_coordinator": SimpleNamespace(
+            data=[definition],
+            last_refresh_succeeded=True,
+        ),
+        "custom_field_write_safety": _enabled_listing_gates(),
+        **_listing_write_identity(),
+    }
+
+    with pytest.raises(ServiceValidationError, match="does not match"):
+        await async_handle_set_custom_field(
+            hass,
+            {
+                "target_type": "listing",
+                "target_id": 123,
+                "customFieldId": 1,
+                "value": "new",
+            },
+        )
+
+    api_client.update_listing_custom_fields.assert_not_called()
+
+
 async def test_set_custom_field_writes_listing_and_verifies_readback(
     hass: HomeAssistant,
 ) -> None:
@@ -726,7 +816,7 @@ async def test_set_custom_field_writes_listing_and_verifies_readback(
     }
     api_client = SimpleNamespace(
         get_listing_payload=AsyncMock(side_effect=[before, after]),
-        update_listing=AsyncMock(return_value={}),
+        update_listing_custom_fields=AsyncMock(return_value={}),
     )
     coordinator_listing = _listing_with_custom_fields(
         123,
@@ -739,20 +829,22 @@ async def test_set_custom_field_writes_listing_and_verifies_readback(
             last_refresh_succeeded=True,
         ),
         "custom_field_write_safety": _enabled_listing_gates(),
+        **_listing_write_identity(),
         "listings_coordinator": SimpleNamespace(data={123: coordinator_listing}),
     }
 
-    result = await async_handle_set_custom_field(
-        hass,
-        {
-            "target_type": "listing",
-            "target_id": 123,
-            "customFieldId": 1,
-            "value": "new",
-        },
-    )
+    with patch("asyncio.sleep", new_callable=AsyncMock):
+        result = await async_handle_set_custom_field(
+            hass,
+            {
+                "target_type": "listing",
+                "target_id": 123,
+                "customFieldId": 1,
+                "value": "new",
+            },
+        )
 
-    api_client.update_listing.assert_awaited_once_with(
+    api_client.update_listing_custom_fields.assert_awaited_once_with(
         123,
         {
             "customFieldValues": [
@@ -773,6 +865,124 @@ async def test_set_custom_field_writes_listing_and_verifies_readback(
     assert patched.custom_fields[1] == "new"
 
 
+async def test_set_custom_field_transport_error_reads_back_no_retry(
+    hass: HomeAssistant,
+) -> None:
+    """Ambiguous transport failures read back instead of retrying stale arrays."""
+    before = {
+        "id": 123,
+        "name": "Beach House",
+        "customFieldValues": [
+            {"customFieldId": 1, "value": "old"},
+            {"customFieldId": 2, "value": "keep"},
+        ],
+    }
+    after = {
+        **before,
+        "customFieldValues": [
+            {"customFieldId": 1, "value": "old"},
+            {"customFieldId": 2, "value": "external-new"},
+        ],
+    }
+    api_client = SimpleNamespace(
+        get_listing_payload=AsyncMock(side_effect=[before, after]),
+        update_listing_custom_fields=AsyncMock(
+            side_effect=HostawayConnectionError("response lost")
+        ),
+    )
+    hass.data.setdefault(DOMAIN, {})["entry-1"] = {
+        "api_client": api_client,
+        "custom_fields_coordinator": SimpleNamespace(
+            data=[_definition(1)],
+            last_refresh_succeeded=True,
+        ),
+        "custom_field_write_safety": _enabled_listing_gates(),
+        **_listing_write_identity(),
+    }
+
+    with pytest.raises(ServiceValidationError, match="ambiguous transport/server"):
+        await async_handle_set_custom_field(
+            hass,
+            {
+                "target_type": "listing",
+                "target_id": 123,
+                "customFieldId": 1,
+                "value": "new",
+            },
+        )
+
+    api_client.update_listing_custom_fields.assert_awaited_once()
+    assert api_client.get_listing_payload.await_count == 2
+
+
+async def test_set_custom_field_rate_limit_remerges_fresh_snapshot(
+    hass: HomeAssistant,
+) -> None:
+    """Rate-limit retries re-read and preserve concurrent custom values."""
+    before = {
+        "id": 123,
+        "name": "Beach House",
+        "customFieldValues": [
+            {"customFieldId": 1, "value": "old"},
+            {"customFieldId": 2, "value": "keep"},
+        ],
+    }
+    refreshed = {
+        **before,
+        "customFieldValues": [
+            {"customFieldId": 1, "value": "old"},
+            {"customFieldId": 2, "value": "external-new"},
+        ],
+    }
+    after = {
+        **refreshed,
+        "customFieldValues": [
+            {"customFieldId": 1, "value": "new"},
+            {"customFieldId": 2, "value": "external-new"},
+        ],
+    }
+    api_client = SimpleNamespace(
+        get_listing_payload=AsyncMock(side_effect=[before, refreshed, after]),
+        update_listing_custom_fields=AsyncMock(
+            side_effect=[HostawayRateLimitError("rate", retry_after=0), {}]
+        ),
+    )
+    hass.data.setdefault(DOMAIN, {})["entry-1"] = {
+        "api_client": api_client,
+        "custom_fields_coordinator": SimpleNamespace(
+            data=[_definition(1)],
+            last_refresh_succeeded=True,
+        ),
+        "custom_field_write_safety": _enabled_listing_gates(),
+        **_listing_write_identity(),
+    }
+
+    result = await async_handle_set_custom_field(
+        hass,
+        {
+            "target_type": "listing",
+            "target_id": 123,
+            "customFieldId": 1,
+            "value": "new",
+        },
+    )
+
+    assert result is not None
+    assert result["result"] == "success"
+    assert api_client.update_listing_custom_fields.await_args_list[0].args[1] == {
+        "customFieldValues": [
+            {"customFieldId": 1, "value": "new"},
+            {"customFieldId": 2, "value": "keep"},
+        ]
+    }
+    assert api_client.update_listing_custom_fields.await_args_list[1].args[1] == {
+        "customFieldValues": [
+            {"customFieldId": 1, "value": "new"},
+            {"customFieldId": 2, "value": "external-new"},
+        ]
+    }
+
+
 async def test_set_custom_field_succeeds_without_local_listing_entity(
     hass: HomeAssistant,
 ) -> None:
@@ -788,7 +998,7 @@ async def test_set_custom_field_succeeds_without_local_listing_entity(
     }
     api_client = SimpleNamespace(
         get_listing_payload=AsyncMock(side_effect=[before, after]),
-        update_listing=AsyncMock(return_value={}),
+        update_listing_custom_fields=AsyncMock(return_value={}),
     )
     hass.data.setdefault(DOMAIN, {})["entry-1"] = {
         "api_client": api_client,
@@ -797,6 +1007,7 @@ async def test_set_custom_field_succeeds_without_local_listing_entity(
             last_refresh_succeeded=True,
         ),
         "custom_field_write_safety": _enabled_listing_gates(),
+        **_listing_write_identity(),
         "listings_coordinator": SimpleNamespace(data={}),
     }
 
@@ -818,7 +1029,7 @@ async def test_set_custom_field_succeeds_without_local_listing_entity(
         "addressed_by": "customFieldId",
         "result": "success",
     }
-    api_client.update_listing.assert_awaited_once_with(
+    api_client.update_listing_custom_fields.assert_awaited_once_with(
         123,
         {"customFieldValues": [{"customFieldId": 1, "value": "new"}]},
     )
@@ -841,7 +1052,7 @@ async def test_set_custom_field_verifies_malformed_success_response(
     }
     api_client = SimpleNamespace(
         get_listing_payload=AsyncMock(side_effect=[before, after]),
-        update_listing=AsyncMock(
+        update_listing_custom_fields=AsyncMock(
             side_effect=HostawayMutationResultError(
                 "Update response missing 'result' object"
             )
@@ -854,6 +1065,7 @@ async def test_set_custom_field_verifies_malformed_success_response(
             last_refresh_succeeded=True,
         ),
         "custom_field_write_safety": _enabled_listing_gates(),
+        **_listing_write_identity(),
     }
 
     result = await async_handle_set_custom_field(
@@ -934,7 +1146,7 @@ async def test_set_custom_field_serializes_same_target_writes(
 
     api_client = SimpleNamespace(
         get_listing_payload=_get_listing_payload,
-        update_listing=_update_listing,
+        update_listing_custom_fields=_update_listing,
     )
     hass.data.setdefault(DOMAIN, {})["entry-1"] = {
         "api_client": api_client,
@@ -943,6 +1155,7 @@ async def test_set_custom_field_serializes_same_target_writes(
             last_refresh_succeeded=True,
         ),
         "custom_field_write_safety": _enabled_listing_gates(),
+        **_listing_write_identity(),
         "listings_coordinator": SimpleNamespace(data={}),
     }
 
@@ -990,11 +1203,11 @@ async def test_set_custom_field_rejects_silent_non_persistence(
     after = {**before}
     api_client = SimpleNamespace(
         get_reservation_payload=AsyncMock(side_effect=[before, after]),
-        update_reservation=AsyncMock(return_value={}),
+        update_reservation_custom_fields=AsyncMock(return_value={}),
     )
     hass.data.setdefault(DOMAIN, {})["entry-1"] = {
         "api_client": api_client,
-        "account_id": 99,
+        "account_id": 1,
         "config_entry_id": "entry-1",
         "custom_fields_coordinator": SimpleNamespace(
             data=[_definition(1, "reservation")],
@@ -1002,7 +1215,7 @@ async def test_set_custom_field_rejects_silent_non_persistence(
         ),
         "custom_field_write_safety": _enabled_reservation_gates(),
         "reservation_custom_field_evidence": ReservationCustomFieldEvidenceState(
-            account_id=99,
+            account_id=1,
             config_entry_id="entry-1",
             custom_field_values_round_trip_verified=True,
             payload_strategy="partial",
@@ -1045,14 +1258,14 @@ async def test_set_custom_field_patches_verified_reservation(
     generation_registry = CustomFieldWriteGenerationRegistry()
     api_client = SimpleNamespace(
         get_reservation_payload=AsyncMock(side_effect=[before, after]),
-        update_reservation=AsyncMock(return_value={}),
+        update_reservation_custom_fields=AsyncMock(return_value={}),
     )
     coordinator = SimpleNamespace(
         data={123: [_reservation_with_custom_fields(456, reservation_values)]}
     )
     hass.data.setdefault(DOMAIN, {})["entry-1"] = {
         "api_client": api_client,
-        "account_id": 99,
+        "account_id": 1,
         "config_entry_id": "entry-1",
         "custom_fields_coordinator": SimpleNamespace(
             data=[_definition(1, "reservation")],
@@ -1061,7 +1274,7 @@ async def test_set_custom_field_patches_verified_reservation(
         "custom_field_write_safety": _enabled_reservation_gates(),
         "custom_field_write_generations": generation_registry,
         "reservation_custom_field_evidence": ReservationCustomFieldEvidenceState(
-            account_id=99,
+            account_id=1,
             config_entry_id="entry-1",
             custom_field_values_round_trip_verified=True,
             payload_strategy="partial",
@@ -1079,7 +1292,7 @@ async def test_set_custom_field_patches_verified_reservation(
         },
     )
 
-    api_client.update_reservation.assert_awaited_once_with(
+    api_client.update_reservation_custom_fields.assert_awaited_once_with(
         456,
         {"customFieldValues": [{"customFieldId": 1, "value": "new"}]},
     )
@@ -1102,7 +1315,7 @@ async def test_set_custom_field_pre_write_read_failure_is_clear(
     """Enabled writes fail before mutation when the pre-write read fails."""
     api_client = SimpleNamespace(
         get_listing_payload=AsyncMock(side_effect=HostawayResponseError("not found")),
-        update_listing=AsyncMock(return_value={}),
+        update_listing_custom_fields=AsyncMock(return_value={}),
     )
     coordinator_listing = _listing_with_custom_fields(
         123,
@@ -1115,6 +1328,7 @@ async def test_set_custom_field_pre_write_read_failure_is_clear(
             last_refresh_succeeded=True,
         ),
         "custom_field_write_safety": _enabled_listing_gates(),
+        **_listing_write_identity(),
         "listings_coordinator": SimpleNamespace(data={123: coordinator_listing}),
     }
 
@@ -1129,7 +1343,7 @@ async def test_set_custom_field_pre_write_read_failure_is_clear(
             },
         )
 
-    api_client.update_listing.assert_not_called()
+    api_client.update_listing_custom_fields.assert_not_called()
     patched = hass.data[DOMAIN]["entry-1"]["listings_coordinator"].data[123]
     assert patched.custom_fields[1] == "old"
 
@@ -1145,7 +1359,9 @@ async def test_set_custom_field_api_error_does_not_publish_success(
     }
     api_client = SimpleNamespace(
         get_listing_payload=AsyncMock(return_value=before),
-        update_listing=AsyncMock(side_effect=HostawayResponseError("boom")),
+        update_listing_custom_fields=AsyncMock(
+            side_effect=HostawayResponseError("boom")
+        ),
     )
     coordinator_listing = _listing_with_custom_fields(
         123,
@@ -1158,6 +1374,7 @@ async def test_set_custom_field_api_error_does_not_publish_success(
             last_refresh_succeeded=True,
         ),
         "custom_field_write_safety": _enabled_listing_gates(),
+        **_listing_write_identity(),
         "listings_coordinator": SimpleNamespace(data={123: coordinator_listing}),
     }
 
@@ -1194,7 +1411,7 @@ async def test_set_custom_field_rejects_unrelated_readback_change(
     }
     api_client = SimpleNamespace(
         get_listing_payload=AsyncMock(side_effect=[before, after]),
-        update_listing=AsyncMock(return_value={}),
+        update_listing_custom_fields=AsyncMock(return_value={}),
     )
     hass.data.setdefault(DOMAIN, {})["entry-1"] = {
         "api_client": api_client,
@@ -1203,6 +1420,7 @@ async def test_set_custom_field_rejects_unrelated_readback_change(
             last_refresh_succeeded=True,
         ),
         "custom_field_write_safety": _enabled_listing_gates(),
+        **_listing_write_identity(),
     }
 
     with pytest.raises(ServiceValidationError, match="recovery was not attempted"):
@@ -1223,11 +1441,11 @@ async def test_reservation_write_evidence_is_account_bound(
     """Reservation write enablement does not cross account boundaries."""
     api_client = SimpleNamespace(
         get_reservation=AsyncMock(),
-        update_reservation=AsyncMock(),
+        update_reservation_custom_fields=AsyncMock(),
     )
     hass.data.setdefault(DOMAIN, {})["entry-1"] = {
         "api_client": api_client,
-        "account_id": 99,
+        "account_id": 1,
         "config_entry_id": "entry-1",
         "custom_fields_coordinator": SimpleNamespace(
             data=[_definition(1, "reservation")],
@@ -1254,7 +1472,7 @@ async def test_reservation_write_evidence_is_account_bound(
         )
 
     api_client.get_reservation.assert_not_called()
-    api_client.update_reservation.assert_not_called()
+    api_client.update_reservation_custom_fields.assert_not_called()
 
 
 def test_service_documentation_covers_custom_field_contracts() -> None:

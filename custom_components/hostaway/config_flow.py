@@ -38,7 +38,11 @@ from custom_components.hostaway.const import (
     CONF_CLIENT_ID,
     CONF_CLIENT_SECRET,
     CONF_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL,
+    CONF_CUSTOM_FIELD_WRITE_ACCOUNT_ID,
     CONF_FILTER_CANCELLED,
+    CONF_LISTING_CUSTOM_FIELD_WRITES_ENABLED,
+    CONF_RESERVATION_CUSTOM_FIELD_RESIDUAL_RISK_ACCEPTED,
+    CONF_RESERVATION_CUSTOM_FIELD_WRITES_ENABLED,
     CONF_RESERVATION_SCAN_INTERVAL,
     CONF_SCAN_INTERVAL,
     CONF_SELECTED_LISTINGS,
@@ -352,6 +356,7 @@ class HostawayOptionsFlow(OptionsFlow):
         """
         self._config_entry = config_entry
 
+    # aislop-ignore-next-line complexity/function-too-long -- single HA options form
     async def async_step_init(
         self,
         user_input: dict[str, Any] | None = None,
@@ -381,6 +386,19 @@ class HostawayOptionsFlow(OptionsFlow):
                 CONF_FILTER_CANCELLED,
                 DEFAULT_FILTER_CANCELLED,
             )
+            write_account_id = user_input.get(CONF_CUSTOM_FIELD_WRITE_ACCOUNT_ID)
+            listing_writes_enabled = user_input.get(
+                CONF_LISTING_CUSTOM_FIELD_WRITES_ENABLED,
+                False,
+            )
+            reservation_writes_enabled = user_input.get(
+                CONF_RESERVATION_CUSTOM_FIELD_WRITES_ENABLED,
+                False,
+            )
+            reservation_risk_accepted = user_input.get(
+                CONF_RESERVATION_CUSTOM_FIELD_RESIDUAL_RISK_ACCEPTED,
+                False,
+            )
 
             if (
                 scan < MIN_SCAN_INTERVAL
@@ -388,6 +406,12 @@ class HostawayOptionsFlow(OptionsFlow):
                 or custom_field_scan < MIN_SCAN_INTERVAL
             ):
                 errors["base"] = "invalid_scan_interval"
+            elif (
+                listing_writes_enabled or reservation_writes_enabled
+            ) and write_account_id is None:
+                errors["base"] = "missing_write_account_id"
+            elif reservation_writes_enabled and not reservation_risk_accepted:
+                errors["base"] = "reservation_risk_not_accepted"
             else:
                 return self.async_create_entry(
                     title="",
@@ -396,6 +420,16 @@ class HostawayOptionsFlow(OptionsFlow):
                         CONF_RESERVATION_SCAN_INTERVAL: res_scan,
                         CONF_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL: custom_field_scan,
                         CONF_FILTER_CANCELLED: filter_cancelled,
+                        CONF_CUSTOM_FIELD_WRITE_ACCOUNT_ID: write_account_id,
+                        CONF_LISTING_CUSTOM_FIELD_WRITES_ENABLED: (
+                            listing_writes_enabled
+                        ),
+                        CONF_RESERVATION_CUSTOM_FIELD_WRITES_ENABLED: (
+                            reservation_writes_enabled
+                        ),
+                        CONF_RESERVATION_CUSTOM_FIELD_RESIDUAL_RISK_ACCEPTED: (
+                            reservation_risk_accepted
+                        ),
                     },
                 )
 
@@ -415,6 +449,30 @@ class HostawayOptionsFlow(OptionsFlow):
             CONF_FILTER_CANCELLED,
             DEFAULT_FILTER_CANCELLED,
         )
+        current_write_account_id = self._config_entry.options.get(
+            CONF_CUSTOM_FIELD_WRITE_ACCOUNT_ID,
+            self._config_entry.data.get(CONF_CUSTOM_FIELD_WRITE_ACCOUNT_ID),
+        )
+        current_listing_writes_enabled = self._config_entry.options.get(
+            CONF_LISTING_CUSTOM_FIELD_WRITES_ENABLED,
+            self._config_entry.data.get(
+                CONF_LISTING_CUSTOM_FIELD_WRITES_ENABLED, False
+            ),
+        )
+        current_reservation_writes_enabled = self._config_entry.options.get(
+            CONF_RESERVATION_CUSTOM_FIELD_WRITES_ENABLED,
+            self._config_entry.data.get(
+                CONF_RESERVATION_CUSTOM_FIELD_WRITES_ENABLED,
+                False,
+            ),
+        )
+        current_reservation_risk_accepted = self._config_entry.options.get(
+            CONF_RESERVATION_CUSTOM_FIELD_RESIDUAL_RISK_ACCEPTED,
+            self._config_entry.data.get(
+                CONF_RESERVATION_CUSTOM_FIELD_RESIDUAL_RISK_ACCEPTED,
+                False,
+            ),
+        )
 
         schema = vol.Schema(
             {
@@ -433,6 +491,22 @@ class HostawayOptionsFlow(OptionsFlow):
                 vol.Optional(
                     CONF_FILTER_CANCELLED,
                     default=current_filter,
+                ): bool,
+                vol.Optional(
+                    CONF_CUSTOM_FIELD_WRITE_ACCOUNT_ID,
+                    default=current_write_account_id,
+                ): vol.Any(None, vol.All(vol.Coerce(int), vol.Range(min=1))),
+                vol.Optional(
+                    CONF_LISTING_CUSTOM_FIELD_WRITES_ENABLED,
+                    default=current_listing_writes_enabled,
+                ): bool,
+                vol.Optional(
+                    CONF_RESERVATION_CUSTOM_FIELD_WRITES_ENABLED,
+                    default=current_reservation_writes_enabled,
+                ): bool,
+                vol.Optional(
+                    CONF_RESERVATION_CUSTOM_FIELD_RESIDUAL_RISK_ACCEPTED,
+                    default=current_reservation_risk_accepted,
                 ): bool,
             }
         )

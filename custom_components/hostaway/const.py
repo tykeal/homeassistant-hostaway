@@ -24,3 +24,11 @@ PLATFORMS: list[Platform] = [Platform.SENSOR]
 CONF_CACHED_TOKEN: str = "cached_token"
 CONF_FILTER_CANCELLED: str = "filter_cancelled"
 DEFAULT_FILTER_CANCELLED: bool = True
+CONF_CUSTOM_FIELD_WRITE_ACCOUNT_ID: str = "custom_field_write_account_id"
+CONF_LISTING_CUSTOM_FIELD_WRITES_ENABLED: str = "listing_custom_field_writes_enabled"
+CONF_RESERVATION_CUSTOM_FIELD_WRITES_ENABLED: str = (
+    "reservation_custom_field_writes_enabled"
+)
+CONF_RESERVATION_CUSTOM_FIELD_RESIDUAL_RISK_ACCEPTED: str = (
+    "reservation_custom_field_residual_risk_accepted"
+)

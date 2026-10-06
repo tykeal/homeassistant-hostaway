@@ -562,3 +562,90 @@ async def test_custom_field_definitions_options_flow(
         },
     )
     assert result["data"][CONF_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL] == 15
+
+
+async def test_custom_field_write_options_flow(
+    hass: HomeAssistant,
+) -> None:
+    """Options flow exposes explicit account-bound write enablement."""
+    from custom_components.hostaway.const import (
+        CONF_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL,
+        CONF_CUSTOM_FIELD_WRITE_ACCOUNT_ID,
+        CONF_LISTING_CUSTOM_FIELD_WRITES_ENABLED,
+        CONF_RESERVATION_CUSTOM_FIELD_RESIDUAL_RISK_ACCEPTED,
+        CONF_RESERVATION_CUSTOM_FIELD_WRITES_ENABLED,
+        DEFAULT_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL,
+    )
+
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    data_schema = result["data_schema"]
+    assert data_schema is not None
+    schema = data_schema.schema
+    assert any(
+        getattr(key, "schema", None) == CONF_CUSTOM_FIELD_WRITE_ACCOUNT_ID
+        for key in schema
+    )
+    assert any(
+        getattr(key, "schema", None) == CONF_LISTING_CUSTOM_FIELD_WRITES_ENABLED
+        for key in schema
+    )
+    assert any(
+        getattr(key, "schema", None) == CONF_RESERVATION_CUSTOM_FIELD_WRITES_ENABLED
+        for key in schema
+    )
+    assert any(
+        getattr(key, "schema", None)
+        == CONF_RESERVATION_CUSTOM_FIELD_RESIDUAL_RISK_ACCEPTED
+        for key in schema
+    )
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={
+            CONF_SCAN_INTERVAL: 5,
+            CONF_RESERVATION_SCAN_INTERVAL: 2,
+            CONF_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL: (
+                DEFAULT_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL
+            ),
+            CONF_LISTING_CUSTOM_FIELD_WRITES_ENABLED: True,
+        },
+    )
+    assert result["errors"] == {"base": "missing_write_account_id"}
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={
+            CONF_SCAN_INTERVAL: 5,
+            CONF_RESERVATION_SCAN_INTERVAL: 2,
+            CONF_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL: (
+                DEFAULT_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL
+            ),
+            CONF_CUSTOM_FIELD_WRITE_ACCOUNT_ID: 1,
+            CONF_LISTING_CUSTOM_FIELD_WRITES_ENABLED: True,
+            CONF_RESERVATION_CUSTOM_FIELD_WRITES_ENABLED: True,
+            CONF_RESERVATION_CUSTOM_FIELD_RESIDUAL_RISK_ACCEPTED: False,
+        },
+    )
+    assert result["errors"] == {"base": "reservation_risk_not_accepted"}
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={
+            CONF_SCAN_INTERVAL: 5,
+            CONF_RESERVATION_SCAN_INTERVAL: 2,
+            CONF_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL: (
+                DEFAULT_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL
+            ),
+            CONF_CUSTOM_FIELD_WRITE_ACCOUNT_ID: 1,
+            CONF_LISTING_CUSTOM_FIELD_WRITES_ENABLED: True,
+            CONF_RESERVATION_CUSTOM_FIELD_WRITES_ENABLED: True,
+            CONF_RESERVATION_CUSTOM_FIELD_RESIDUAL_RISK_ACCEPTED: True,
+        },
+    )
+    assert result["data"][CONF_CUSTOM_FIELD_WRITE_ACCOUNT_ID] == 1
+    assert result["data"][CONF_LISTING_CUSTOM_FIELD_WRITES_ENABLED] is True
+    assert result["data"][CONF_RESERVATION_CUSTOM_FIELD_WRITES_ENABLED] is True
+    assert result["data"][CONF_RESERVATION_CUSTOM_FIELD_RESIDUAL_RISK_ACCEPTED] is True

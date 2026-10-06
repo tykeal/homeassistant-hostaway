@@ -526,6 +526,64 @@ class TestHttpClientCore:
         assert response.status_code == 200
         mock_sleep.assert_called()
 
+    async def test_custom_field_put_5xx_does_not_retry(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Custom-field PUTs leave ambiguous 5xx recovery to the service."""
+        route = respx.put(f"{FAKE_BASE_URL}/v1/listings/123").mock(
+            return_value=httpx.Response(502)
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with pytest.raises(HostawayConnectionError):
+            await client.update_listing_custom_fields(
+                123,
+                {"customFieldValues": [{"customFieldId": 1, "value": "new"}]},
+            )
+
+        assert route.call_count == 1
+
+    async def test_custom_field_put_429_does_not_blind_retry(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Custom-field PUTs do not retry the same array after 429."""
+        route = respx.put(f"{FAKE_BASE_URL}/v1/reservations/456").mock(
+            return_value=httpx.Response(429, headers={"Retry-After": "1"})
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with pytest.raises(HostawayRateLimitError):
+            await client.update_reservation_custom_fields(
+                456,
+                {"customFieldValues": [{"customFieldId": 1, "value": "new"}]},
+            )
+
+        assert route.call_count == 1
+
+    async def test_custom_field_put_403_auth_does_not_blind_retry(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Custom-field PUTs do not auth-refresh retry the same array."""
+        route = respx.put(f"{FAKE_BASE_URL}/v1/listings/123").mock(
+            return_value=httpx.Response(403, text="invalid_token")
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with pytest.raises(HostawayAuthError):
+            await client.update_listing_custom_fields(
+                123,
+                {"customFieldValues": [{"customFieldId": 1, "value": "new"}]},
+            )
+
+        tm.invalidate.assert_called_once()
+        assert route.call_count == 1
+
     async def test_network_error_raises_connection_error(
         self, mock_httpx_client: httpx.AsyncClient
     ) -> None:
