@@ -555,13 +555,22 @@ get_custom_field_values:
 
 set_custom_field:
   name: Set custom field
-  description: >-
+  description: |
     Set one Hostaway custom variable on a listing or reservation by exactly
     one of varName or customFieldId. Use null to clear. Response when
     requested: target_type, target_id, customFieldId, varName, addressed_by,
     and result. Writes remain disabled until target-specific safety evidence
     is recorded; built-in fields such as doorCode are not custom variables.
     Use set_door_code for built-in reservation door-code fields.
+    Response example:
+    {
+      "target_type": "listing",
+      "target_id": 12345,
+      "customFieldId": 678,
+      "varName": "parking_bay",
+      "addressed_by": "varName",
+      "result": "success"
+    }
   fields:
     target_type:
       name: Target type

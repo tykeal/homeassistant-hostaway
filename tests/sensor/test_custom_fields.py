@@ -165,6 +165,49 @@ async def test_listing_custom_field_sensor_resolved_and_unresolved(
     }
 
 
+async def test_listing_custom_field_sensor_stays_present_when_cleared(
+    hass: HomeAssistant,
+) -> None:
+    """A cleared custom field keeps its diagnostic listing sensor."""
+    entry = _make_entry(selected=[100])
+    entry.add_to_hass(hass)
+    api_client = AsyncMock()
+    api_client.get_all_listings = AsyncMock(
+        return_value=[_listing([{"customFieldId": 9, "value": None}])]
+    )
+    coordinator = HostawayListingsCoordinator(hass, entry, api_client)
+    await coordinator.async_refresh()
+    definitions = [_definition(9, "parking_bay")]
+    definitions_coordinator = SimpleNamespace(
+        data=definitions,
+        get_definition=lambda custom_field_id, object_type: (
+            definitions[0]
+            if custom_field_id == 9 and object_type == "listing"
+            else None
+        ),
+    )
+
+    sensor = HostawayListingCustomFieldSensor(
+        coordinator,
+        cast(Any, definitions_coordinator),
+        100,
+        entry,
+        9,
+        "custom_parking_bay",
+    )
+
+    assert sensor.native_value is None
+    assert sensor.extra_state_attributes == {
+        "customFieldId": 9,
+        "varName": "parking_bay",
+        "name": "Parking Bay",
+        "type": "text",
+        "possibleValues": [],
+        "value": None,
+        "resolved": True,
+    }
+
+
 async def test_listing_custom_field_sensor_listens_for_definition_refresh(
     hass: HomeAssistant,
 ) -> None:
