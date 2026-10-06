@@ -44,6 +44,7 @@ from custom_components.hostaway.api.exceptions import (
     HostawayRateLimitError,
 )
 from custom_components.hostaway.api.models import HostawayListing, HostawayReservation
+from custom_components.hostaway.const import CONF_SELECTED_LISTINGS
 from custom_components.hostaway.sensor.custom_fields import (
     ListingCustomFieldKeyAllocation,
 )
@@ -390,9 +391,9 @@ async def _send_custom_field_update(
 
 def _rate_limit_retry_delay(retry_after: float | None) -> float:
     """Return a bounded service-level 429 retry delay."""
-    if retry_after is None:
-        return INITIAL_BACKOFF
-    return min(max(retry_after, INITIAL_BACKOFF), MAX_BACKOFF)
+    if retry_after is not None:
+        return max(retry_after, 0.1)
+    return min(INITIAL_BACKOFF, MAX_BACKOFF)
 
 
 async def _read_target_snapshot(
@@ -672,7 +673,9 @@ def _patch_local_state(
     if target_type == LISTING_OBJECT_TYPE and isinstance(target, HostawayListing):
         coordinator = entry_data.get("listings_coordinator")
         data = getattr(coordinator, "data", None)
-        if isinstance(data, dict):
+        if isinstance(data, dict) and (
+            target_id in data or target_id in _selected_listing_ids(coordinator)
+        ):
             updated = dict(data)
             updated[target_id] = target
             _publish_coordinator_data(coordinator, updated)
@@ -697,9 +700,6 @@ def _patch_local_state(
             else:
                 patched.append(reservation)
         updated_reservations[listing_id] = patched
-    if not changed:
-        updated_reservations.setdefault(target.listing_id, []).append(target)
-        changed = True
     if changed:
         _publish_coordinator_data(coordinator, updated_reservations)
 
@@ -710,6 +710,17 @@ def _publish_coordinator_data(coordinator: Any, data: Any) -> None:
         coordinator.async_set_updated_data(data)
     else:
         coordinator.data = data
+
+
+def _selected_listing_ids(coordinator: Any) -> set[int]:
+    """Return selected listing ids from a coordinator config entry."""
+    entry = getattr(coordinator, "config_entry", None)
+    raw_ids = getattr(entry, "data", {}).get(CONF_SELECTED_LISTINGS, [])
+    return {
+        item
+        for item in raw_ids
+        if not isinstance(item, bool) and isinstance(item, int) and item > 0
+    }
 
 
 def _validate_set_request(

@@ -1078,8 +1078,52 @@ async def test_set_custom_field_succeeds_without_local_listing_entity(
         {"customFieldValues": [{"customFieldId": 1, "value": "new"}]},
     )
     assert api_client.get_listing_payload.await_count == 2
-    patched = hass.data[DOMAIN]["entry-1"]["listings_coordinator"].data[123]
-    assert patched.custom_fields[1] == "new"
+    assert hass.data[DOMAIN]["entry-1"]["listings_coordinator"].data == {}
+
+
+async def test_set_custom_field_patches_selected_absent_listing(
+    hass: HomeAssistant,
+) -> None:
+    """Verified listing writes patch selected targets absent from cache."""
+    before = {
+        "id": 123,
+        "name": "Beach House",
+        "customFieldValues": [{"customFieldId": 1, "value": "old"}],
+    }
+    after = {
+        **before,
+        "customFieldValues": [{"customFieldId": 1, "value": "new"}],
+    }
+    api_client = SimpleNamespace(
+        get_listing_payload=AsyncMock(side_effect=[before, after]),
+        update_listing_custom_fields=AsyncMock(return_value={}),
+    )
+    coordinator = SimpleNamespace(
+        data={},
+        config_entry=SimpleNamespace(data={"selected_listings": [123]}),
+    )
+    hass.data.setdefault(DOMAIN, {})["entry-1"] = {
+        "api_client": api_client,
+        "custom_fields_coordinator": SimpleNamespace(
+            data=[_definition(1)],
+            last_refresh_succeeded=True,
+        ),
+        "custom_field_write_safety": _enabled_listing_gates(),
+        **_listing_write_identity(),
+        "listings_coordinator": coordinator,
+    }
+
+    await async_handle_set_custom_field(
+        hass,
+        {
+            "target_type": "listing",
+            "target_id": 123,
+            "customFieldId": 1,
+            "value": "new",
+        },
+    )
+
+    assert coordinator.data[123].custom_fields[1] == "new"
 
 
 async def test_set_custom_field_verifies_malformed_success_response(
@@ -1354,10 +1398,10 @@ async def test_set_custom_field_patches_verified_reservation(
     }
 
 
-async def test_set_custom_field_patches_absent_reservation(
+async def test_set_custom_field_skips_absent_reservation_patch(
     hass: HomeAssistant,
 ) -> None:
-    """Verified reservation writes patch data even when absent from cache."""
+    """Verified reservation writes do not add unrepresented reservations."""
     before = {
         "id": 456,
         "listingMapId": 123,
@@ -1404,7 +1448,7 @@ async def test_set_custom_field_patches_absent_reservation(
         },
     )
 
-    assert coordinator.data[123][0].custom_fields[1] == "new"
+    assert coordinator.data[123] == []
 
 
 async def test_set_custom_field_pre_write_read_failure_is_clear(
