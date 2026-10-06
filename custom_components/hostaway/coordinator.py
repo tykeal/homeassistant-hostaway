@@ -17,6 +17,9 @@ from homeassistant.helpers.update_coordinator import (
 )
 
 from custom_components.hostaway.api.custom_fields import (
+    LISTING_OBJECT_TYPE,
+    RESERVATION_OBJECT_TYPE,
+    CustomFieldWriteGenerationRegistry,
     HostawayCustomFieldDefinition,
     fetch_custom_field_definitions,
     lookup_definition_by_id,
@@ -181,6 +184,7 @@ class HostawayListingsCoordinator(
             entry: The config entry for this integration.
             api_client: Hostaway API client for fetching listings.
         """
+        self._hass = hass
         self.api_client = api_client
         interval_minutes = entry.options.get(
             CONF_SCAN_INTERVAL,
@@ -207,6 +211,11 @@ class HostawayListingsCoordinator(
             ConfigEntryAuthFailed: On authentication failure.
         """
         selected = set(self.config_entry.data.get(CONF_SELECTED_LISTINGS, []))
+        generations = _write_generations(self._hass, self.config_entry.entry_id)
+        captured = _capture_generations(
+            generations,
+            {(LISTING_OBJECT_TYPE, listing_id) for listing_id in selected},
+        )
         try:
             listings = await self.api_client.get_all_listings()
         except HostawayAuthError as exc:
@@ -217,7 +226,16 @@ class HostawayListingsCoordinator(
             raise UpdateFailed(
                 f"Failed to fetch listings: {exc}",
             ) from exc
-        return {listing.id: listing for listing in listings if listing.id in selected}
+        result = {listing.id: listing for listing in listings if listing.id in selected}
+        current = self.data or {}
+        for listing_id in selected:
+            key = (LISTING_OBJECT_TYPE, listing_id)
+            if (
+                _generation_changed(generations, key, captured)
+                and listing_id in current
+            ):
+                result[listing_id] = current[listing_id]
+        return result
 
 
 class HostawayReservationsCoordinator(
@@ -248,6 +266,7 @@ class HostawayReservationsCoordinator(
             entry: The config entry for this integration.
             api_client: Hostaway API client for fetching reservations.
         """
+        self._hass = hass
         self.api_client = api_client
         interval_minutes = entry.options.get(
             CONF_RESERVATION_SCAN_INTERVAL,
@@ -277,6 +296,20 @@ class HostawayReservationsCoordinator(
             ConfigEntryAuthFailed: On authentication failure.
         """
         selected = self.config_entry.data.get(CONF_SELECTED_LISTINGS, [])
+        current_at_start = self.data or {}
+        current_by_id = {
+            reservation.id: reservation
+            for reservations in current_at_start.values()
+            for reservation in reservations
+        }
+        generations = _write_generations(self._hass, self.config_entry.entry_id)
+        captured = _capture_generations(
+            generations,
+            {
+                (RESERVATION_OBJECT_TYPE, reservation_id)
+                for reservation_id in current_by_id
+            },
+        )
         result: dict[int, list[HostawayReservation]] = {}
         try:
             for listing_id in selected:
@@ -290,4 +323,85 @@ class HostawayReservationsCoordinator(
             raise UpdateFailed(
                 f"Failed to fetch reservations: {exc}",
             ) from exc
-        return result
+        latest = self.data or {}
+        latest_by_id = {
+            reservation.id: reservation
+            for reservations_for_listing in latest.values()
+            for reservation in reservations_for_listing
+        }
+        return {
+            listing_id: _preserve_changed_reservations(
+                listing_id,
+                reservations,
+                latest_by_id,
+                generations,
+                captured,
+            )
+            for listing_id, reservations in result.items()
+        }
+
+
+def _write_generations(
+    hass: HomeAssistant,
+    entry_id: str,
+) -> CustomFieldWriteGenerationRegistry | None:
+    """Return the write-generation registry for one config entry."""
+    domain_data = hass.data.get(DOMAIN)
+    if not isinstance(domain_data, dict):
+        return None
+    entry_data = domain_data.get(entry_id)
+    if not isinstance(entry_data, dict):
+        return None
+    registry = entry_data.get("custom_field_write_generations")
+    if isinstance(registry, CustomFieldWriteGenerationRegistry):
+        return registry
+    return None
+
+
+def _capture_generations(
+    registry: CustomFieldWriteGenerationRegistry | None,
+    keys: set[tuple[str, int]],
+) -> dict[tuple[str, int], int]:
+    """Return generation values captured before a coordinator fetch."""
+    if registry is None:
+        return {}
+    return {key: registry.current(*key) for key in keys}
+
+
+def _generation_changed(
+    registry: CustomFieldWriteGenerationRegistry | None,
+    key: tuple[str, int],
+    captured: dict[tuple[str, int], int],
+) -> bool:
+    """Return whether a target changed during an in-flight refresh."""
+    if registry is None:
+        return False
+    return registry.current(*key) != captured.get(key, 0)
+
+
+def _preserve_changed_reservations(
+    listing_id: int,
+    fetched: list[HostawayReservation],
+    current_by_id: dict[int, HostawayReservation],
+    generations: CustomFieldWriteGenerationRegistry | None,
+    captured: dict[tuple[str, int], int],
+) -> list[HostawayReservation]:
+    """Preserve reservations patched by writes during an in-flight refresh."""
+    result: list[HostawayReservation] = []
+    seen: set[int] = set()
+    for reservation in fetched:
+        key = (RESERVATION_OBJECT_TYPE, reservation.id)
+        if _generation_changed(generations, key, captured):
+            result.append(current_by_id.get(reservation.id, reservation))
+        else:
+            result.append(reservation)
+        seen.add(reservation.id)
+    for reservation_id, reservation in current_by_id.items():
+        key = (RESERVATION_OBJECT_TYPE, reservation_id)
+        if (
+            reservation.listing_id == listing_id
+            and reservation_id not in seen
+            and _generation_changed(generations, key, captured)
+        ):
+            result.append(reservation)
+    return sorted(result, key=lambda reservation: reservation.check_in)

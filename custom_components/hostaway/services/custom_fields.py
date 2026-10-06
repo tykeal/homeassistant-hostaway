@@ -54,6 +54,19 @@ class _ValueResponseContext:
     allocation: ListingCustomFieldKeyAllocation | None = None
 
 
+@dataclass(frozen=True)
+class _PostWriteVerification:
+    """Inputs required for mandatory post-write read-back verification."""
+
+    target_type: str
+    target_id: int
+    custom_field_id: int
+    value: Any
+    before_snapshot: dict[str, Any]
+    payload: dict[str, Any]
+    after_snapshot: dict[str, Any]
+
+
 def _call_data(call: ServiceCall | dict[str, Any]) -> dict[str, Any]:
     """Return service-call data from Home Assistant or direct tests."""
     if isinstance(call, dict):
@@ -290,12 +303,15 @@ async def _write_custom_field(
         target_id,
     )
     _verify_post_write_readback(
-        target_type,
-        custom_field_id,
-        value,
-        before_snapshot,
-        payload,
-        after_snapshot,
+        _PostWriteVerification(
+            target_type=target_type,
+            target_id=target_id,
+            custom_field_id=custom_field_id,
+            value=value,
+            before_snapshot=before_snapshot,
+            payload=payload,
+            after_snapshot=after_snapshot,
+        )
     )
     return after
 
@@ -325,29 +341,35 @@ async def _read_target_snapshot(
     return snapshot, result
 
 
-def _verify_post_write_readback(
-    target_type: str,
-    custom_field_id: int,
-    value: Any,
-    before_snapshot: dict[str, Any],
-    payload: dict[str, Any],
-    after_snapshot: dict[str, Any],
-) -> None:
+def _verify_post_write_readback(verification: _PostWriteVerification) -> None:
     """Verify Hostaway persisted only the requested custom-field change."""
-    if _snapshot_value(after_snapshot, custom_field_id) != value:
+    if (
+        _snapshot_value(
+            verification.after_snapshot,
+            verification.custom_field_id,
+        )
+        != verification.value
+    ):
         raise ServiceValidationError(
-            f"Hostaway reported success updating {target_type} {custom_field_id}, "
+            f"Hostaway reported success updating {verification.target_type} "
+            f"{verification.target_id} customFieldId "
+            f"{verification.custom_field_id}, "
             "but the mandatory read-back did not show the custom-field value. "
             "This matches the known Hostaway success-without-custom-field-"
             "persistence bug; no success was reported."
         )
-    expected = dict(before_snapshot)
-    expected["customFieldValues"] = payload["customFieldValues"]
-    differences = canonical_snapshot_differences(expected, after_snapshot)
+    expected = dict(verification.before_snapshot)
+    expected["customFieldValues"] = verification.payload["customFieldValues"]
+    differences = canonical_snapshot_differences(
+        expected,
+        verification.after_snapshot,
+    )
     if differences:
         raise ServiceValidationError(
-            f"Hostaway {target_type} {custom_field_id} read-back changed unrelated "
-            f"data at {', '.join(differences)}; recovery was not attempted because "
+            f"Hostaway {verification.target_type} {verification.target_id} "
+            f"customFieldId {verification.custom_field_id} read-back changed "
+            f"unrelated data at {', '.join(differences)}; "
+            "recovery was not attempted because "
             "no verified conditional/version-protected recovery path is available"
         )
 
