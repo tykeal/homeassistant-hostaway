@@ -6,12 +6,12 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 
 from custom_components.hostaway.api.custom_fields import (
     HostawayCustomFieldDefinition,
@@ -205,19 +205,49 @@ async def test_listing_custom_field_sensor_listens_for_definition_refresh(
     await coordinator.async_shutdown()
 
 
-def test_custom_fields_do_not_create_writable_entities() -> None:
+@patch(
+    "custom_components.hostaway.HostawayApiClient.get_all_reservations",
+    new_callable=AsyncMock,
+    return_value=[],
+)
+@patch(
+    "custom_components.hostaway.HostawayApiClient.get_all_listings",
+    new_callable=AsyncMock,
+)
+@patch(
+    "custom_components.hostaway.HostawayApiClient.test_connection",
+    new_callable=AsyncMock,
+    return_value=True,
+)
+async def test_custom_fields_do_not_create_writable_entities(
+    mock_test: AsyncMock,
+    mock_listings: AsyncMock,
+    mock_reservations: AsyncMock,
+    hass: HomeAssistant,
+) -> None:
     """Custom fields expose service-only writes, not text/number/select entities."""
-    root = Path("custom_components/hostaway")
-    entity_code = "\n".join(
-        path.read_text()
-        for pattern in ("text/**/*.py", "number/**/*.py", "select/**/*.py")
-        for path in root.glob(pattern)
-    )
-    custom_field_code = Path(
-        "custom_components/hostaway/services/custom_fields.py"
-    ).read_text()
+    del mock_test, mock_reservations
+    entry = _make_entry(selected=[100])
+    entry.add_to_hass(hass)
+    mock_listings.return_value = [_listing([{"customFieldId": 9, "value": "A1"}])]
 
-    assert "custom_field" not in entity_code
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    registry = er.async_get(hass)
+    writable_entities = [
+        entity
+        for entity in registry.entities.values()
+        if entity.config_entry_id == entry.entry_id
+        and entity.domain in {"text", "number", "select"}
+    ]
+    custom_field_code = (
+        __import__("pathlib")
+        .Path("custom_components/hostaway/services/custom_fields.py")
+        .read_text()
+    )
+
+    assert writable_entities == []
     assert "create_custom_field" not in custom_field_code
     assert "update_custom_field_definition" not in custom_field_code
     assert "delete_custom_field" not in custom_field_code

@@ -6,12 +6,14 @@
 
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock
 
 import pytest
 import voluptuous as vol
+import yaml
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import entity_registry as er
@@ -764,6 +766,109 @@ async def test_set_custom_field_writes_listing_and_verifies_readback(
     assert patched.custom_fields[1] == "new"
 
 
+async def test_set_custom_field_serializes_same_target_writes(
+    hass: HomeAssistant,
+) -> None:
+    """Concurrent writes to one target read after the prior write completes."""
+    before = {
+        "id": 123,
+        "name": "Beach House",
+        "customFieldValues": [
+            {"customFieldId": 1, "value": "old-1"},
+            {"customFieldId": 2, "value": "old-2"},
+        ],
+    }
+    after_first = {
+        **before,
+        "customFieldValues": [
+            {"customFieldId": 1, "value": "new-1"},
+            {"customFieldId": 2, "value": "old-2"},
+        ],
+    }
+    after_second = {
+        **before,
+        "customFieldValues": [
+            {"customFieldId": 1, "value": "new-1"},
+            {"customFieldId": 2, "value": "new-2"},
+        ],
+    }
+    state = {"reads": 0, "early_second_read": False}
+    first_update_in_progress = False
+    first_write_read_back = False
+    update_payloads: list[dict[str, Any]] = []
+
+    async def _get_listing_payload(_target_id: int) -> dict[str, Any]:
+        """Return snapshots that expose un-serialized pre-read races."""
+        nonlocal first_write_read_back
+
+        state["reads"] += 1
+        if state["reads"] == 1:
+            return before
+        if first_update_in_progress:
+            state["early_second_read"] = True
+            return before
+        if not first_write_read_back:
+            first_write_read_back = True
+            return after_first
+        if len(update_payloads) < 2:
+            return after_first
+        return after_second
+
+    async def _update_listing(_target_id: int, payload: dict[str, Any]) -> dict:
+        """Record listing update payloads."""
+        nonlocal first_update_in_progress
+
+        update_payloads.append(payload)
+        if len(update_payloads) == 1:
+            first_update_in_progress = True
+            try:
+                await asyncio.sleep(0)
+            finally:
+                first_update_in_progress = False
+        return {}
+
+    api_client = SimpleNamespace(
+        get_listing_payload=_get_listing_payload,
+        update_listing=_update_listing,
+    )
+    hass.data.setdefault(DOMAIN, {})["entry-1"] = {
+        "api_client": api_client,
+        "custom_fields_coordinator": SimpleNamespace(
+            data=[_definition(1), _definition(2, var_name="second")],
+            last_refresh_succeeded=True,
+        ),
+        "custom_field_write_safety": _enabled_listing_gates(),
+        "listings_coordinator": SimpleNamespace(data={}),
+    }
+
+    await asyncio.gather(
+        async_handle_set_custom_field(
+            hass,
+            {
+                "target_type": "listing",
+                "target_id": 123,
+                "customFieldId": 1,
+                "value": "new-1",
+            },
+        ),
+        async_handle_set_custom_field(
+            hass,
+            {
+                "target_type": "listing",
+                "target_id": 123,
+                "customFieldId": 2,
+                "value": "new-2",
+            },
+        ),
+    )
+
+    assert state["early_second_read"] is False
+    assert update_payloads[1]["customFieldValues"] == [
+        {"customFieldId": 1, "value": "new-1"},
+        {"customFieldId": 2, "value": "new-2"},
+    ]
+
+
 async def test_set_custom_field_rejects_silent_non_persistence(
     hass: HomeAssistant,
 ) -> None:
@@ -901,21 +1006,23 @@ def test_service_documentation_covers_custom_field_contracts() -> None:
         .Path("custom_components/hostaway/services.yaml")
         .read_text()
     )
+    services = yaml.safe_load(text)
 
     for definition in SERVICE_DEFINITIONS:
         assert f"{definition.name}:" in text
-    for phrase in (
-        "get_custom_fields:",
-        "get_custom_field_values:",
-        "set_custom_field:",
-        "customFieldId",
-        "varName",
-        "Use null to clear",
-        "hidden",
-        "Task definitions are not returned",
-        "multiple accounts",
-    ):
-        assert phrase in text
+    assert "custom_fields" in services["get_custom_fields"]["description"]
+    assert (
+        "Task definitions are not returned"
+        in services["get_custom_fields"]["description"]
+    )
+    assert "hidden" in services["get_custom_field_values"]["description"]
+    set_description = services["set_custom_field"]["description"]
+    assert "Set one Hostaway custom variable" in set_description
+    assert "customFieldId" in set_description
+    assert "varName" in set_description
+    assert "Use null to clear" in set_description
+    assert "target_type" in set_description
+    assert services["set_custom_field"]["fields"]["config_entry_id"]["description"]
 
 
 def test_door_code_documentation_distinguishes_built_ins() -> None:

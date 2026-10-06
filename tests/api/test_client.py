@@ -1069,6 +1069,87 @@ class TestUpdateTask:
             await client.update_task(999, {"title": "New"})
 
 
+class TestUpdateListing:
+    """Tests for HostawayApiClient.update_listing()."""
+
+    async def test_update_listing_success(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Successful listing updates return result objects."""
+        respx.put(f"{FAKE_BASE_URL}/v1/listings/42").mock(
+            return_value=httpx.Response(
+                200,
+                json={"status": "success", "result": {"id": 42}},
+            )
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        result = await client.update_listing(42, {"customFieldValues": []})
+
+        assert result == {"id": 42}
+
+    async def test_update_listing_sends_payload(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Listing updates use PUT /v1/listings/{id} and forward JSON."""
+        route = respx.put(f"{FAKE_BASE_URL}/v1/listings/99").mock(
+            return_value=httpx.Response(
+                200,
+                json={"status": "success", "result": {"id": 99}},
+            )
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        await client.update_listing(
+            99,
+            {"customFieldValues": [{"customFieldId": 1, "value": "A"}]},
+        )
+
+        request = route.calls[0].request
+        assert "/v1/listings/99" in str(request.url)
+        assert json.loads(request.content) == {
+            "customFieldValues": [{"customFieldId": 1, "value": "A"}]
+        }
+
+    async def test_update_listing_api_error(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Listing update API failures surface as response errors."""
+        respx.put(f"{FAKE_BASE_URL}/v1/listings/42").mock(
+            return_value=httpx.Response(
+                200,
+                json={"status": "fail", "result": "not found"},
+            )
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with pytest.raises(HostawayResponseError, match="Update failed"):
+            await client.update_listing(42, {"customFieldValues": []})
+
+    async def test_update_listing_missing_result(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Listing updates require an object result."""
+        respx.put(f"{FAKE_BASE_URL}/v1/listings/42").mock(
+            return_value=httpx.Response(
+                200,
+                json={"status": "success", "result": "ok"},
+            )
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with pytest.raises(HostawayResponseError, match="missing 'result' object"):
+            await client.update_listing(42, {"customFieldValues": []})
+
+
 class TestDeleteTask:
     """Tests for HostawayApiClient.delete_task()."""
 
