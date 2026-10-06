@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -34,12 +35,17 @@ from custom_components.hostaway.api.custom_fields import (
     validate_custom_field_value,
     validate_identifier,
 )
-from custom_components.hostaway.api.exceptions import HostawayApiError
+from custom_components.hostaway.api.exceptions import (
+    HostawayApiError,
+    HostawayMutationResultError,
+)
 from custom_components.hostaway.api.models import HostawayListing, HostawayReservation
 from custom_components.hostaway.sensor.custom_fields import (
     ListingCustomFieldKeyAllocation,
 )
 from custom_components.hostaway.services.helpers import _resolve_entry_data
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -293,6 +299,14 @@ async def _write_custom_field(
             await api_client.update_listing(target_id, payload)
         else:
             await api_client.update_reservation(target_id, payload)
+    except HostawayMutationResultError as exc:
+        _LOGGER.warning(
+            "Hostaway returned a successful but malformed mutation response "
+            "for %s %s; continuing with mandatory read-back: %s",
+            target_type,
+            target_id,
+            exc,
+        )
     except (AttributeError, HostawayApiError) as exc:
         raise ServiceValidationError(
             f"Unable to update {target_type} {target_id}: {exc}"

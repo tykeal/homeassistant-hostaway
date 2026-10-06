@@ -468,10 +468,25 @@ get_tasks:
 
 get_custom_fields:
   name: Get custom fields
-  description: >-
+  description: |
     Return cached Hostaway custom variable definitions for listing and
     reservation objects. Hidden fields are included in reads.
-    Task definitions are not returned. Response: {"custom_fields": [...]}.
+    Task definitions are not returned. Response schema:
+    {
+      "custom_fields": [
+        {
+          "customFieldId": 123,
+          "varName": "parking_bay",
+          "name": "Parking Bay",
+          "type": "text",
+          "objectType": "listing",
+          "possibleValues": [],
+          "isPublic": false,
+          "sortOrder": 10
+        }
+      ]
+    }
+    Empty result: {"custom_fields": []}.
   fields:
     config_entry_id:
       name: Config entry ID
@@ -485,11 +500,29 @@ get_custom_fields:
 
 get_custom_field_values:
   name: Get custom field values
-  description: >-
+  description: |
     Return Hostaway custom variable values for one listing or reservation.
     The service reads the target directly from Hostaway and includes
-    hidden and defined-but-unset fields with a null value. Response:
-    {"custom_fields": {...}}.
+    hidden and defined-but-unset fields with a null value. Response schema:
+    {
+      "custom_fields": {
+        "custom_parking_bay": {
+          "customFieldId": 123,
+          "varName": "parking_bay",
+          "name": "Parking Bay",
+          "type": "text",
+          "possibleValues": [],
+          "value": "A1",
+          "resolved": true
+        },
+        "custom_field_999": {
+          "customFieldId": 999,
+          "value": "legacy",
+          "resolved": false
+        }
+      }
+    }
+    Empty result: {"custom_fields": {}}.
   fields:
     target_type:
       name: Target type

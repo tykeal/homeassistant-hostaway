@@ -31,6 +31,7 @@ from custom_components.hostaway.api.custom_fields import (
 from custom_components.hostaway.api.exceptions import (
     HostawayAuthError,
     HostawayConnectionError,
+    HostawayMutationResultError,
     HostawayRateLimitError,
     HostawayReservationLockedError,
     HostawayResponseError,
@@ -384,7 +385,7 @@ class HostawayApiClient:
             error_prefix,
         )
         if not isinstance(result, dict):
-            raise HostawayResponseError(missing_result)
+            raise HostawayMutationResultError(missing_result)
         return result
 
     async def _paginate_offset(

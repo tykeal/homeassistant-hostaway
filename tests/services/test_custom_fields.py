@@ -19,11 +19,15 @@ from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import entity_registry as er
 
 from custom_components.hostaway.api.custom_fields import (
+    CustomFieldWriteGenerationRegistry,
     CustomFieldWriteSafetyGates,
     HostawayCustomFieldDefinition,
     ReservationCustomFieldEvidenceState,
 )
-from custom_components.hostaway.api.exceptions import HostawayResponseError
+from custom_components.hostaway.api.exceptions import (
+    HostawayMutationResultError,
+    HostawayResponseError,
+)
 from custom_components.hostaway.api.models import HostawayListing, HostawayReservation
 from custom_components.hostaway.const import DOMAIN
 from custom_components.hostaway.services import SERVICE_DEFINITIONS
@@ -766,6 +770,51 @@ async def test_set_custom_field_writes_listing_and_verifies_readback(
     assert patched.custom_fields[1] == "new"
 
 
+async def test_set_custom_field_verifies_malformed_success_response(
+    hass: HomeAssistant,
+) -> None:
+    """A malformed success response still requires mandatory read-back."""
+    before = {
+        "id": 123,
+        "name": "Beach House",
+        "customFieldValues": [{"customFieldId": 1, "value": "old"}],
+    }
+    after = {
+        **before,
+        "customFieldValues": [{"customFieldId": 1, "value": "new"}],
+    }
+    api_client = SimpleNamespace(
+        get_listing_payload=AsyncMock(side_effect=[before, after]),
+        update_listing=AsyncMock(
+            side_effect=HostawayMutationResultError(
+                "Update response missing 'result' object"
+            )
+        ),
+    )
+    hass.data.setdefault(DOMAIN, {})["entry-1"] = {
+        "api_client": api_client,
+        "custom_fields_coordinator": SimpleNamespace(
+            data=[_definition(1)],
+            last_refresh_succeeded=True,
+        ),
+        "custom_field_write_safety": _enabled_listing_gates(),
+    }
+
+    result = await async_handle_set_custom_field(
+        hass,
+        {
+            "target_type": "listing",
+            "target_id": 123,
+            "customFieldId": 1,
+            "value": "new",
+        },
+    )
+
+    result_data = cast(dict[str, Any], result)
+    assert result_data["result"] == "success"
+    assert api_client.get_listing_payload.await_count == 2
+
+
 async def test_set_custom_field_serializes_same_target_writes(
     hass: HomeAssistant,
 ) -> None:
@@ -919,6 +968,78 @@ async def test_set_custom_field_rejects_silent_non_persistence(
         )
 
 
+async def test_set_custom_field_patches_verified_reservation(
+    hass: HomeAssistant,
+) -> None:
+    """Successful reservation writes patch coordinator data and generation."""
+    reservation_values = [{"customFieldId": 1, "value": "old"}]
+    before = {
+        "id": 456,
+        "listingMapId": 123,
+        "guestName": "Guest",
+        "arrivalDate": "2026-01-01",
+        "departureDate": "2026-01-02",
+        "status": "confirmed",
+        "customFieldValues": reservation_values,
+    }
+    after = {
+        **before,
+        "customFieldValues": [{"customFieldId": 1, "value": "new"}],
+    }
+    generation_registry = CustomFieldWriteGenerationRegistry()
+    api_client = SimpleNamespace(
+        get_reservation_payload=AsyncMock(side_effect=[before, after]),
+        update_reservation=AsyncMock(return_value={}),
+    )
+    coordinator = SimpleNamespace(
+        data={123: [_reservation_with_custom_fields(456, reservation_values)]}
+    )
+    hass.data.setdefault(DOMAIN, {})["entry-1"] = {
+        "api_client": api_client,
+        "account_id": 99,
+        "config_entry_id": "entry-1",
+        "custom_fields_coordinator": SimpleNamespace(
+            data=[_definition(1, "reservation")],
+            last_refresh_succeeded=True,
+        ),
+        "custom_field_write_safety": _enabled_reservation_gates(),
+        "custom_field_write_generations": generation_registry,
+        "reservation_custom_field_evidence": ReservationCustomFieldEvidenceState(
+            account_id=99,
+            config_entry_id="entry-1",
+            custom_field_values_round_trip_verified=True,
+            payload_strategy="partial",
+        ),
+        "reservations_coordinator": coordinator,
+    }
+
+    result = await async_handle_set_custom_field(
+        hass,
+        {
+            "target_type": "reservation",
+            "target_id": 456,
+            "customFieldId": 1,
+            "value": "new",
+        },
+    )
+
+    api_client.update_reservation.assert_awaited_once_with(
+        456,
+        {"customFieldValues": [{"customFieldId": 1, "value": "new"}]},
+    )
+    patched = coordinator.data[123][0]
+    assert patched.custom_fields[1] == "new"
+    assert generation_registry.current("reservation", 456) == 1
+    assert result == {
+        "target_type": "reservation",
+        "target_id": 456,
+        "customFieldId": 1,
+        "varName": "parking_bay",
+        "addressed_by": "customFieldId",
+        "result": "success",
+    }
+
+
 async def test_set_custom_field_rejects_unrelated_readback_change(
     hass: HomeAssistant,
 ) -> None:
@@ -1011,11 +1132,19 @@ def test_service_documentation_covers_custom_field_contracts() -> None:
     for definition in SERVICE_DEFINITIONS:
         assert f"{definition.name}:" in text
     assert "custom_fields" in services["get_custom_fields"]["description"]
+    assert "customFieldId" in services["get_custom_fields"]["description"]
+    assert "objectType" in services["get_custom_fields"]["description"]
+    assert "isPublic" in services["get_custom_fields"]["description"]
+    assert "sortOrder" in services["get_custom_fields"]["description"]
+    assert '{"custom_fields": []}' in services["get_custom_fields"]["description"]
     assert (
         "Task definitions are not returned"
         in services["get_custom_fields"]["description"]
     )
     assert "hidden" in services["get_custom_field_values"]["description"]
+    assert "resolved" in services["get_custom_field_values"]["description"]
+    assert "value" in services["get_custom_field_values"]["description"]
+    assert '{"custom_fields": {}}' in services["get_custom_field_values"]["description"]
     set_description = services["set_custom_field"]["description"]
     assert "Set one Hostaway custom variable" in set_description
     assert "customFieldId" in set_description
