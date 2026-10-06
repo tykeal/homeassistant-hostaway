@@ -408,6 +408,12 @@ async def _send_custom_field_update(
 def _rate_limit_retry_delay(retry_after: float | None) -> float:
     """Return a bounded service-level 429 retry delay."""
     if retry_after is not None:
+        if retry_after > MAX_BACKOFF:
+            raise ServiceValidationError(
+                "Hostaway rate-limited the custom-field write with a "
+                f"Retry-After delay of {retry_after:g} seconds. No retry was "
+                "attempted; try again after the advertised delay."
+            )
         return max(retry_after, 0.1)
     return min(INITIAL_BACKOFF, MAX_BACKOFF)
 
