@@ -353,6 +353,26 @@ class CustomFieldWriteSafetyGates:
 
 
 @dataclass(frozen=True)
+class ListingCustomFieldEvidenceState:
+    """Account-bound listing custom-field write evidence state."""
+
+    account_id: int | None = None
+    config_entry_id: str | None = None
+    partial_put_verified: bool = False
+    payload_strategy: ListingPayloadStrategy | None = None
+
+    @property
+    def enables_listing_writes(self) -> bool:
+        """Return whether this account has sufficient listing evidence."""
+        return (
+            self.account_id is not None
+            and self.config_entry_id is not None
+            and self.partial_put_verified
+            and self.payload_strategy == "partial"
+        )
+
+
+@dataclass(frozen=True)
 class ReservationCustomFieldEvidenceState:
     """Account-bound reservation custom-field write evidence state."""
 
@@ -445,7 +465,7 @@ def lookup_definition_by_id(
 
 def resolve_var_name(
     definitions: Iterable[HostawayCustomFieldDefinition],
-    var_name: str,
+    var_name: object,
     object_type: str,
 ) -> HostawayCustomFieldDefinition:
     """Resolve one varName to a definition scoped to one object type."""
@@ -733,11 +753,24 @@ def build_full_object_custom_field_payload(
 
 def select_listing_payload_strategy(
     gates: CustomFieldWriteSafetyGates,
+    evidence: ListingCustomFieldEvidenceState | None = None,
+    *,
+    account_id: int | None = None,
+    config_entry_id: str | None = None,
 ) -> ListingPayloadStrategy:
     """Return the enabled listing strategy or fail closed."""
     if gates.listing_payload_strategy == "partial":
         if not gates.listing_partial_put_verified:
             msg = "listing partial strategy lacks partial-PUT verification"
+            raise CustomFieldMergeError(msg)
+        if evidence is None or not evidence.enables_listing_writes:
+            msg = "listing evidence is not bound to this Hostaway account"
+            raise CustomFieldMergeError(msg)
+        if (
+            evidence.account_id != account_id
+            or evidence.config_entry_id != config_entry_id
+        ):
+            msg = "listing evidence does not match this Hostaway account"
             raise CustomFieldMergeError(msg)
         return "partial"
     if gates.listing_payload_strategy == "full_object":

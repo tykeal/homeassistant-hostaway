@@ -20,6 +20,7 @@ from custom_components.hostaway.api.custom_fields import (
     HostawayCustomFieldCollection,
     HostawayCustomFieldDefinition,
     HostawayCustomFieldValue,
+    ListingCustomFieldEvidenceState,
     ReservationCustomFieldEvidenceState,
     build_allowlisted_restore_payload,
     build_custom_field_values_payload,
@@ -569,6 +570,54 @@ def test_reservation_evidence_is_account_bound_and_fail_closed() -> None:
         )
     with pytest.raises(CustomFieldMergeError, match="does not match"):
         select_reservation_payload_strategy(
+            gates,
+            evidence,
+            account_id=123,
+            config_entry_id="other",
+        )
+
+
+def test_listing_evidence_is_account_bound_and_fail_closed() -> None:
+    """Listing evidence must match the account and config entry."""
+    assert not ListingCustomFieldEvidenceState(
+        partial_put_verified=True,
+        payload_strategy="partial",
+    ).enables_listing_writes
+    assert ListingCustomFieldEvidenceState(
+        account_id=123,
+        config_entry_id="entry",
+        partial_put_verified=True,
+        payload_strategy="partial",
+    ).enables_listing_writes
+    gates = CustomFieldWriteSafetyGates()
+    object.__setattr__(gates, "listing_payload_strategy", "partial")
+    object.__setattr__(gates, "listing_partial_put_verified", True)
+    with pytest.raises(CustomFieldMergeError, match="account"):
+        select_listing_payload_strategy(gates)
+    evidence = ListingCustomFieldEvidenceState(
+        account_id=123,
+        config_entry_id="entry",
+        partial_put_verified=True,
+        payload_strategy="partial",
+    )
+    assert (
+        select_listing_payload_strategy(
+            gates,
+            evidence,
+            account_id=123,
+            config_entry_id="entry",
+        )
+        == "partial"
+    )
+    with pytest.raises(CustomFieldMergeError, match="does not match"):
+        select_listing_payload_strategy(
+            gates,
+            evidence,
+            account_id=456,
+            config_entry_id="entry",
+        )
+    with pytest.raises(CustomFieldMergeError, match="does not match"):
+        select_listing_payload_strategy(
             gates,
             evidence,
             account_id=123,

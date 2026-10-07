@@ -48,18 +48,28 @@
                     "scan_interval": "Listing scan interval (minutes)",
                     "reservation_scan_interval": "Reservation scan interval (minutes)",
                     "custom_field_definitions_scan_interval": "Custom field definitions scan interval (minutes)",
-                    "filter_cancelled": "Exclude inactive reservations"
+                    "filter_cancelled": "Exclude inactive reservations",
+                    "custom_field_write_account_id": "Hostaway account ID for custom-field writes",
+                    "listing_custom_field_writes_enabled": "Enable listing custom-field writes",
+                    "reservation_custom_field_writes_enabled": "Enable reservation custom-field writes",
+                    "reservation_custom_field_residual_risk_accepted": "I accept reservation custom-field write risk"
                 },
                 "data_description": {
                     "scan_interval": "How often to poll for listing updates. Minimum 1 minute.",
                     "reservation_scan_interval": "How often to poll for reservation updates. Minimum 1 minute.",
                     "custom_field_definitions_scan_interval": "How often to refresh custom field definitions. Minimum 1 minute.",
-                    "filter_cancelled": "When enabled, cancelled, declined, and expired reservations are excluded from sensor state and attributes."
+                    "filter_cancelled": "When enabled, cancelled, declined, and expired reservations are excluded from sensor state and attributes.",
+                    "custom_field_write_account_id": "Writes remain disabled unless this ID matches the accountId reported by Hostaway custom-field definitions for this entry.",
+                    "listing_custom_field_writes_enabled": "Allow partial listing PUT requests that send the complete merged customFieldValues array for this verified account.",
+                    "reservation_custom_field_writes_enabled": "Allow reservation custom-field PUT requests for this verified account. Every write is followed by mandatory read-back verification.",
+                    "reservation_custom_field_residual_risk_accepted": "Required for reservation writes. Hostaway has a known bug where reservation custom-field updates can report success without persisting; read-back detects this, but reservation write semantics remain unconfirmed."
                 }
             }
         },
         "error": {
-            "invalid_scan_interval": "Scan intervals must be at least 1 minute each."
+            "invalid_scan_interval": "Scan intervals must be at least 1 minute each.",
+            "missing_write_account_id": "Enter the Hostaway account ID before enabling custom-field writes.",
+            "reservation_risk_not_accepted": "Reservation custom-field writes require accepting the documented residual risk."
         }
     },
     "entity": {

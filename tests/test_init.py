@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any, cast
 from unittest.mock import AsyncMock, patch
 
 from homeassistant.config_entries import ConfigEntryState
@@ -33,14 +34,16 @@ def _make_entry(**overrides: object) -> MockConfigEntry:
     Returns:
         A MockConfigEntry for the Hostaway integration.
     """
+    data: dict[str, Any] = {
+        CONF_CLIENT_ID: "test-client-id",
+        CONF_CLIENT_SECRET: "test-client-secret",
+        CONF_SELECTED_LISTINGS: [12345],
+    }
+    data.update(cast(dict[str, Any], overrides.pop("data", {})))
     return MockConfigEntry(
         domain=DOMAIN,
         title="Hostaway (test-cli...)",
-        data={
-            CONF_CLIENT_ID: "test-client-id",
-            CONF_CLIENT_SECRET: "test-client-secret",
-            CONF_SELECTED_LISTINGS: [12345],
-        },
+        data=data,
         unique_id="test-client-id",
         **overrides,  # type: ignore[arg-type]
     )
@@ -263,8 +266,122 @@ class TestCustomFieldRuntimeData:
             CustomFieldWriteSafetyGates,
         )
         assert data["custom_field_write_safety"].listing_partial_put_verified is False
+        assert data["custom_field_write_safety"].listing_payload_strategy is None
         assert (
             data["custom_field_write_safety"].reservation_no_clobber_verified is False
         )
+        assert data["custom_field_write_safety"].reservation_payload_strategy is None
+        assert data["config_entry_id"] == entry.entry_id
+        assert data["account_id"] is None
+        assert data["listing_custom_field_evidence"] is None
+        assert data["reservation_custom_field_evidence"] is None
         assert "custom_field_write_locks" in data
         assert "custom_field_write_generations" in data
+        assert entry.update_listeners
+
+    @patch(
+        "custom_components.hostaway.HostawayApiClient.get_all_reservations",
+        new_callable=AsyncMock,
+        return_value=[],
+    )
+    @patch(
+        "custom_components.hostaway.HostawayApiClient.get_all_listings",
+        new_callable=AsyncMock,
+        return_value=[],
+    )
+    @patch(
+        "custom_components.hostaway.HostawayApiClient.test_connection",
+        new_callable=AsyncMock,
+        return_value=True,
+    )
+    async def test_setup_enables_verified_write_entry(
+        self,
+        mock_test: AsyncMock,
+        mock_listings: AsyncMock,
+        mock_reservations: AsyncMock,
+        hass: HomeAssistant,
+    ) -> None:
+        """Production write gates require explicit account-bound options."""
+        from custom_components.hostaway.api.custom_fields import (
+            ListingCustomFieldEvidenceState,
+            ReservationCustomFieldEvidenceState,
+        )
+
+        entry = _make_entry(
+            entry_id="verified-entry",
+            data={
+                CONF_CLIENT_ID: "test-client-id",
+                CONF_CLIENT_SECRET: "test-client-secret",
+                CONF_SELECTED_LISTINGS: [12345],
+                "custom_field_write_account_id": 1,
+                "listing_custom_field_writes_enabled": True,
+                "reservation_custom_field_writes_enabled": True,
+                "reservation_custom_field_residual_risk_accepted": True,
+                "reservation_custom_field_risk_accepted_account_id": 1,
+            },
+        )
+        entry.add_to_hass(hass)
+
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+        data = hass.data[DOMAIN][entry.entry_id]
+        gates = data["custom_field_write_safety"]
+        assert gates.listing_partial_put_verified is True
+        assert gates.listing_payload_strategy == "partial"
+        assert gates.reservation_no_clobber_verified is True
+        assert gates.reservation_payload_strategy == "partial"
+        assert data["account_id"] == 1
+        assert isinstance(
+            data["listing_custom_field_evidence"],
+            ListingCustomFieldEvidenceState,
+        )
+        assert isinstance(
+            data["reservation_custom_field_evidence"],
+            ReservationCustomFieldEvidenceState,
+        )
+
+    @patch(
+        "custom_components.hostaway.HostawayApiClient.get_all_reservations",
+        new_callable=AsyncMock,
+        return_value=[],
+    )
+    @patch(
+        "custom_components.hostaway.HostawayApiClient.get_all_listings",
+        new_callable=AsyncMock,
+        return_value=[],
+    )
+    @patch(
+        "custom_components.hostaway.HostawayApiClient.test_connection",
+        new_callable=AsyncMock,
+        return_value=True,
+    )
+    async def test_setup_rejects_unbound_write_entry(
+        self,
+        mock_test: AsyncMock,
+        mock_listings: AsyncMock,
+        mock_reservations: AsyncMock,
+        hass: HomeAssistant,
+    ) -> None:
+        """Write toggles without an account id keep the entry disabled."""
+        entry = _make_entry(
+            entry_id="other-entry",
+            data={
+                CONF_CLIENT_ID: "test-client-id",
+                CONF_CLIENT_SECRET: "test-client-secret",
+                CONF_SELECTED_LISTINGS: [12345],
+                "listing_custom_field_writes_enabled": True,
+                "reservation_custom_field_writes_enabled": True,
+                "reservation_custom_field_residual_risk_accepted": True,
+            },
+        )
+        entry.add_to_hass(hass)
+
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+        data = hass.data[DOMAIN][entry.entry_id]
+        assert data["custom_field_write_safety"].listing_payload_strategy is None
+        assert data["custom_field_write_safety"].reservation_payload_strategy is None
+        assert data["listing_custom_field_evidence"] is None
+        assert data["reservation_custom_field_evidence"] is None

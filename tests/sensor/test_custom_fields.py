@@ -8,9 +8,10 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 from typing import Any, cast
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 
 from custom_components.hostaway.api.custom_fields import (
     HostawayCustomFieldDefinition,
@@ -164,6 +165,49 @@ async def test_listing_custom_field_sensor_resolved_and_unresolved(
     }
 
 
+async def test_listing_custom_field_sensor_stays_present_when_cleared(
+    hass: HomeAssistant,
+) -> None:
+    """A cleared custom field keeps its diagnostic listing sensor."""
+    entry = _make_entry(selected=[100])
+    entry.add_to_hass(hass)
+    api_client = AsyncMock()
+    api_client.get_all_listings = AsyncMock(
+        return_value=[_listing([{"customFieldId": 9, "value": None}])]
+    )
+    coordinator = HostawayListingsCoordinator(hass, entry, api_client)
+    await coordinator.async_refresh()
+    definitions = [_definition(9, "parking_bay")]
+    definitions_coordinator = SimpleNamespace(
+        data=definitions,
+        get_definition=lambda custom_field_id, object_type: (
+            definitions[0]
+            if custom_field_id == 9 and object_type == "listing"
+            else None
+        ),
+    )
+
+    sensor = HostawayListingCustomFieldSensor(
+        coordinator,
+        cast(Any, definitions_coordinator),
+        100,
+        entry,
+        9,
+        "custom_parking_bay",
+    )
+
+    assert sensor.native_value is None
+    assert sensor.extra_state_attributes == {
+        "customFieldId": 9,
+        "varName": "parking_bay",
+        "name": "Parking Bay",
+        "type": "text",
+        "possibleValues": [],
+        "value": None,
+        "resolved": True,
+    }
+
+
 async def test_listing_custom_field_sensor_listens_for_definition_refresh(
     hass: HomeAssistant,
 ) -> None:
@@ -202,3 +246,51 @@ async def test_listing_custom_field_sensor_listens_for_definition_refresh(
 
     assert listeners == [sensor.async_write_ha_state]
     await coordinator.async_shutdown()
+
+
+@patch(
+    "custom_components.hostaway.HostawayApiClient.get_all_reservations",
+    new_callable=AsyncMock,
+    return_value=[],
+)
+@patch(
+    "custom_components.hostaway.HostawayApiClient.get_all_listings",
+    new_callable=AsyncMock,
+)
+@patch(
+    "custom_components.hostaway.HostawayApiClient.test_connection",
+    new_callable=AsyncMock,
+    return_value=True,
+)
+async def test_custom_fields_do_not_create_writable_entities(
+    mock_test: AsyncMock,
+    mock_listings: AsyncMock,
+    mock_reservations: AsyncMock,
+    hass: HomeAssistant,
+) -> None:
+    """Custom fields expose service-only writes, not text/number/select entities."""
+    del mock_test, mock_reservations
+    entry = _make_entry(selected=[100])
+    entry.add_to_hass(hass)
+    mock_listings.return_value = [_listing([{"customFieldId": 9, "value": "A1"}])]
+
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    registry = er.async_get(hass)
+    writable_entities = [
+        entity
+        for entity in registry.entities.values()
+        if entity.config_entry_id == entry.entry_id
+        and entity.domain in {"text", "number", "select"}
+    ]
+    custom_field_code = (
+        __import__("pathlib")
+        .Path("custom_components/hostaway/services/custom_fields.py")
+        .read_text()
+    )
+
+    assert writable_entities == []
+    assert "create_custom_field" not in custom_field_code
+    assert "update_custom_field_definition" not in custom_field_code
+    assert "delete_custom_field" not in custom_field_code
