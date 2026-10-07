@@ -12,14 +12,16 @@ description = "Hostaway integration for Home Assistant"
 requires-python = ">=3.14.2"
 license = { text = "Apache-2.0" }
 
-dependencies = [
-    "httpx==0.28.1",
-]
+# Home Assistant ships httpx itself, and the integration consumes it through
+# homeassistant.helpers.httpx_client.get_async_client(). Declaring httpx here
+# (or in custom_components/hostaway/manifest.json) makes hassfest fail with
+# "Requirement httpx is a dependency of Home Assistant itself and must not be
+# listed in the manifest of a custom integration". Keep this list empty.
+dependencies = []
 
 [project.optional-dependencies]
 test = [
     "homeassistant>=2026.7.2",
-    "httpx==0.28.1",
     "pytest>=8.0",
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=6.0",
@@ -30,7 +32,6 @@ test = [
 [dependency-groups]
 dev = [
     "homeassistant>=2026.7.2",
-    "httpx==0.28.1",
     "interrogate>=1.7",
     "mypy>=2.3.0",
     "pytest>=8.0",
