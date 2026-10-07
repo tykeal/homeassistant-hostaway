@@ -13,10 +13,16 @@ requires-python = ">=3.14.2"
 license = { text = "Apache-2.0" }
 
 # Home Assistant ships httpx itself, and the integration consumes it through
-# homeassistant.helpers.httpx_client.get_async_client(). Declaring httpx here
-# (or in custom_components/hostaway/manifest.json) makes hassfest fail with
-# "Requirement httpx is a dependency of Home Assistant itself and must not be
-# listed in the manifest of a custom integration". Keep this list empty.
+# homeassistant.helpers.httpx_client.get_async_client() rather than building
+# its own AsyncClient, so declaring it here would pin a package we do not
+# manage. An exact pin is also a latent conflict: it breaks resolution as soon
+# as Home Assistant moves to a different httpx.
+#
+# Separately, hassfest reads custom_components/hostaway/manifest.json, not this
+# file, and rejects Home Assistant's own dependencies there with
+# "[REQUIREMENTS] Requirement httpx is a dependency of Home Assistant itself
+# and must not be listed in the manifest of a custom integration". Keep httpx
+# out of that manifest too.
 dependencies = []
 
 [project.optional-dependencies]
