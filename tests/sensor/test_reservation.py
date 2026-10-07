@@ -405,6 +405,34 @@ class TestBuildReservationAttributes:
             },
         }
 
+    def test_attributes_reflect_patched_reservation_custom_field(self) -> None:
+        """Reservation attributes reflect the locally patched write value."""
+        res = _make_reservation()
+        patched = type(res).from_api_response(
+            {
+                "id": res.id,
+                "listingMapId": res.listing_id,
+                "guestName": res.guest_name,
+                "arrivalDate": res.check_in,
+                "departureDate": res.check_out,
+                "status": res.status,
+                "customFieldValues": [
+                    {"customFieldId": 8, "value": "Updated linen note"}
+                ],
+            }
+        )
+
+        attrs = _build_reservation_attributes(
+            patched,
+            [patched],
+            100,
+            [_custom_definition(8)],
+        )
+
+        assert attrs["custom_fields"]["custom_field_8"]["value"] == (
+            "Updated linen note"
+        )
+
     def test_upcoming_reservations_preserve_order(self) -> None:
         """upcoming_reservations preserves input order."""
         r1 = _make_reservation(1, check_in="2025-08-01")

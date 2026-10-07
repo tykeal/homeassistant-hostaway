@@ -3,6 +3,7 @@
 """HTTP client for authenticated Hostaway API requests."""
 
 # aislop-ignore-file ai-slop/hallucinated-import -- in-repo component imports
+# aislop-ignore-file complexity/file-too-large -- cohesive HTTP client abstraction
 
 from __future__ import annotations
 
@@ -31,6 +32,7 @@ from custom_components.hostaway.api.custom_fields import (
 from custom_components.hostaway.api.exceptions import (
     HostawayAuthError,
     HostawayConnectionError,
+    HostawayMutationResultError,
     HostawayRateLimitError,
     HostawayReservationLockedError,
     HostawayResponseError,
@@ -105,13 +107,23 @@ class HostawayApiClient:
 
     async def get_listing(self, listing_id: int) -> HostawayListing:
         """Return one listing with custom-field resources included."""
-        data = await read_listing_with_custom_fields(self._request, listing_id)
-        return HostawayListing.from_api_response(data)
+        return HostawayListing.from_api_response(
+            await self.get_listing_payload(listing_id)
+        )
 
     async def get_reservation(self, reservation_id: int) -> HostawayReservation:
         """Return one reservation with custom-field resources included."""
-        data = await read_reservation_with_custom_fields(self._request, reservation_id)
-        return HostawayReservation.from_api_response(data)
+        return HostawayReservation.from_api_response(
+            await self.get_reservation_payload(reservation_id)
+        )
+
+    async def get_listing_payload(self, listing_id: int) -> dict[str, Any]:
+        """Return one raw listing payload with custom-field resources included."""
+        return await read_listing_with_custom_fields(self._request, listing_id)
+
+    async def get_reservation_payload(self, reservation_id: int) -> dict[str, Any]:
+        """Return one raw reservation payload with custom-field resources included."""
+        return await read_reservation_with_custom_fields(self._request, reservation_id)
 
     async def create_task(self, data: dict[str, Any]) -> dict[str, Any]:
         """Create a task."""
@@ -170,6 +182,44 @@ class HostawayApiClient:
             "Update response missing 'result' object",
         )
 
+    async def update_reservation_custom_fields(
+        self, reservation_id: int, data: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Update reservation custom fields without ambiguous blind retries."""
+        return await self._mutate(
+            "PUT",
+            f"/v1/reservations/{reservation_id}",
+            data,
+            "Update failed",
+            "Update response missing 'result' object",
+            retry_ambiguous=False,
+        )
+
+    async def update_listing(
+        self, listing_id: int, data: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Update a listing."""
+        return await self._mutate(
+            "PUT",
+            f"/v1/listings/{listing_id}",
+            data,
+            "Update failed",
+            "Update response missing 'result' object",
+        )
+
+    async def update_listing_custom_fields(
+        self, listing_id: int, data: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Update listing custom fields without ambiguous blind retries."""
+        return await self._mutate(
+            "PUT",
+            f"/v1/listings/{listing_id}",
+            data,
+            "Update failed",
+            "Update response missing 'result' object",
+            retry_ambiguous=False,
+        )
+
     async def _request(
         self,
         method: str,
@@ -178,6 +228,7 @@ class HostawayApiClient:
         params: dict[str, Any] | None = None,
         json: dict[str, Any] | None = None,
         _retried_auth: bool = False,
+        retry_ambiguous: bool = True,
     ) -> httpx.Response:
         """Make an authenticated API request with retries."""
         url = f"{self._base_url}{path}"
@@ -196,6 +247,10 @@ class HostawayApiClient:
                     },
                 )
             except httpx.RequestError as exc:
+                if not retry_ambiguous:
+                    raise HostawayConnectionError(
+                        f"Failed to connect to Hostaway API: {exc}"
+                    ) from exc
                 if attempt >= MAX_RETRIES:
                     raise HostawayConnectionError(
                         "Failed to connect to Hostaway API after "
@@ -220,17 +275,25 @@ class HostawayApiClient:
                     params=params,
                     json_body=json,
                     _retried_auth=_retried_auth,
+                    retry_ambiguous=retry_ambiguous,
                 )
             if response.status_code == 404:
                 raise HostawayResponseError(f"Resource not found: {path}")
             if response.status_code == 429:
                 delay = self._handle_rate_limit_response(
-                    response, attempt, MAX_RETRIES, backoff
+                    response,
+                    attempt,
+                    MAX_RETRIES if retry_ambiguous else 0,
+                    backoff,
                 )
                 await asyncio.sleep(delay)
                 backoff = min(backoff * BACKOFF_MULTIPLIER, MAX_BACKOFF)
                 continue
             if _retry._is_server_error(response.status_code):
+                if not retry_ambiguous:
+                    raise HostawayConnectionError(
+                        f"Server error {response.status_code}"
+                    )
                 delay = self._handle_server_error(
                     response, attempt, MAX_RETRIES, backoff
                 )
@@ -246,6 +309,7 @@ class HostawayApiClient:
             "Request loop exited without returning"
         )  # pragma: no cover
 
+    # aislop-ignore-next-line complexity/too-many-params -- carries request context
     async def _handle_forbidden_response(
         self,
         response: httpx.Response,
@@ -255,6 +319,7 @@ class HostawayApiClient:
         params: dict[str, Any] | None,
         json_body: dict[str, Any] | None,
         _retried_auth: bool,
+        retry_ambiguous: bool,
     ) -> httpx.Response:
         """Handle 403 responses as auth or reservation-lock failures."""
         body = _redaction._safe_response_body(response)
@@ -271,8 +336,18 @@ class HostawayApiClient:
                 path,
                 body,
             )
+            if not path.startswith("/v1/reservations/"):
+                raise HostawayResponseError(
+                    f"Forbidden: {method} {path} returned 403; body: {body}"
+                )
             raise HostawayReservationLockedError(
                 f"Reservation locked: {method} {path} returned 403; body: {body}"
+            )
+        if not retry_ambiguous:
+            self._token_manager.invalidate()
+            raise HostawayAuthError(
+                "Forbidden response for custom-field mutation was not retried: "
+                f"{method} {path} returned 403; body: {body}"
             )
         _LOGGER.warning(
             "Hostaway returned 403 for %s %s "
@@ -289,6 +364,7 @@ class HostawayApiClient:
             params=params,
             json=json_body,
             _retried_auth=True,
+            retry_ambiguous=retry_ambiguous,
         )
 
     def _handle_rate_limit_response(
@@ -355,14 +431,25 @@ class HostawayApiClient:
         data: dict[str, Any],
         error_prefix: str,
         missing_result: str,
+        *,
+        retry_ambiguous: bool = True,
     ) -> dict[str, Any]:
         """Return a successful mutation payload that must be an object."""
-        result = _responses.ensure_success(
-            _responses.parse_response(await self._request(method, path, json=data)),
-            error_prefix,
+        response = await self._request(
+            method,
+            path,
+            json=data,
+            retry_ambiguous=retry_ambiguous,
         )
+        try:
+            parsed = _responses.parse_response(response)
+        except HostawayResponseError as exc:
+            if not retry_ambiguous:
+                raise HostawayMutationResultError(f"{missing_result}: {exc}") from exc
+            raise
+        result = _responses.ensure_success(parsed, error_prefix)
         if not isinstance(result, dict):
-            raise HostawayResponseError(missing_result)
+            raise HostawayMutationResultError(missing_result)
         return result
 
     async def _paginate_offset(

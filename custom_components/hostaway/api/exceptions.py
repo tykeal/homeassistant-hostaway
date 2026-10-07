@@ -52,3 +52,7 @@ class HostawayConnectionError(HostawayApiError):
 
 class HostawayResponseError(HostawayApiError):
     """Unexpected response format: missing fields, invalid JSON."""
+
+
+class HostawayMutationResultError(HostawayResponseError):
+    """Successful mutation response had an unusable result payload."""

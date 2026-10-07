@@ -24,6 +24,99 @@ LISTING_OBJECT_TYPE = "listing"
 RESERVATION_OBJECT_TYPE = "reservation"
 SUPPORTED_OBJECT_TYPES = frozenset({LISTING_OBJECT_TYPE, RESERVATION_OBJECT_TYPE})
 CollectionState = Literal["present", "missing", "null", "invalid"]
+ListingPayloadStrategy = Literal["partial", "full_object"]
+ReservationPayloadStrategy = Literal["partial"]
+PayloadStrategy = Literal["partial", "full_object"]
+LISTING_WRITABLE_RESTORE_FIELDS = frozenset(
+    {
+        "name",
+        "internalListingName",
+        "externalListingName",
+        "description",
+        "houseRules",
+        "keyPickup",
+        "specialInstruction",
+        "street",
+        "address",
+        "city",
+        "state",
+        "country",
+        "zipcode",
+        "price",
+        "personCapacity",
+        "bedroomsNumber",
+        "bedsNumber",
+        "bathroomsNumber",
+        "minNights",
+        "maxNights",
+        "checkInTimeStart",
+        "checkInTimeEnd",
+        "checkOutTime",
+        "currencyCode",
+        "timeZoneName",
+        "latitude",
+        "longitude",
+        "customFieldValues",
+    }
+)
+LISTING_RESTORE_EXCLUDED_FIELDS = frozenset(
+    {
+        "id",
+        "accountId",
+        "isActive",
+        "isListed",
+        "specialStatus",
+        "countryCode",
+        "propertyType",
+        "listingUrl",
+        "thumbnailUrl",
+        "picture",
+        "pictures",
+    }
+)
+LISTING_RESTORE_FIELD_ALIASES = {"internalName": "internalListingName"}
+TASK_WRITABLE_RESTORE_FIELDS = frozenset(
+    {
+        "listingMapId",
+        "reservationId",
+        "assigneeUserId",
+        "canBePickedByGroupId",
+        "supervisorUserId",
+        "title",
+        "description",
+        "status",
+        "priority",
+        "canStartFrom",
+        "shouldEndBy",
+        "categoriesMap",
+        "resolutionNote",
+        "dueDate",
+        "customFieldValues",
+    }
+)
+TASK_RESTORE_EXCLUDED_FIELDS = frozenset(
+    {
+        "id",
+        "accountId",
+        "channelId",
+        "createdByUserId",
+        "insertedOn",
+        "createdAt",
+        "createdOn",
+        "isUpdatedManually",
+    }
+)
+TASK_RESTORE_FIELD_ALIASES = {"customFieldValue": "customFieldValues"}
+SERVER_MANAGED_VOLATILE_FIELDS = frozenset(
+    {
+        "updatedAt",
+        "updatedOn",
+        "lastUpdatedAt",
+        "lastUpdatedOn",
+        "modifiedAt",
+        "modifiedOn",
+    }
+)
 
 
 class RequestProtocol(Protocol):
@@ -247,12 +340,61 @@ class CustomFieldWriteSafetyGates:
     """Executable default-off safety gates for custom-field writes."""
 
     listing_partial_put_verified: bool
+    listing_payload_strategy: ListingPayloadStrategy | None
     reservation_no_clobber_verified: bool
+    reservation_payload_strategy: ReservationPayloadStrategy | None
 
     def __init__(self) -> None:
         """Initialize both safety gates to their source-controlled defaults."""
         object.__setattr__(self, "listing_partial_put_verified", False)
+        object.__setattr__(self, "listing_payload_strategy", None)
         object.__setattr__(self, "reservation_no_clobber_verified", False)
+        object.__setattr__(self, "reservation_payload_strategy", None)
+
+
+@dataclass(frozen=True)
+class ListingCustomFieldEvidenceState:
+    """Account-bound listing custom-field write evidence state."""
+
+    account_id: int | None = None
+    config_entry_id: str | None = None
+    partial_put_verified: bool = False
+    payload_strategy: ListingPayloadStrategy | None = None
+
+    @property
+    def enables_listing_writes(self) -> bool:
+        """Return whether this account has sufficient listing evidence."""
+        return (
+            self.account_id is not None
+            and self.config_entry_id is not None
+            and self.partial_put_verified
+            and self.payload_strategy == "partial"
+        )
+
+
+@dataclass(frozen=True)
+class ReservationCustomFieldEvidenceState:
+    """Account-bound reservation custom-field write evidence state."""
+
+    account_id: int | None = None
+    config_entry_id: str | None = None
+    custom_field_values_round_trip_verified: bool = False
+    authoritative_contract_verified: bool = False
+    payload_strategy: ReservationPayloadStrategy | None = None
+
+    @property
+    def enables_reservation_writes(self) -> bool:
+        """Return whether this account has sufficient reservation evidence."""
+        has_evidence = (
+            self.custom_field_values_round_trip_verified
+            or self.authoritative_contract_verified
+        )
+        return (
+            self.account_id is not None
+            and self.config_entry_id is not None
+            and has_evidence
+            and self.payload_strategy == "partial"
+        )
 
 
 @dataclass
@@ -323,7 +465,7 @@ def lookup_definition_by_id(
 
 def resolve_var_name(
     definitions: Iterable[HostawayCustomFieldDefinition],
-    var_name: str,
+    var_name: object,
     object_type: str,
 ) -> HostawayCustomFieldDefinition:
     """Resolve one varName to a definition scoped to one object type."""
@@ -498,13 +640,243 @@ def build_custom_field_values_payload(
     replaced = False
     for raw in collection.raw_entries:
         if isinstance(raw, Mapping) and raw.get("customFieldId") == custom_field_id:
-            merged.append({"customFieldId": custom_field_id, "value": value})
+            updated = dict(raw)
+            updated["value"] = value
+            merged.append(updated)
             replaced = True
         else:
             merged.append(raw)
     if not replaced:
         merged.append({"customFieldId": custom_field_id, "value": value})
     return {"customFieldValues": merged}
+
+
+def _restore_allowlist(target_type: str) -> frozenset[str]:
+    """Return writable restore fields for a target type."""
+    if target_type == "listing":
+        return LISTING_WRITABLE_RESTORE_FIELDS
+    if target_type == "task":
+        return TASK_WRITABLE_RESTORE_FIELDS
+    msg = "full-object restore payloads are disabled for reservations"
+    raise CustomFieldMergeError(msg)
+
+
+def _restore_exclusions(target_type: str) -> frozenset[str]:
+    """Return read-only restore fields classified as safe to omit."""
+    if target_type == "listing":
+        return LISTING_RESTORE_EXCLUDED_FIELDS | SERVER_MANAGED_VOLATILE_FIELDS
+    if target_type == "task":
+        return TASK_RESTORE_EXCLUDED_FIELDS | SERVER_MANAGED_VOLATILE_FIELDS
+    msg = "full-object restore payloads are disabled for reservations"
+    raise CustomFieldMergeError(msg)
+
+
+def _restore_aliases(target_type: str) -> Mapping[str, str]:
+    """Return read aliases normalized into writable restore fields."""
+    if target_type == "listing":
+        return LISTING_RESTORE_FIELD_ALIASES
+    if target_type == "task":
+        return TASK_RESTORE_FIELD_ALIASES
+    msg = "full-object restore payloads are disabled for reservations"
+    raise CustomFieldMergeError(msg)
+
+
+def _normalize_restore_value(value: Any) -> Any:
+    """Return an allowlisted restore value normalized for JSON payloads."""
+    if isinstance(value, Mapping):
+        return {str(key): _normalize_restore_value(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_normalize_restore_value(item) for item in value]
+    return value
+
+
+def build_allowlisted_restore_payload(
+    snapshot: Mapping[str, Any],
+    target_type: str,
+    *,
+    require_concurrent_edit_detection: bool = False,
+    concurrent_edit_detection_available: bool = False,
+) -> dict[str, Any]:
+    """Reconstruct an allowlisted restore payload from a complete snapshot.
+
+    The payload is rebuilt field-by-field from a target-specific writable
+    allowlist. Passing a raw deep copy of a GET response is therefore never a
+    valid restore strategy.
+    """
+    if require_concurrent_edit_detection and not concurrent_edit_detection_available:
+        msg = "full-object listing writes require concurrent edit detection"
+        raise CustomFieldMergeError(msg)
+    allowlist = _restore_allowlist(target_type)
+    exclusions = _restore_exclusions(target_type)
+    aliases = _restore_aliases(target_type)
+    unclassified = set(snapshot) - allowlist - exclusions - set(aliases)
+    if unclassified:
+        msg = "snapshot contains fields with no restore classification"
+        raise CustomFieldMergeError(msg)
+    payload = {
+        key: _normalize_restore_value(value)
+        for key, value in snapshot.items()
+        if key in allowlist
+    }
+    for source, destination in aliases.items():
+        if source in snapshot and destination not in payload:
+            payload[destination] = _normalize_restore_value(snapshot[source])
+    ensure_writable_collection(HostawayCustomFieldCollection.from_object(payload))
+    if payload == dict(snapshot):
+        msg = "raw GET response deepcopy is not a valid restore payload"
+        raise CustomFieldMergeError(msg)
+    return payload
+
+
+def build_full_object_custom_field_payload(
+    current_object: Mapping[str, Any],
+    custom_field_id: int,
+    value: Any,
+    *,
+    target_type: str = "listing",
+    concurrent_edit_detection_available: bool = False,
+) -> dict[str, Any]:
+    """Build an allowlisted full-object payload with merged custom fields."""
+    if target_type != "listing":
+        msg = "full-object custom-field writes are listing-only"
+        raise CustomFieldMergeError(msg)
+    payload = build_allowlisted_restore_payload(
+        current_object,
+        target_type,
+        require_concurrent_edit_detection=True,
+        concurrent_edit_detection_available=concurrent_edit_detection_available,
+    )
+    merged = build_custom_field_values_payload(current_object, custom_field_id, value)
+    payload["customFieldValues"] = merged["customFieldValues"]
+    return payload
+
+
+def select_listing_payload_strategy(
+    gates: CustomFieldWriteSafetyGates,
+    evidence: ListingCustomFieldEvidenceState | None = None,
+    *,
+    account_id: int | None = None,
+    config_entry_id: str | None = None,
+) -> ListingPayloadStrategy:
+    """Return the enabled listing strategy or fail closed."""
+    if gates.listing_payload_strategy == "partial":
+        if not gates.listing_partial_put_verified:
+            msg = "listing partial strategy lacks partial-PUT verification"
+            raise CustomFieldMergeError(msg)
+        if evidence is None or not evidence.enables_listing_writes:
+            msg = "listing evidence is not bound to this Hostaway account"
+            raise CustomFieldMergeError(msg)
+        if (
+            evidence.account_id != account_id
+            or evidence.config_entry_id != config_entry_id
+        ):
+            msg = "listing evidence does not match this Hostaway account"
+            raise CustomFieldMergeError(msg)
+        return "partial"
+    if gates.listing_payload_strategy == "full_object":
+        if gates.listing_partial_put_verified:
+            msg = "full-object strategy must not masquerade as partial evidence"
+            raise CustomFieldMergeError(msg)
+        msg = "full-object listing strategy is disabled without version checks"
+        raise CustomFieldMergeError(msg)
+    msg = "listing custom-field writes are disabled until evidence is recorded"
+    raise CustomFieldMergeError(msg)
+
+
+def select_reservation_payload_strategy(
+    gates: CustomFieldWriteSafetyGates,
+    evidence: ReservationCustomFieldEvidenceState | None = None,
+    *,
+    account_id: int | None = None,
+    config_entry_id: str | None = None,
+) -> ReservationPayloadStrategy:
+    """Return the enabled reservation strategy or fail closed."""
+    if gates.reservation_payload_strategy != "partial":
+        msg = "reservation custom-field writes are disabled until evidence is recorded"
+        raise CustomFieldMergeError(msg)
+    if not gates.reservation_no_clobber_verified:
+        msg = "reservation no-clobber evidence has not been verified"
+        raise CustomFieldMergeError(msg)
+    if evidence is None or not evidence.enables_reservation_writes:
+        msg = "reservation evidence is not bound to this Hostaway account"
+        raise CustomFieldMergeError(msg)
+    if evidence.account_id != account_id or evidence.config_entry_id != config_entry_id:
+        msg = "reservation evidence does not match this Hostaway account"
+        raise CustomFieldMergeError(msg)
+    return "partial"
+
+
+def canonicalize_complete_snapshot(value: Any) -> Any:
+    """Return a canonical object snapshot for verification comparisons."""
+    return _canonicalize_complete_snapshot(value, top_level=True)
+
+
+def _canonicalize_complete_snapshot(value: Any, *, top_level: bool) -> Any:
+    """Return a canonical snapshot value with scoped volatile exclusions."""
+    if isinstance(value, Mapping):
+        canonical: dict[str, Any] = {}
+        for key in sorted(value):
+            if top_level and key in SERVER_MANAGED_VOLATILE_FIELDS:
+                continue
+            item = value[key]
+            if top_level and key == "customFieldValues" and isinstance(item, list):
+                canonical[key] = _canonical_custom_field_values(item)
+            else:
+                canonical[key] = _canonicalize_complete_snapshot(item, top_level=False)
+        return canonical
+    if isinstance(value, list):
+        return [
+            _canonicalize_complete_snapshot(item, top_level=False) for item in value
+        ]
+    return value
+
+
+def _canonical_custom_field_values(values: list[Any]) -> list[Any]:
+    """Return custom-field values in stable comparison order."""
+    canonical = [
+        _canonicalize_complete_snapshot(item, top_level=False) for item in values
+    ]
+    return sorted(canonical, key=lambda item: json.dumps(item, sort_keys=True))
+
+
+def canonical_snapshot_differences(before: Any, after: Any) -> list[str]:
+    """Return paths that differ between two canonicalized snapshots."""
+    return _snapshot_differences(
+        canonicalize_complete_snapshot(before),
+        canonicalize_complete_snapshot(after),
+        "$",
+    )
+
+
+def _snapshot_differences(before: Any, after: Any, path: str) -> list[str]:
+    """Return recursive snapshot difference paths."""
+    if type(before) is not type(after):
+        return [path]
+    if isinstance(before, Mapping) and isinstance(after, Mapping):
+        paths: list[str] = []
+        keys = set(before) | set(after)
+        for key in sorted(keys):
+            if key not in before or key not in after:
+                paths.append(f"{path}.{key}")
+                continue
+            paths.extend(
+                _snapshot_differences(before[key], after[key], f"{path}.{key}")
+            )
+        return paths
+    if isinstance(before, list) and isinstance(after, list):
+        if len(before) != len(after):
+            return [path]
+        paths = []
+        for index, (before_item, after_item) in enumerate(
+            zip(before, after, strict=True)
+        ):
+            paths.extend(
+                _snapshot_differences(before_item, after_item, f"{path}[{index}]")
+            )
+        return paths
+    if before != after:
+        return [path]
+    return []
 
 
 def definition_index_by_id(

@@ -4,18 +4,26 @@
 
 # aislop-ignore-file ai-slop/hallucinated-import -- HA runtime provides these packages
 
+import json
 import shutil
 from argparse import Namespace
 from pathlib import Path
 from typing import Any
 
+import httpx
 import pytest
 
 from scripts.verify_custom_field_writes import (
+    build_parser,
+    compare_complete_snapshots,
     compare_unrelated,
     custom_field_value,
+    normalize_task_snapshot,
     redact,
+    redact_payload_for_log,
+    sanitize_summary,
     snapshot_path,
+    validate_restore_payload,
     verify,
 )
 
@@ -36,12 +44,166 @@ def test_redaction_hides_string_values() -> None:
     }
 
 
+def test_summary_sanitizer_preserves_protocol_metadata() -> None:
+    """Evidence summaries keep protocol state while redacting identifiers."""
+    assert sanitize_summary(
+        {
+            "mode": "task-canary",
+            "task_id": 42,
+            "restore_payload_keys": ["title", "customFieldValues"],
+            "indicative_not_conclusive": True,
+            "canonical_summary": {"guest@example.com": "private"},
+        }
+    ) == {
+        "mode": "task-canary",
+        "task_id": "<redacted>",
+        "restore_payload_keys": ["title", "customFieldValues"],
+        "indicative_not_conclusive": True,
+        "canonical_summary": "<redacted>",
+    }
+
+
+def test_payload_log_redaction_omits_private_metadata_keys() -> None:
+    """Dry-run payload logging does not expose arbitrary metadata keys."""
+    payload = {
+        "customFieldValues": [
+            {
+                "customFieldId": 1,
+                "value": {"guest@example.com": "private"},
+                "guest@example.com": "metadata",
+            }
+        ]
+    }
+
+    redacted = redact_payload_for_log(payload)
+
+    assert "guest@example.com" not in json.dumps(redacted)
+    assert redacted == {
+        "customFieldValues": [{"customFieldId": "<redacted>", "value": {}}]
+    }
+
+
 def test_snapshot_path_is_outside_git() -> None:
     """Private snapshots are not stored in the repository."""
     path = snapshot_path("listing", 123)
 
     assert ".hostaway" in path.parts
     assert "custom-field-write-snapshots" in path.parts
+
+
+def test_parser_accepts_task_canary_without_target() -> None:
+    """Task canary mode requires no listing or reservation target."""
+    args = build_parser().parse_args(
+        [
+            "task-canary",
+            "--custom-field-id",
+            "1",
+            "--unrelated-custom-field-id",
+            "2",
+            "--value",
+            "sentinel",
+        ]
+    )
+
+    assert args.task_canary is True
+    assert args.target_type == "task"
+    assert args.target_id is None
+    assert args.custom_field_id == 1
+    assert args.unrelated_custom_field_id == 2
+    assert args.value == "sentinel"
+
+
+def test_parser_rejects_task_canary_target(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Task canary mode fails fast when a target is supplied."""
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(
+            [
+                "task-canary",
+                "--custom-field-id",
+                "1",
+                "--unrelated-custom-field-id",
+                "2",
+                "--value",
+                "sentinel",
+                "listing",
+                "123",
+            ]
+        )
+
+    assert "disposable task it creates itself" in capsys.readouterr().err
+
+
+def test_parser_rejects_legacy_target_with_task_canary(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Legacy target plus --task-canary is rejected with a safety message."""
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(
+            [
+                "listing",
+                "123",
+                "--task-canary",
+                "--custom-field-id",
+                "1",
+                "--unrelated-custom-field-id",
+                "2",
+                "--value",
+                "sentinel",
+            ]
+        )
+
+    assert "do not pass listing or reservation target" in capsys.readouterr().err
+
+
+def test_parser_requires_unrelated_task_canary_id(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Missing unrelated task field id is an argparse-level error."""
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(
+            ["task-canary", "--custom-field-id", "1", "--value", "sentinel"]
+        )
+
+    assert "--unrelated-custom-field-id" in capsys.readouterr().err
+
+
+def test_parser_rejects_task_canary_listing_map_id(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Task canary mode rejects listing target ids."""
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(
+            [
+                "task-canary",
+                "--custom-field-id",
+                "1",
+                "--unrelated-custom-field-id",
+                "2",
+                "--value",
+                "sentinel",
+                "--listing-map-id",
+                "123",
+            ]
+        )
+
+    assert "do not pass listing or reservation target" in capsys.readouterr().err
+
+
+def test_parser_accepts_listing_and_reservation_modes() -> None:
+    """Existing listing and reservation verification invocations still parse."""
+    listing = build_parser().parse_args(["listing", "123", "--snapshot"])
+    reservation = build_parser().parse_args(["reservation", "456", "7", "sentinel"])
+
+    assert listing.target_type == "listing"
+    assert listing.target_id == 123
+    assert listing.snapshot is True
+    assert listing.task_canary is False
+    assert reservation.target_type == "reservation"
+    assert reservation.target_id == 456
+    assert reservation.custom_field_id == 7
+    assert reservation.value == "sentinel"
 
 
 def test_compare_unrelated_detects_changes() -> None:
@@ -65,12 +227,40 @@ def test_custom_field_value_reads_addressed_value() -> None:
     assert custom_field_value(data, 7) == "changed"
 
 
+def test_normalize_task_snapshot_uses_singular_response_alias() -> None:
+    """Task reads normalize documented singular custom-field response shape."""
+    assert normalize_task_snapshot(
+        {"id": 1, "customFieldValue": [{"customFieldId": 7, "value": "changed"}]}
+    ) == {
+        "id": 1,
+        "customFieldValues": [{"customFieldId": 7, "value": "changed"}],
+    }
+
+
 def test_compare_unrelated_checks_all_built_ins() -> None:
     """Verification compares every visible built-in field from the snapshot."""
     before = {"price": 100, "customFieldValues": [{"customFieldId": 1, "value": "a"}]}
     after = {"price": 200, "customFieldValues": [{"customFieldId": 1, "value": "b"}]}
 
     assert compare_unrelated(before, after, 1) == ["built-in fields changed"]
+
+
+def test_compare_complete_snapshots_normalizes_volatile_fields() -> None:
+    """Complete comparison ignores server-managed update timestamps."""
+    before = {"id": 1, "updatedAt": "old", "name": "Task"}
+    after = {"id": 1, "updatedAt": "new", "name": "Changed"}
+
+    assert compare_complete_snapshots(before, after) == ["$.name"]
+
+
+def test_validate_restore_payload_refuses_raw_get_copy() -> None:
+    """Restore validation rebuilds an allowlisted payload."""
+    snapshot = {"id": 1, "name": "Listing", "customFieldValues": []}
+
+    assert validate_restore_payload(snapshot, "listing") == {
+        "name": "Listing",
+        "customFieldValues": [],
+    }
 
 
 def test_compare_unrelated_handles_malformed_raw_entries() -> None:
@@ -81,56 +271,67 @@ def test_compare_unrelated_handles_malformed_raw_entries() -> None:
     assert compare_unrelated(before, after, 1) == []
 
 
-async def test_verify_restores_complete_snapshot_on_failure(
+async def test_verify_mutation_mode_fails_closed_after_preflight(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Live helper restores the full snapshot after unrelated changes."""
-    before = {
-        "id": 10,
-        "price": 100,
-        "customFieldValues": [{"customFieldId": 1, "value": "old"}],
-    }
-    after = {
-        "id": 10,
-        "price": 200,
-        "customFieldValues": [{"customFieldId": 1, "value": "new"}],
-    }
-    calls: list[dict[str, Any]] = []
-    reads = [before, after, before]
+    """Listing and reservation mutation steps remain disabled."""
+    calls: list[str] = []
 
     async def fake_request(*args: Any, **kwargs: Any) -> dict[str, Any]:
-        """Return scripted Hostaway responses and capture writes."""
-        method = args[1]
-        if method == "GET":
-            return reads.pop(0)
-        calls.append(kwargs["json"])
-        return {"id": 10}
+        """Return a safe object and record request methods."""
+        del kwargs
+        calls.append(args[1])
+        return {
+            "id": 10,
+            "customFieldValues": [{"customFieldId": 1, "value": "old"}],
+        }
 
-    snapshot = Path(".verify-test-artifacts/restore-failure/listing-10.json")
     monkeypatch.setenv("HOSTAWAY_ACCESS_TOKEN", "token")
-    monkeypatch.setattr("builtins.input", lambda _prompt: "MUTATE listing 10")
     monkeypatch.setattr("scripts.verify_custom_field_writes._request", fake_request)
-    monkeypatch.setattr(
-        "scripts.verify_custom_field_writes.snapshot_path",
-        lambda _target_type, _target_id: snapshot,
+
+    with pytest.raises(RuntimeError, match="mutation steps remain disabled"):
+        await verify(
+            Namespace(
+                target_type="listing",
+                target_id=10,
+                custom_field_id=1,
+                value="new",
+                mutate=True,
+            )
+        )
+
+    assert calls == ["GET"]
+
+
+def test_complete_diff_accepts_addressed_insertion() -> None:
+    """Complete comparison permits only the builder-approved insertion."""
+    before = {"customFieldValues": [{"customFieldId": 2, "value": "keep"}]}
+    after = {
+        "customFieldValues": [
+            {"customFieldId": 2, "value": "keep"},
+            {"customFieldId": 1, "value": "new"},
+        ]
+    }
+
+    from scripts.verify_custom_field_writes import (
+        _complete_differences_ignoring_addressed_value,
     )
 
-    try:
-        with pytest.raises(RuntimeError, match="built-in fields changed"):
-            await verify(
-                Namespace(
-                    target_type="listing",
-                    target_id=10,
-                    custom_field_id=1,
-                    value="new",
-                    mutate=True,
-                )
-            )
-    finally:
-        shutil.rmtree(snapshot.parent.parent, ignore_errors=True)
+    assert _complete_differences_ignoring_addressed_value(before, after, 1) == []
 
-    assert calls[0] == {"customFieldValues": [{"customFieldId": 1, "value": "new"}]}
-    assert calls[1] == before
+
+def test_complete_diff_detects_addressed_metadata_loss() -> None:
+    """Complete comparison catches addressed raw-entry metadata loss."""
+    before = {
+        "customFieldValues": [{"customFieldId": 1, "value": "old", "metadata": "keep"}]
+    }
+    after = {"customFieldValues": [{"customFieldId": 1, "value": "new"}]}
+
+    from scripts.verify_custom_field_writes import (
+        _complete_differences_ignoring_addressed_value,
+    )
+
+    assert _complete_differences_ignoring_addressed_value(before, after, 1)
 
 
 async def test_verify_sends_no_mutation_on_preflight_error(
@@ -163,10 +364,50 @@ async def test_verify_sends_no_mutation_on_preflight_error(
     assert calls == ["GET"]
 
 
+async def test_verify_dry_run_redacts_private_metadata_keys(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Dry-run output omits arbitrary metadata keys from preserved entries."""
+    before = {
+        "id": 10,
+        "customFieldValues": [
+            {
+                "customFieldId": 1,
+                "value": "old",
+                "guest@example.com": "private",
+            }
+        ],
+    }
+
+    async def fake_request(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        """Return a safe object for dry-run payload generation."""
+        del args, kwargs
+        return before
+
+    monkeypatch.setenv("HOSTAWAY_ACCESS_TOKEN", "token")
+    monkeypatch.setattr("scripts.verify_custom_field_writes._request", fake_request)
+
+    assert (
+        await verify(
+            Namespace(
+                target_type="listing",
+                target_id=10,
+                custom_field_id=1,
+                value="new",
+                mutate=False,
+            )
+        )
+        == 0
+    )
+
+    assert "guest@example.com" not in capsys.readouterr().out
+
+
 async def test_verify_writes_private_snapshot_permissions(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Live helper stores private rollback snapshots before confirmation."""
+    """Snapshot mode stores private snapshots with restricted permissions."""
     before = {"id": 10, "customFieldValues": [{"customFieldId": 1, "value": "old"}]}
     snapshot_root = Path(".verify-test-artifacts/permissions")
     snapshot = snapshot_root / "listing-10.json"
@@ -181,24 +422,28 @@ async def test_verify_writes_private_snapshot_permissions(
         raise AssertionError("mutation should not be sent before confirmation")
 
     monkeypatch.setenv("HOSTAWAY_ACCESS_TOKEN", "token")
-    monkeypatch.setattr("builtins.input", lambda _prompt: "no")
     monkeypatch.setattr("scripts.verify_custom_field_writes._request", fake_request)
     monkeypatch.setattr(
         "scripts.verify_custom_field_writes.snapshot_path",
         lambda _target_type, _target_id: snapshot,
     )
+    monkeypatch.setattr(
+        "scripts.verify_custom_field_writes.append_live_verification_summary",
+        lambda _summary: None,
+    )
 
     try:
-        with pytest.raises(RuntimeError, match="confirmation did not match"):
-            await verify(
-                Namespace(
-                    target_type="listing",
-                    target_id=10,
-                    custom_field_id=1,
-                    value="new",
-                    mutate=True,
-                )
+        await verify(
+            Namespace(
+                target_type="listing",
+                target_id=10,
+                custom_field_id=None,
+                value=None,
+                mutate=False,
+                snapshot=True,
+                task_canary=False,
             )
+        )
 
         assert snapshot.parent.stat().st_mode & 0o777 == 0o700
         assert snapshot.stat().st_mode & 0o777 == 0o600
@@ -206,153 +451,104 @@ async def test_verify_writes_private_snapshot_permissions(
         shutil.rmtree(snapshot_root, ignore_errors=True)
 
 
-async def test_verify_restores_complete_when_target_does_not_change(
+async def test_snapshot_mode_is_read_only_and_records_redacted_summary(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Live helper keeps complete rollback default until checks pass."""
+    """Snapshot mode writes no mutations and logs only redacted summaries."""
     before = {
         "id": 10,
-        "price": 100,
-        "customFieldValues": [
-            {"customFieldId": 1, "value": "old"},
-            {"customFieldId": 2, "value": "keep"},
-        ],
+        "name": "Secret Listing",
+        "customFieldValues": [{"customFieldId": 1, "value": "secret"}],
     }
-    after = {
-        "id": 10,
-        "price": 100,
-        "customFieldValues": [
-            {"customFieldId": 1, "value": "old"},
-            {"customFieldId": 2, "value": "keep"},
-        ],
-    }
-    calls: list[dict[str, Any]] = []
-    reads = [before, after, before]
-    snapshot = Path(".verify-test-artifacts/target/listing-10.json")
+    calls: list[str] = []
+    snapshot = Path(".verify-test-artifacts/snapshot/listing-10.json")
+    summaries: list[dict[str, Any]] = []
 
     async def fake_request(*args: Any, **kwargs: Any) -> dict[str, Any]:
-        """Return scripted Hostaway responses and capture writes."""
-        if args[1] == "GET":
-            return reads.pop(0)
-        calls.append(kwargs["json"])
-        return {"id": 10}
+        """Return a listing snapshot and record methods."""
+        del kwargs
+        calls.append(args[1])
+        return before
 
     monkeypatch.setenv("HOSTAWAY_ACCESS_TOKEN", "token")
-    monkeypatch.setattr("builtins.input", lambda _prompt: "MUTATE listing 10")
     monkeypatch.setattr("scripts.verify_custom_field_writes._request", fake_request)
     monkeypatch.setattr(
         "scripts.verify_custom_field_writes.snapshot_path",
         lambda _target_type, _target_id: snapshot,
     )
+    monkeypatch.setattr(
+        "scripts.verify_custom_field_writes.append_live_verification_summary",
+        summaries.append,
+    )
 
     try:
-        with pytest.raises(RuntimeError, match="target custom field did not change"):
-            await verify(
-                Namespace(
-                    target_type="listing",
-                    target_id=10,
-                    custom_field_id=1,
-                    value="new",
-                    mutate=True,
-                )
+        result = await verify(
+            Namespace(
+                target_type="listing",
+                target_id=10,
+                custom_field_id=None,
+                value=None,
+                mutate=False,
+                snapshot=True,
+                task_canary=False,
             )
+        )
     finally:
         shutil.rmtree(snapshot.parent, ignore_errors=True)
 
-    assert calls[0] == {
-        "customFieldValues": [
-            {"customFieldId": 1, "value": "new"},
-            {"customFieldId": 2, "value": "keep"},
-        ]
-    }
-    assert calls[1] == before
+    assert result == 0
+    assert calls == ["GET"]
+    assert summaries[0]["restore_payload_keys"] == ["customFieldValues", "name"]
 
 
-async def test_verify_restores_when_mutation_response_fails(
+async def test_task_canary_uses_production_restore_and_deletes_own_task(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Live helper restores when a sent mutation raises."""
+    """Task canary creates, mutates, restores, verifies, and deletes its task."""
+    custom_values = [
+        {"customFieldId": 1, "value": "old"},
+        {"customFieldId": 2, "value": "keep"},
+    ]
     before = {
-        "id": 10,
-        "price": 100,
-        "customFieldValues": [{"customFieldId": 1, "value": "old"}],
+        "id": 42,
+        "title": "Hostaway custom-field verification canary",
+        "updatedAt": "before",
+        "customFieldValue": custom_values,
     }
-    calls: list[dict[str, Any]] = []
-    reads = [before, before]
-    snapshot = Path(".verify-test-artifacts/timeout/listing-10.json")
+    after = {
+        **before,
+        "updatedAt": "after",
+        "customFieldValue": [
+            {"customFieldId": 1, "value": "new"},
+            {"customFieldId": 2, "value": "keep"},
+        ],
+    }
+    restored = {**before, "updatedAt": "restored"}
+    reads = [before, after, restored]
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    snapshot = Path(".verify-test-artifacts/task/task-42.json")
+    summaries: list[dict[str, Any]] = []
 
     async def fake_request(*args: Any, **kwargs: Any) -> dict[str, Any]:
-        """Raise for the mutation and capture the restore payload."""
-        if args[1] == "GET":
+        """Return scripted task canary responses and record requests."""
+        method = args[1]
+        path = args[2]
+        calls.append((method, path, kwargs.get("json")))
+        if method == "POST":
+            return {"id": 42}
+        if method == "GET":
             return reads.pop(0)
-        calls.append(kwargs["json"])
-        if len(calls) == 1:
-            raise RuntimeError("request timed out")
-        return {"id": 10}
+        return {}
 
     monkeypatch.setenv("HOSTAWAY_ACCESS_TOKEN", "token")
-    monkeypatch.setattr("builtins.input", lambda _prompt: "MUTATE listing 10")
     monkeypatch.setattr("scripts.verify_custom_field_writes._request", fake_request)
     monkeypatch.setattr(
         "scripts.verify_custom_field_writes.snapshot_path",
         lambda _target_type, _target_id: snapshot,
     )
-
-    try:
-        with pytest.raises(RuntimeError, match="request timed out"):
-            await verify(
-                Namespace(
-                    target_type="listing",
-                    target_id=10,
-                    custom_field_id=1,
-                    value="new",
-                    mutate=True,
-                )
-            )
-    finally:
-        shutil.rmtree(snapshot.parent, ignore_errors=True)
-
-    assert calls[0] == {"customFieldValues": [{"customFieldId": 1, "value": "new"}]}
-    assert calls[1] == before
-
-
-async def test_verify_uses_minimal_restore_after_checks_pass(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Live helper switches to minimal restore after verification passes."""
-    before = {
-        "id": 10,
-        "price": 100,
-        "customFieldValues": [
-            {"customFieldId": 1, "value": "old"},
-            {"customFieldId": 2, "value": "keep"},
-        ],
-    }
-    after = {
-        "id": 10,
-        "price": 100,
-        "customFieldValues": [
-            {"customFieldId": 1, "value": "new"},
-            {"customFieldId": 2, "value": "keep"},
-        ],
-    }
-    calls: list[dict[str, Any]] = []
-    reads = [before, after, before]
-    snapshot = Path(".verify-test-artifacts/success/listing-10.json")
-
-    async def fake_request(*args: Any, **kwargs: Any) -> dict[str, Any]:
-        """Return scripted Hostaway responses and capture writes."""
-        if args[1] == "GET":
-            return reads.pop(0)
-        calls.append(kwargs["json"])
-        return {"id": 10}
-
-    monkeypatch.setenv("HOSTAWAY_ACCESS_TOKEN", "token")
-    monkeypatch.setattr("builtins.input", lambda _prompt: "MUTATE listing 10")
-    monkeypatch.setattr("scripts.verify_custom_field_writes._request", fake_request)
     monkeypatch.setattr(
-        "scripts.verify_custom_field_writes.snapshot_path",
-        lambda _target_type, _target_id: snapshot,
+        "scripts.verify_custom_field_writes.append_live_verification_summary",
+        summaries.append,
     )
 
     try:
@@ -362,11 +558,353 @@ async def test_verify_uses_minimal_restore_after_checks_pass(
                 target_id=10,
                 custom_field_id=1,
                 value="new",
-                mutate=True,
+                original_value="old",
+                unrelated_custom_field_id=2,
+                listing_map_id=None,
+                mutate=False,
+                snapshot=False,
+                task_canary=True,
             )
         )
     finally:
         shutil.rmtree(snapshot.parent, ignore_errors=True)
 
     assert result == 0
-    assert calls[1] == {"customFieldValues": before["customFieldValues"]}
+    assert [call[0] for call in calls] == [
+        "POST",
+        "GET",
+        "PUT",
+        "GET",
+        "PUT",
+        "GET",
+        "DELETE",
+    ]
+    assert calls[2][2] == {
+        "customFieldValues": [
+            {"customFieldId": 1, "value": "new"},
+            {"customFieldId": 2, "value": "keep"},
+        ]
+    }
+    assert calls[4][2] == {
+        "title": before["title"],
+        "customFieldValues": custom_values,
+    }
+    assert summaries == [
+        {"mode": "task-canary", "task_id": 42, "indicative_not_conclusive": True}
+    ]
+
+
+async def test_request_accepts_delete_array_result() -> None:
+    """DELETE cleanup accepts Hostaway's empty-array success result."""
+    from scripts.verify_custom_field_writes import _request
+
+    class Client:
+        """Minimal async client returning a DELETE response."""
+
+        async def request(self, *args: Any, **kwargs: Any) -> httpx.Response:
+            """Return a successful empty-array result response."""
+            del args, kwargs
+            return httpx.Response(
+                200,
+                json={"status": "success", "result": []},
+                request=httpx.Request("DELETE", "https://api.hostaway.com/v1/tasks/42"),
+            )
+
+    client: Any = Client()
+    assert await _request(client, "DELETE", "/v1/tasks/42", "token") == {}
+
+
+async def test_task_canary_rejects_noop_sentinel(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task canary rejects a sentinel equal to the fetched baseline."""
+    before = {
+        "id": 42,
+        "customFieldValues": [
+            {"customFieldId": 1, "value": "old"},
+            {"customFieldId": 2, "value": "keep"},
+        ],
+    }
+    reads = [before]
+    snapshot = Path(".verify-test-artifacts/task-noop/task-42.json")
+
+    async def fake_request(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        """Return a created task and unchanged baseline."""
+        del kwargs
+        method = args[1]
+        if method == "POST":
+            return {"id": 42}
+        if method == "GET":
+            return reads.pop(0)
+        return {}
+
+    monkeypatch.setenv("HOSTAWAY_ACCESS_TOKEN", "token")
+    monkeypatch.setattr("scripts.verify_custom_field_writes._request", fake_request)
+    monkeypatch.setattr(
+        "scripts.verify_custom_field_writes.snapshot_path",
+        lambda _target_type, _target_id: snapshot,
+    )
+
+    with pytest.raises(RuntimeError, match="sentinel must differ"):
+        await verify(
+            Namespace(
+                target_type="listing",
+                target_id=10,
+                custom_field_id=1,
+                value="old",
+                original_value="old",
+                unrelated_custom_field_id=2,
+                listing_map_id=None,
+                mutate=False,
+                snapshot=False,
+                task_canary=True,
+            )
+        )
+
+
+async def test_task_canary_rejects_invalid_ids_before_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task canary validates both custom-field ids before creating a task."""
+    calls: list[str] = []
+
+    async def fake_request(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        """Fail if any live request is attempted."""
+        del kwargs
+        calls.append(args[1])
+        return {}
+
+    monkeypatch.setenv("HOSTAWAY_ACCESS_TOKEN", "token")
+    monkeypatch.setattr("scripts.verify_custom_field_writes._request", fake_request)
+
+    with pytest.raises(ValueError, match="customFieldId"):
+        await verify(
+            Namespace(
+                target_type="listing",
+                target_id=10,
+                custom_field_id=0,
+                value="new",
+                original_value="old",
+                unrelated_custom_field_id=-1,
+                listing_map_id=None,
+                mutate=False,
+                snapshot=False,
+                task_canary=True,
+            )
+        )
+
+    assert calls == []
+
+
+async def test_task_canary_requires_unrelated_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task canary validates required unrelated ids before creating a task."""
+    calls: list[str] = []
+
+    async def fake_request(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        """Fail if validation allows a live request."""
+        del kwargs
+        calls.append(args[1])
+        return {}
+
+    monkeypatch.setenv("HOSTAWAY_ACCESS_TOKEN", "token")
+    monkeypatch.setattr("scripts.verify_custom_field_writes._request", fake_request)
+
+    with pytest.raises(ValueError, match="unrelated_custom_field_id"):
+        await verify(
+            Namespace(
+                target_type="listing",
+                target_id=10,
+                custom_field_id=1,
+                value="new",
+                original_value="old",
+                unrelated_custom_field_id=None,
+                listing_map_id=None,
+                mutate=False,
+                snapshot=False,
+                task_canary=True,
+            )
+        )
+    assert calls == []
+
+
+async def test_task_canary_does_not_restore_before_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task canary does not send rollback when snapshot storage fails."""
+    before = {
+        "id": 42,
+        "customFieldValues": [
+            {"customFieldId": 1, "value": "old"},
+            {"customFieldId": 2, "value": "keep"},
+        ],
+    }
+    reads = [before]
+    calls: list[str] = []
+
+    async def fake_request(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        """Record task canary calls and return baseline data."""
+        del kwargs
+        method = args[1]
+        calls.append(method)
+        if method == "POST":
+            return {"id": 42}
+        if method == "GET":
+            return reads.pop(0)
+        return {}
+
+    def fail_snapshot(*args: Any, **kwargs: Any) -> None:
+        """Raise before a rollback snapshot is saved."""
+        del args, kwargs
+        raise OSError("snapshot failed")
+
+    monkeypatch.setenv("HOSTAWAY_ACCESS_TOKEN", "token")
+    monkeypatch.setattr("scripts.verify_custom_field_writes._request", fake_request)
+    monkeypatch.setattr(
+        "scripts.verify_custom_field_writes._write_private_snapshot",
+        fail_snapshot,
+    )
+
+    with pytest.raises(OSError, match="snapshot failed"):
+        await verify(
+            Namespace(
+                target_type="listing",
+                target_id=10,
+                custom_field_id=1,
+                value="new",
+                original_value="old",
+                unrelated_custom_field_id=2,
+                listing_map_id=None,
+                mutate=False,
+                snapshot=False,
+                task_canary=True,
+            )
+        )
+
+    assert calls == ["POST", "GET", "DELETE"]
+
+
+async def test_task_canary_requires_mutation_persistence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task canary fails when Hostaway ignores the partial PUT."""
+    before = {
+        "id": 42,
+        "title": "Hostaway custom-field verification canary",
+        "customFieldValues": [
+            {"customFieldId": 1, "value": "old"},
+            {"customFieldId": 2, "value": "keep"},
+        ],
+    }
+    reads = [before, before]
+    calls: list[str] = []
+    snapshot = Path(".verify-test-artifacts/task-ignored/task-42.json")
+
+    async def fake_request(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        """Return unchanged task reads after the mutation."""
+        del kwargs
+        method = args[1]
+        calls.append(method)
+        if method == "POST":
+            return {"id": 42}
+        if method == "GET":
+            return reads.pop(0)
+        return {}
+
+    monkeypatch.setenv("HOSTAWAY_ACCESS_TOKEN", "token")
+    monkeypatch.setattr("scripts.verify_custom_field_writes._request", fake_request)
+    monkeypatch.setattr(
+        "scripts.verify_custom_field_writes.snapshot_path",
+        lambda _target_type, _target_id: snapshot,
+    )
+
+    try:
+        with pytest.raises(RuntimeError, match="mutation did not persist"):
+            await verify(
+                Namespace(
+                    target_type="listing",
+                    target_id=10,
+                    custom_field_id=1,
+                    value="new",
+                    original_value="old",
+                    unrelated_custom_field_id=2,
+                    listing_map_id=None,
+                    mutate=False,
+                    snapshot=False,
+                    task_canary=True,
+                )
+            )
+    finally:
+        shutil.rmtree(snapshot.parent, ignore_errors=True)
+
+    assert calls == ["POST", "GET", "PUT", "GET", "PUT", "DELETE"]
+
+
+async def test_task_canary_redacts_restore_difference_paths(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Restore failures report counts instead of sensitive path keys."""
+    before = {
+        "id": 42,
+        "customFieldValues": [
+            {"customFieldId": 1, "value": {"guest@example.com": "old"}},
+            {"customFieldId": 2, "value": "keep"},
+        ],
+    }
+    after = {
+        "id": 42,
+        "customFieldValues": [
+            {"customFieldId": 1, "value": "new"},
+            {"customFieldId": 2, "value": "keep"},
+        ],
+    }
+    restored = {
+        "id": 42,
+        "customFieldValues": [
+            {"customFieldId": 1, "value": {"guest@example.com": "changed"}},
+            {"customFieldId": 2, "value": "keep"},
+        ],
+    }
+    reads = [before, after, restored]
+    snapshot = Path(".verify-test-artifacts/task-diff/task-42.json")
+
+    async def fake_request(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        """Return scripted task canary reads with a bad restore."""
+        del kwargs
+        method = args[1]
+        if method == "POST":
+            return {"id": 42}
+        if method == "GET":
+            return reads.pop(0)
+        return {}
+
+    monkeypatch.setenv("HOSTAWAY_ACCESS_TOKEN", "token")
+    monkeypatch.setattr("scripts.verify_custom_field_writes._request", fake_request)
+    monkeypatch.setattr(
+        "scripts.verify_custom_field_writes.snapshot_path",
+        lambda _target_type, _target_id: snapshot,
+    )
+
+    try:
+        with pytest.raises(RuntimeError) as exc_info:
+            await verify(
+                Namespace(
+                    target_type="listing",
+                    target_id=10,
+                    custom_field_id=1,
+                    value="new",
+                    original_value="old",
+                    unrelated_custom_field_id=2,
+                    listing_map_id=None,
+                    mutate=False,
+                    snapshot=False,
+                    task_canary=True,
+                )
+            )
+    finally:
+        shutil.rmtree(snapshot.parent, ignore_errors=True)
+
+    message = str(exc_info.value)
+    assert "difference(s)" in message
+    assert "guest@example.com" not in message

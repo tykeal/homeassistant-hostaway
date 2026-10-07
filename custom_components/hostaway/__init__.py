@@ -25,6 +25,8 @@ from custom_components.hostaway.api.custom_fields import (
     CustomFieldWriteGenerationRegistry,
     CustomFieldWriteLockRegistry,
     CustomFieldWriteSafetyGates,
+    ListingCustomFieldEvidenceState,
+    ReservationCustomFieldEvidenceState,
 )
 from custom_components.hostaway.api.exceptions import (
     HostawayApiError,
@@ -37,6 +39,11 @@ from custom_components.hostaway.const import (
     CONF_CACHED_TOKEN,
     CONF_CLIENT_ID,
     CONF_CLIENT_SECRET,
+    CONF_CUSTOM_FIELD_WRITE_ACCOUNT_ID,
+    CONF_LISTING_CUSTOM_FIELD_WRITES_ENABLED,
+    CONF_RESERVATION_CUSTOM_FIELD_RESIDUAL_RISK_ACCEPTED,
+    CONF_RESERVATION_CUSTOM_FIELD_RISK_ACCEPTED_ACCOUNT_ID,
+    CONF_RESERVATION_CUSTOM_FIELD_WRITES_ENABLED,
     DOMAIN,
     PLATFORMS,
 )
@@ -47,6 +54,63 @@ from custom_components.hostaway.coordinator import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _entry_custom_field_write_account_id(entry: ConfigEntry) -> int | None:
+    """Return the explicitly configured custom-field write account id."""
+    value = entry.options.get(
+        CONF_CUSTOM_FIELD_WRITE_ACCOUNT_ID,
+        entry.data.get(CONF_CUSTOM_FIELD_WRITE_ACCOUNT_ID),
+    )
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value
+
+
+def _custom_field_write_safety(
+    entry: ConfigEntry,
+) -> tuple[
+    CustomFieldWriteSafetyGates,
+    ListingCustomFieldEvidenceState | None,
+    ReservationCustomFieldEvidenceState | None,
+    int | None,
+]:
+    """Build explicit account-bound production custom-field write gates."""
+    account_id = _entry_custom_field_write_account_id(entry)
+    options = {**entry.data, **entry.options}
+    has_account = account_id is not None
+    listing_enabled = (
+        has_account and options.get(CONF_LISTING_CUSTOM_FIELD_WRITES_ENABLED) is True
+    )
+    reservation_enabled = (
+        has_account
+        and options.get(CONF_RESERVATION_CUSTOM_FIELD_WRITES_ENABLED) is True
+        and options.get(CONF_RESERVATION_CUSTOM_FIELD_RESIDUAL_RISK_ACCEPTED) is True
+        and options.get(CONF_RESERVATION_CUSTOM_FIELD_RISK_ACCEPTED_ACCOUNT_ID)
+        == account_id
+    )
+    gates = CustomFieldWriteSafetyGates()
+    listing_evidence = None
+    reservation_evidence = None
+    if listing_enabled:
+        object.__setattr__(gates, "listing_partial_put_verified", True)
+        object.__setattr__(gates, "listing_payload_strategy", "partial")
+        listing_evidence = ListingCustomFieldEvidenceState(
+            account_id=account_id,
+            config_entry_id=entry.entry_id,
+            partial_put_verified=True,
+            payload_strategy="partial",
+        )
+    if reservation_enabled:
+        object.__setattr__(gates, "reservation_no_clobber_verified", True)
+        object.__setattr__(gates, "reservation_payload_strategy", "partial")
+        reservation_evidence = ReservationCustomFieldEvidenceState(
+            account_id=account_id,
+            config_entry_id=entry.entry_id,
+            custom_field_values_round_trip_verified=True,
+            payload_strategy="partial",
+        )
+    return gates, listing_evidence, reservation_evidence, account_id
 
 
 async def async_setup_entry(
@@ -134,6 +198,12 @@ async def async_setup_entry(
         1,
         _initial_custom_fields_refresh,
     )
+    (
+        write_safety,
+        listing_evidence,
+        reservation_evidence,
+        account_id,
+    ) = _custom_field_write_safety(entry)
 
     hass.data.setdefault(DOMAIN, {})
     entry_data = hass.data[DOMAIN].setdefault(entry.entry_id, {})
@@ -146,7 +216,11 @@ async def async_setup_entry(
             "custom_fields_coordinator": custom_fields_coordinator,
             "custom_fields_update_unsub": custom_fields_update_unsub,
             "custom_fields_initial_refresh_unsub": custom_fields_initial_refresh_unsub,
-            "custom_field_write_safety": CustomFieldWriteSafetyGates(),
+            "config_entry_id": entry.entry_id,
+            "account_id": account_id,
+            "custom_field_write_safety": write_safety,
+            "listing_custom_field_evidence": listing_evidence,
+            "reservation_custom_field_evidence": reservation_evidence,
             "custom_field_write_locks": CustomFieldWriteLockRegistry(),
             "custom_field_write_generations": CustomFieldWriteGenerationRegistry(),
         }
@@ -156,6 +230,8 @@ async def async_setup_entry(
     from custom_components.hostaway.services import async_setup_services
 
     async_setup_services(hass)
+
+    entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
@@ -201,3 +277,8 @@ async def async_unload_entry(
             async_unregister_services(hass)
 
     return unload_ok
+
+
+async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Reload the config entry after option changes."""
+    await hass.config_entries.async_reload(entry.entry_id)

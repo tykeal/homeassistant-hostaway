@@ -17,6 +17,7 @@ from custom_components.hostaway.api.const import DEFAULT_PAGE_LIMIT
 from custom_components.hostaway.api.exceptions import (
     HostawayAuthError,
     HostawayConnectionError,
+    HostawayMutationResultError,
     HostawayRateLimitError,
     HostawayReservationLockedError,
     HostawayResponseError,
@@ -261,6 +262,27 @@ class TestHttpClientCore:
         with pytest.raises(HostawayReservationLockedError):
             await client._request(
                 "PUT", "/v1/reservations/59426054", json={"doorCode": "9999"}
+            )
+
+        tm.invalidate.assert_not_called()
+        assert route.call_count == 1
+
+    async def test_403_listing_non_auth_raises_forbidden(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Listing 403 responses are not reported as reservation locks."""
+        body = '{"status":"fail","result":"Listing update forbidden"}'
+        route = respx.put(f"{FAKE_BASE_URL}/v1/listings/123").mock(
+            return_value=httpx.Response(403, text=body)
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with pytest.raises(HostawayResponseError, match="Forbidden"):
+            await client.update_listing_custom_fields(
+                123,
+                {"customFieldValues": [{"customFieldId": 1, "value": "new"}]},
             )
 
         tm.invalidate.assert_not_called()
@@ -525,6 +547,105 @@ class TestHttpClientCore:
 
         assert response.status_code == 200
         mock_sleep.assert_called()
+
+    async def test_custom_field_put_5xx_does_not_retry(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Custom-field PUTs leave ambiguous 5xx recovery to the service."""
+        route = respx.put(f"{FAKE_BASE_URL}/v1/listings/123").mock(
+            return_value=httpx.Response(502)
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with pytest.raises(HostawayConnectionError):
+            await client.update_listing_custom_fields(
+                123,
+                {"customFieldValues": [{"customFieldId": 1, "value": "new"}]},
+            )
+
+        assert route.call_count == 1
+
+    async def test_custom_field_put_429_does_not_blind_retry(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Custom-field PUTs do not retry the same array after 429."""
+        route = respx.put(f"{FAKE_BASE_URL}/v1/reservations/456").mock(
+            return_value=httpx.Response(429, headers={"Retry-After": "1"})
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with pytest.raises(HostawayRateLimitError):
+            await client.update_reservation_custom_fields(
+                456,
+                {"customFieldValues": [{"customFieldId": 1, "value": "new"}]},
+            )
+
+        assert route.call_count == 1
+
+    async def test_custom_field_put_403_auth_does_not_blind_retry(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Custom-field PUTs do not auth-refresh retry the same array."""
+        route = respx.put(f"{FAKE_BASE_URL}/v1/listings/123").mock(
+            return_value=httpx.Response(403, text="invalid_token")
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with pytest.raises(HostawayAuthError):
+            await client.update_listing_custom_fields(
+                123,
+                {"customFieldValues": [{"customFieldId": 1, "value": "new"}]},
+            )
+
+        tm.invalidate.assert_called_once()
+        assert route.call_count == 1
+
+    async def test_custom_field_put_malformed_2xx_is_ambiguous(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Custom-field PUTs classify malformed 2xx responses as ambiguous."""
+        route = respx.put(f"{FAKE_BASE_URL}/v1/listings/123").mock(
+            return_value=httpx.Response(200, text="not-json")
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with pytest.raises(HostawayMutationResultError):
+            await client.update_listing_custom_fields(
+                123,
+                {"customFieldValues": [{"customFieldId": 1, "value": "new"}]},
+            )
+
+        assert route.call_count == 1
+
+    async def test_custom_field_put_explicit_fail_is_not_ambiguous(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Explicit Hostaway failure statuses are not malformed successes."""
+        route = respx.put(f"{FAKE_BASE_URL}/v1/listings/123").mock(
+            return_value=httpx.Response(
+                200,
+                json={"status": "fail", "result": "rejected"},
+            )
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with pytest.raises(HostawayResponseError):
+            await client.update_listing_custom_fields(
+                123,
+                {"customFieldValues": [{"customFieldId": 1, "value": "new"}]},
+            )
+
+        assert route.call_count == 1
 
     async def test_network_error_raises_connection_error(
         self, mock_httpx_client: httpx.AsyncClient
@@ -1067,6 +1188,87 @@ class TestUpdateTask:
 
         with pytest.raises(HostawayResponseError):
             await client.update_task(999, {"title": "New"})
+
+
+class TestUpdateListing:
+    """Tests for HostawayApiClient.update_listing()."""
+
+    async def test_update_listing_success(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Successful listing updates return result objects."""
+        respx.put(f"{FAKE_BASE_URL}/v1/listings/42").mock(
+            return_value=httpx.Response(
+                200,
+                json={"status": "success", "result": {"id": 42}},
+            )
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        result = await client.update_listing(42, {"customFieldValues": []})
+
+        assert result == {"id": 42}
+
+    async def test_update_listing_sends_payload(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Listing updates use PUT /v1/listings/{id} and forward JSON."""
+        route = respx.put(f"{FAKE_BASE_URL}/v1/listings/99").mock(
+            return_value=httpx.Response(
+                200,
+                json={"status": "success", "result": {"id": 99}},
+            )
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        await client.update_listing(
+            99,
+            {"customFieldValues": [{"customFieldId": 1, "value": "A"}]},
+        )
+
+        request = route.calls[0].request
+        assert "/v1/listings/99" in str(request.url)
+        assert json.loads(request.content) == {
+            "customFieldValues": [{"customFieldId": 1, "value": "A"}]
+        }
+
+    async def test_update_listing_api_error(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Listing update API failures surface as response errors."""
+        respx.put(f"{FAKE_BASE_URL}/v1/listings/42").mock(
+            return_value=httpx.Response(
+                200,
+                json={"status": "fail", "result": "not found"},
+            )
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with pytest.raises(HostawayResponseError, match="Update failed"):
+            await client.update_listing(42, {"customFieldValues": []})
+
+    async def test_update_listing_missing_result(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """Listing updates require an object result."""
+        respx.put(f"{FAKE_BASE_URL}/v1/listings/42").mock(
+            return_value=httpx.Response(
+                200,
+                json={"status": "success", "result": "ok"},
+            )
+        )
+
+        tm = _make_mock_token_manager()
+        client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
+
+        with pytest.raises(HostawayResponseError, match="missing 'result' object"):
+            await client.update_listing(42, {"customFieldValues": []})
 
 
 class TestDeleteTask:

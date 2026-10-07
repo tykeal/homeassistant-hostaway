@@ -10,6 +10,9 @@ from unittest.mock import AsyncMock
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.hostaway.api.custom_fields import (
+    CustomFieldWriteGenerationRegistry,
+)
 from custom_components.hostaway.api.exceptions import HostawayApiError
 from custom_components.hostaway.api.models import (
     HostawayListing,
@@ -209,6 +212,33 @@ class TestHostawayListingsCoordinator:
         # Data retained from last successful fetch
         assert coordinator.data == {100: _make_listing(100, "Good")}
 
+    async def test_inflight_refresh_preserves_written_listing(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """A stale listing poll cannot overwrite a verified write patch."""
+        entry = _make_entry(selected=[100])
+        entry.add_to_hass(hass)
+        registry = CustomFieldWriteGenerationRegistry()
+        hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
+            "custom_field_write_generations": registry,
+        }
+        api_client = AsyncMock()
+        coordinator = HostawayListingsCoordinator(hass, entry, api_client)
+        coordinator.data = {100: _make_listing(100, "Old")}
+
+        async def _get_all_listings() -> list[HostawayListing]:
+            """Return stale data after a write patches and advances generation."""
+            coordinator.data = {100: _make_listing(100, "Patched")}
+            registry.advance("listing", 100)
+            return [_make_listing(100, "Stale")]
+
+        api_client.get_all_listings = _get_all_listings
+
+        await coordinator.async_refresh()
+
+        assert coordinator.data == {100: _make_listing(100, "Patched")}
+
 
 class TestHostawayReservationsCoordinator:
     """Tests for HostawayReservationsCoordinator."""
@@ -257,6 +287,71 @@ class TestHostawayReservationsCoordinator:
 
         dates = [r.check_in for r in coordinator.data[100]]
         assert dates == ["2025-08-01", "2025-08-15", "2025-09-01"]
+
+    async def test_inflight_refresh_preserves_written_reservation(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """A stale reservation poll cannot overwrite a verified write patch."""
+        entry = _make_entry(selected=[100])
+        entry.add_to_hass(hass)
+        registry = CustomFieldWriteGenerationRegistry()
+        hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
+            "custom_field_write_generations": registry,
+        }
+        api_client = AsyncMock()
+        coordinator = HostawayReservationsCoordinator(hass, entry, api_client)
+        coordinator.data = {100: [_make_reservation(1, 100, guest_name="Old")]}
+
+        async def _get_all_reservations(listing_id: int) -> list[HostawayReservation]:
+            """Return stale data after a write patches and advances generation."""
+            coordinator.data = {100: [_make_reservation(1, 100, guest_name="Patched")]}
+            registry.advance("reservation", 1)
+            return [_make_reservation(1, listing_id, guest_name="Stale")]
+
+        api_client.get_all_reservations = _get_all_reservations
+
+        await coordinator.async_refresh()
+
+        assert coordinator.data == {
+            100: [_make_reservation(1, 100, guest_name="Patched")]
+        }
+
+    async def test_late_inflight_refresh_preserves_written_reservation(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """A later listing fetch cannot publish an earlier stale reservation."""
+        entry = _make_entry(selected=[100, 200])
+        entry.add_to_hass(hass)
+        registry = CustomFieldWriteGenerationRegistry()
+        hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
+            "custom_field_write_generations": registry,
+        }
+        api_client = AsyncMock()
+        coordinator = HostawayReservationsCoordinator(hass, entry, api_client)
+        coordinator.data = {
+            100: [_make_reservation(1, 100, guest_name="Old")],
+            200: [_make_reservation(2, 200, guest_name="Other")],
+        }
+
+        async def _get_all_reservations(listing_id: int) -> list[HostawayReservation]:
+            """Patch listing 100 after its stale fetch has already completed."""
+            if listing_id == 200:
+                coordinator.data = {
+                    100: [_make_reservation(1, 100, guest_name="Patched")],
+                    200: [_make_reservation(2, 200, guest_name="Other")],
+                }
+                registry.advance("reservation", 1)
+            return [_make_reservation(listing_id // 100, listing_id, "2025-08-01")]
+
+        api_client.get_all_reservations = _get_all_reservations
+
+        await coordinator.async_refresh()
+
+        assert coordinator.data[100] == [
+            _make_reservation(1, 100, guest_name="Patched")
+        ]
 
     async def test_configurable_poll_interval(
         self,

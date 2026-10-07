@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
 from unittest.mock import AsyncMock, patch
 
 import voluptuous as vol
@@ -40,6 +41,11 @@ def _make_entry(**overrides: object) -> MockConfigEntry:
     Returns:
         A MockConfigEntry for the Hostaway integration.
     """
+    options: dict[str, Any] = {
+        CONF_SCAN_INTERVAL: DEFAULT_SCAN_INTERVAL,
+        CONF_RESERVATION_SCAN_INTERVAL: DEFAULT_RESERVATION_SCAN_INTERVAL,
+    }
+    options.update(cast(dict[str, Any], overrides.pop("options", {})))
     return MockConfigEntry(
         domain=DOMAIN,
         title="Hostaway (test-cli...)",
@@ -49,10 +55,7 @@ def _make_entry(**overrides: object) -> MockConfigEntry:
             CONF_SELECTED_LISTINGS: [12345],
         },
         unique_id="test-client-id",
-        options={
-            CONF_SCAN_INTERVAL: DEFAULT_SCAN_INTERVAL,
-            CONF_RESERVATION_SCAN_INTERVAL: DEFAULT_RESERVATION_SCAN_INTERVAL,
-        },
+        options=options,
         **overrides,  # type: ignore[arg-type]
     )
 
@@ -562,3 +565,132 @@ async def test_custom_field_definitions_options_flow(
         },
     )
     assert result["data"][CONF_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL] == 15
+
+
+async def test_custom_field_write_options_flow(
+    hass: HomeAssistant,
+) -> None:
+    """Options flow exposes explicit account-bound write enablement."""
+    from custom_components.hostaway.const import (
+        CONF_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL,
+        CONF_CUSTOM_FIELD_WRITE_ACCOUNT_ID,
+        CONF_LISTING_CUSTOM_FIELD_WRITES_ENABLED,
+        CONF_RESERVATION_CUSTOM_FIELD_RESIDUAL_RISK_ACCEPTED,
+        CONF_RESERVATION_CUSTOM_FIELD_RISK_ACCEPTED_ACCOUNT_ID,
+        CONF_RESERVATION_CUSTOM_FIELD_WRITES_ENABLED,
+        DEFAULT_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL,
+    )
+
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    data_schema = result["data_schema"]
+    assert data_schema is not None
+    schema = data_schema.schema
+    assert any(
+        getattr(key, "schema", None) == CONF_CUSTOM_FIELD_WRITE_ACCOUNT_ID
+        for key in schema
+    )
+    assert any(
+        getattr(key, "schema", None) == CONF_LISTING_CUSTOM_FIELD_WRITES_ENABLED
+        for key in schema
+    )
+    assert any(
+        getattr(key, "schema", None) == CONF_RESERVATION_CUSTOM_FIELD_WRITES_ENABLED
+        for key in schema
+    )
+    assert any(
+        getattr(key, "schema", None)
+        == CONF_RESERVATION_CUSTOM_FIELD_RESIDUAL_RISK_ACCEPTED
+        for key in schema
+    )
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={
+            CONF_SCAN_INTERVAL: 5,
+            CONF_RESERVATION_SCAN_INTERVAL: 2,
+            CONF_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL: (
+                DEFAULT_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL
+            ),
+            CONF_LISTING_CUSTOM_FIELD_WRITES_ENABLED: True,
+        },
+    )
+    assert result["errors"] == {"base": "missing_write_account_id"}
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={
+            CONF_SCAN_INTERVAL: 5,
+            CONF_RESERVATION_SCAN_INTERVAL: 2,
+            CONF_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL: (
+                DEFAULT_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL
+            ),
+            CONF_CUSTOM_FIELD_WRITE_ACCOUNT_ID: 1,
+            CONF_LISTING_CUSTOM_FIELD_WRITES_ENABLED: True,
+            CONF_RESERVATION_CUSTOM_FIELD_WRITES_ENABLED: True,
+            CONF_RESERVATION_CUSTOM_FIELD_RESIDUAL_RISK_ACCEPTED: False,
+        },
+    )
+    assert result["errors"] == {"base": "reservation_risk_not_accepted"}
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={
+            CONF_SCAN_INTERVAL: 5,
+            CONF_RESERVATION_SCAN_INTERVAL: 2,
+            CONF_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL: (
+                DEFAULT_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL
+            ),
+            CONF_CUSTOM_FIELD_WRITE_ACCOUNT_ID: 1,
+            CONF_LISTING_CUSTOM_FIELD_WRITES_ENABLED: True,
+            CONF_RESERVATION_CUSTOM_FIELD_WRITES_ENABLED: True,
+            CONF_RESERVATION_CUSTOM_FIELD_RESIDUAL_RISK_ACCEPTED: True,
+        },
+    )
+    assert result["data"][CONF_CUSTOM_FIELD_WRITE_ACCOUNT_ID] == 1
+    assert result["data"][CONF_LISTING_CUSTOM_FIELD_WRITES_ENABLED] is True
+    assert result["data"][CONF_RESERVATION_CUSTOM_FIELD_WRITES_ENABLED] is True
+    assert result["data"][CONF_RESERVATION_CUSTOM_FIELD_RESIDUAL_RISK_ACCEPTED] is True
+    assert result["data"][CONF_RESERVATION_CUSTOM_FIELD_RISK_ACCEPTED_ACCOUNT_ID] == 1
+
+
+async def test_custom_field_write_options_rebinds_risk(
+    hass: HomeAssistant,
+) -> None:
+    """Changing accounts requires clearing reservation risk acceptance."""
+    from custom_components.hostaway.const import (
+        CONF_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL,
+        CONF_CUSTOM_FIELD_WRITE_ACCOUNT_ID,
+        CONF_RESERVATION_CUSTOM_FIELD_RESIDUAL_RISK_ACCEPTED,
+        CONF_RESERVATION_CUSTOM_FIELD_RISK_ACCEPTED_ACCOUNT_ID,
+        CONF_RESERVATION_CUSTOM_FIELD_WRITES_ENABLED,
+        DEFAULT_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL,
+    )
+
+    entry = _make_entry(
+        options={
+            CONF_CUSTOM_FIELD_WRITE_ACCOUNT_ID: 1,
+            CONF_RESERVATION_CUSTOM_FIELD_RESIDUAL_RISK_ACCEPTED: True,
+            CONF_RESERVATION_CUSTOM_FIELD_RISK_ACCEPTED_ACCOUNT_ID: 1,
+        }
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={
+            CONF_SCAN_INTERVAL: 5,
+            CONF_RESERVATION_SCAN_INTERVAL: 2,
+            CONF_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL: (
+                DEFAULT_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL
+            ),
+            CONF_CUSTOM_FIELD_WRITE_ACCOUNT_ID: 2,
+            CONF_RESERVATION_CUSTOM_FIELD_WRITES_ENABLED: False,
+            CONF_RESERVATION_CUSTOM_FIELD_RESIDUAL_RISK_ACCEPTED: True,
+        },
+    )
+
+    assert result["errors"] == {"base": "reservation_risk_not_accepted"}

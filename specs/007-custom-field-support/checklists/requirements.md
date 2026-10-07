@@ -51,11 +51,15 @@ proceeding to planning
     collision-safe `custom_fields` mappings rather than display-name keys.
 - External API endpoint and payload details appear in the spec only where they
   are the subject of safety verification requirements (FR-035 and FR-051
-  through FR-055); they are drawn from issue #195 and live source evidence and
-  define integration obligations rather than internal implementation design.
+  through FR-056); they are drawn from issue #195, live source evidence, and
+  the 2026-10-04 Hostaway Technical Support answer. The spec preserves the
+  distinction between authoritative listing top-level partial-body evidence,
+  observed-only array replacement behaviour, and explicitly unconfirmed
+  reservation/task array semantics with the known reservation persistence bug.
 - SC-003 no longer depends on a minimum count of populated custom variables.
-  The empty-diff no-op protocol uses the whole object as the control group,
-  followed by a sentinel write and exact restore check.
+  Mandatory post-write read-back verifies every successful-looking write, and
+  the empty-diff no-op protocol remains available where live corroboration is
+  required.
 - Three checklist items remain intentionally unchecked: implementation-detail
   and technology-agnostic checks are not fully met because this feature's
   measurable outcomes must name Home Assistant visibility, Hostaway service

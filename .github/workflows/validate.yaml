@@ -33,7 +33,7 @@ jobs:
     timeout-minutes: 5
     steps:
       # yamllint disable-line rule:line-length
-      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c  # v2.21.0
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
         with:
           egress-policy: 'audit'
 
@@ -43,7 +43,7 @@ jobs:
 
       - name: 'Validate with hassfest'
         # yamllint disable-line rule:line-length
-        uses: home-assistant/actions/hassfest@a7c616ce81ccda50150bf1595786c71b1883fabb  # master (no tags published)
+        uses: home-assistant/actions/hassfest@06749dd8c0b54f350bc69c8752456cee498808a3  # master (no tags published)
 
   hacs:
     name: 'HACS'
@@ -53,7 +53,7 @@ jobs:
     timeout-minutes: 5
     steps:
       # yamllint disable-line rule:line-length
-      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c  # v2.21.0
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
         with:
           egress-policy: 'audit'
 
