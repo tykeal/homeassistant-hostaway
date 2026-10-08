@@ -53,8 +53,9 @@ The budget is operator-tunable through the options flow only, in a collapsed
 "advanced" section, defaulting to 180 and **rejecting** — never clamping —
 values above 200 per general counter. Limiter state includes both account-keyed
 gates and a process-wide IP gate, survives a config entry reload, and is
-exposed through a new diagnostics module with credential material digested
-rather than emitted.
+exposed through a new diagnostics module that identifies each limiter by an
+opaque random label and never emits, digests, or otherwise derives anything
+from credential material.
 
 The general Hostaway model is represented as two active gates: one
 per-account gate and one process-wide per-IP gate. The account gate's effective
@@ -267,7 +268,8 @@ Full rationale and the source verification behind each is in
    `show_advanced_options`** (R-013). Verified against installed HA 2026.9.4:
    `show_advanced_options` is deprecated, breaks in 2027.6, and its body is an
    unconditional `return True`, so it hides nothing. This is an owner decision encoded in the spec.
-10. **Diagnostics digest the account key** (R-015, data-model §11). The
+10. **Diagnostics never derive anything from the account key** (R-015,
+    data-model §11). The
     account key *is* `CONF_CLIENT_ID`. FR-029 forbids credentials in
     diagnostics, so only an opaque random label is emitted. The config
     entry `unique_id` is **not** a safe correlation field:
