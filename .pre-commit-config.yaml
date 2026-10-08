@@ -197,9 +197,16 @@ repos:
         language_version: python3.14
         args: ["--show-error-codes", "--install-types", "--non-interactive"]
         additional_dependencies:
-          - "homeassistant>=2026.4.0"
+          # Pin to the same versions uv.lock resolves. These were previously
+          # floating, so rebuilding the hook env resolved
+          # pytest-homeassistant-custom-component to 0.13.368, which hard-pins
+          # homeassistant==2026.10.0b0. That beta replaces voluptuous schemas
+          # with probatio, so mypy reported four phantom data_schema errors in
+          # config_flow.py that do not exist against the stable release.
+          # Keep these in step with uv.lock when Home Assistant is upgraded.
+          - "homeassistant==2026.9.4"
           - "pytest"
-          - "pytest-homeassistant-custom-component>=0.13.0"
+          - "pytest-homeassistant-custom-component==0.13.367"
           - "httpx"
           - "respx"
 
