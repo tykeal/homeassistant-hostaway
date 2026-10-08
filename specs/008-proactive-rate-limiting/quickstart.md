@@ -187,7 +187,7 @@ transient validation limiter that does not contribute to shared budget minima.
 | FR-018..020 priority & interactive deadline | contextvar + priority heap with aging + `INTERACTIVE_POLICY` |
 | FR-021..024 shedding | coordinator base class with cycle-wide deadline |
 | FR-025..028 observability | coordinator base (shed log) + `client.py` (DEBUG/WARNING) |
-| FR-029 diagnostics | new `diagnostics.py` + `redaction.py` digest |
+| FR-029 diagnostics | new `diagnostics.py` + opaque per-limiter label |
 | FR-030..034 configuration | `config_flow.py` + `const.py` + `strings.json` |
 | FR-035..036 documentation | README |
 | FR-037 first refresh never shed | coordinator base `_first_refresh_complete`; custom-fields not-yet-loaded state |

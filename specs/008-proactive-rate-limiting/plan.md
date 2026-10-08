@@ -135,7 +135,7 @@ assumption that it does; see "Assumptions carried, not resolved" below.
 | VII. UX Consistency | PASS | The budget is a standard options-flow field with translated label, description, and error, following the existing `invalid_scan_interval` pattern. No entity naming or state-attribute change. Shed cycles keep entities available rather than flipping them unavailable — a deliberate UX choice (SC-005). |
 | VIII. Performance Requirements | PASS | This principle literally requires "the client MUST NOT exceed Hostaway's published rate limits"; the feature is the mechanism. Admission is O(log n) on a heap bounded by in-flight waiters, memory is bounded by each documented gate ceiling, and an idle limiter costs zero wakeups (SC-008). No blocking call is introduced. |
 | IX. Phased Development | PASS | Eight increments with explicit checkpoints, documented below and to be mirrored in `tasks.md`. The foundational constants/exceptions land first, then the pure limiter lands and is proven before any HA wiring depends on it. |
-| X. Security & Credential Management (NON-NEGOTIABLE) | PASS | The limiter's account key is `CONF_CLIENT_ID` — half the credential pair. It is never logged, never in `__repr__`, and diagnostics emit only a truncated SHA-256 handle. No change to token handling. |
+| X. Security & Credential Management (NON-NEGOTIABLE) | PASS | The limiter's account key is `CONF_CLIENT_ID` — half the credential pair. It is never logged, never in `__repr__`, and diagnostics emit only an opaque random label that is not derived from it. No change to token handling. |
 
 **Gate Result**: PASS. No constitution violations; the Complexity Tracking
 table is therefore empty.
@@ -176,7 +176,6 @@ custom_components/hostaway/
 │   │                          #      +HostawayRateLimitWaitTimeout
 │   ├── client.py              # EDIT acquire inside the retry loop; 429 feedback
 │   ├── auth.py                # EDIT acquire in _request_token; 429 feedback
-│   ├── redaction.py           # EDIT +account_handle digest helper
 │   └── retry.py               # EDIT header parsing only (FR-013); the
 │                              #      backoff curve, MAX_RETRIES, MAX_BACKOFF
 │                              #      and jitter are preserved unchanged
@@ -270,7 +269,7 @@ Full rationale and the source verification behind each is in
    unconditional `return True`, so it hides nothing. This is an owner decision encoded in the spec.
 10. **Diagnostics digest the account key** (R-015, data-model §11). The
     account key *is* `CONF_CLIENT_ID`. FR-029 forbids credentials in
-    diagnostics, so only a truncated SHA-256 handle is emitted. The config
+    diagnostics, so only an opaque random label is emitted. The config
     entry `unique_id` is **not** a safe correlation field:
     `config_flow.py:244` assigns it from `self._client_id`, so emitting it
     would disclose the credential verbatim. Coordinator keys use fixed
@@ -352,7 +351,7 @@ preserves a previously stored value.
 
 ### Phase F — Diagnostics
 
-New `diagnostics.py` plus the `redaction.py` digest helper.
+New `diagnostics.py` plus an opaque label allocated on each limiter.
 
 *Checkpoint*: SC-013, including per-gate account/IP state and the assertion that neither
 `client_id` nor `client_secret` appears anywhere in the serialized payload.
@@ -425,8 +424,10 @@ Raised here rather than silently resolved.
    none. See item 6.
 4. **FR-029's "MUST NOT include credentials" is in direct tension with FR-005's
    keying.** The budget key is `CONF_CLIENT_ID`, which is credential material.
-   Resolved by emitting a truncated SHA-256 handle, but the spec does not
-   anticipate the conflict.
+   Resolved by emitting an opaque random label allocated at limiter creation.
+   A truncated digest was rejected because Hostaway client IDs are low-entropy
+   numeric account identifiers, making such a digest an offline-testable
+   verifier for the credential. The spec does not anticipate the conflict.
 5. **SC-002 before/after comparison is now simulated.** The spec no longer
    depends on a shared live Hostaway environment. Tests use a deterministic
    simulator containing only integration-generated traffic, first with limiter

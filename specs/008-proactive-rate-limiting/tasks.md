@@ -605,14 +605,20 @@ appears in it.
 the `rate_limit.gates.account` / `rate_limit.gates.ip` shape and the absence
 of any credential substring.
 
-- [ ] T034 [P] [US4] Add an `account_handle(account_key)` helper returning the
-  first 12 hex chars of `sha256(account_key)` —
-  `custom_components/hostaway/api/redaction.py`, `tests/api/` — FR-029,
-  Constitution X, data-model §11 — **Verify**: the digest is stable,
-  non-reversible, and never equal to any substring of the input.
+- [ ] T034 [P] [US4] Add an opaque `limiter_label` allocated when an
+  `AccountRateLimiter` is created: a `secrets.token_hex(6)` value stored on the
+  limiter, **not derived from the account key in any way** —
+  `custom_components/hostaway/api/rate_limit.py`, `tests/api/` — FR-029,
+  Constitution X, data-model §11 — **Verify**: the label is stable for the
+  lifetime of the limiter, distinct per limiter, and **independent of the
+  account key** — the same account key in two processes yields different
+  labels, and no function maps the account key to the label. A derived digest
+  is explicitly rejected: Hostaway client IDs are low-entropy numeric account
+  identifiers, so a truncated hash would be an offline-testable verifier for
+  the credential.
 
 - [ ] T035 [US4] Create `async_get_config_entry_diagnostics(hass, entry)`
-  emitting the contract §8 payload: `account_handle`, `budget_source`
+  emitting the contract §8 payload: `limiter_label`, `budget_source`
   (`"default"` vs `"option"`), per-gate `account` and `ip` objects (budget,
   effective budget, window seconds, admitted in window, waiting interactive,
   waiting scheduled, suppressed, seconds until clear), `admitted_total`,

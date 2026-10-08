@@ -638,14 +638,17 @@ change.
 include credentials". The limiter's account key *is* `CONF_CLIENT_ID` — the
 Hostaway client id, half of the credential pair. It must **not** be emitted
 verbatim. Diagnostics should report a stable but non-reversible handle (a
-truncated SHA-256 of the account key) and nothing else that identifies the
+random `limiter_label`, never derived from the account key) and nothing else that identifies the
 account. The config entry's `unique_id` **must not** be used for correlation
 either: `config_flow.py:244` calls `async_set_unique_id(self._client_id)`, so
 the unique id *is* the client id and emitting it would leak the same
 credential by another name. Coordinator keys in the payload must likewise use
 fixed labels such as `listings`, `reservations`, and `custom_fields` rather
 than the generated coordinator names, which embed the unique id. The existing
-`api/redaction.py` module is the natural home for the helper.
+label is allocated by the limiter itself. A truncated digest of the account
+key was rejected: Hostaway client IDs are low-entropy numeric account
+identifiers, so such a digest would be an offline-testable verifier for the
+credential rather than a non-reversible handle.
 
 Payload shape is specified in
 [contracts/rate-limiter-interface.md](contracts/rate-limiter-interface.md). It

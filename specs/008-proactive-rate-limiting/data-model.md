@@ -500,12 +500,12 @@ credential pair. FR-029 forbids credentials in diagnostics.
 | Rule | Detail |
 |---|---|
 | Never emit `account_key` verbatim | Not in diagnostics, not in `__repr__`, not in any log record |
-| Diagnostics identifier | `account_handle` = first 12 hex chars of `sha256(account_key)` |
-| Correlation | Use `account_handle` only. The config entry `unique_id` MUST NOT be emitted: `config_flow.py:244` sets it from `CONF_CLIENT_ID`, so it is the credential itself |
+| Diagnostics identifier | `limiter_label` = `secrets.token_hex(6)` allocated when the limiter is created. A digest of the account key is **rejected**: Hostaway client IDs are low-entropy numeric account identifiers, so a truncated hash is an offline-testable verifier for the credential |
+| Correlation | Use `limiter_label` only. The config entry `unique_id` MUST NOT be emitted: `config_flow.py:244` sets it from `CONF_CLIENT_ID`, so it is the credential itself |
 | Coordinator keys | Fixed labels (`listings`, `reservations`, `custom_fields`); never the generated coordinator names, which embed the unique id |
 
-The helper belongs in the existing `custom_components/hostaway/api/redaction.py`
-alongside the other redaction utilities.
+The label is allocated by the limiter itself; no redaction helper is needed,
+because nothing credential-derived is ever computed.
 
 ---
 

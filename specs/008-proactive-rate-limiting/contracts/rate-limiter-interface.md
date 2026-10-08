@@ -338,7 +338,7 @@ New module: `custom_components/hostaway/diagnostics.py`, exposing
 ```json
 {
   "rate_limit": {
-    "account_handle": "9f2c41a0be77",
+    "limiter_label": "3f9c2a7b1d04",
     "budget_source": "option",
     "gates": {
       "account": {
@@ -386,7 +386,7 @@ New module: `custom_components/hostaway/diagnostics.py`, exposing
 | MUST include per-gate budget, current window utilization, waiting counts, and suppression state | FR-029, SC-013 |
 | MUST include `rate_limited_total` and `rate_limited_by_counter` broken down by applied counter (`account`, `ip`, `endpoint`, `provider`, and `unknown`) | FR-029, SC-013 |
 | MUST NOT include `client_id`, `client_secret`, or any token | FR-029, SC-013, Constitution X |
-| `account_handle` MUST be a non-reversible digest of the account key, not the key | FR-029 |
+| `limiter_label` MUST be an opaque random identifier allocated at limiter creation, **not derived from the account key** | FR-029 |
 | `budget_source` MUST distinguish `"default"` from `"option"` so an operator can see whether they changed it | diagnostic usefulness |
 
 **SC-013 acceptance shape**:
