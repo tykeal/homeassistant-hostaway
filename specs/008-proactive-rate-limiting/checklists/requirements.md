@@ -20,8 +20,8 @@ proceeding to planning
 ## Requirement Completeness
 
 - [x] No [NEEDS CLARIFICATION] markers remain
-- [x] Requirements are testable and unambiguous
-- [x] Success criteria are measurable
+- [ ] Requirements are testable and unambiguous
+- [ ] Success criteria are measurable
 - [x] Success criteria are technology-agnostic (no implementation details)
 - [x] All acceptance scenarios are defined
 - [x] Edge cases are identified
@@ -42,11 +42,21 @@ proceeding to planning
   infrastructure for an existing codebase; the enforcement chokepoint and the
   budget key are part of the requirement, not an implementation choice, and
   the owner asked for a spec concrete enough to plan and task from.
-- Six open questions (OQ-001..OQ-006) were recorded in the spec rather than
-  guessed. Five (OQ-002..OQ-006) were resolved in the 2026-10-08 clarification
-  session and encoded into the requirements; OQ-001 remains open as a recorded
-  assumption about undocumented Hostaway behaviour. It does not block planning
+- Ten decision questions (OQ-001..OQ-010) are recorded in the spec rather
+  than guessed. Nine (OQ-002..OQ-010) are resolved and encoded into the
+  requirements, including the superseded per-account-only decision, the
+  documented sliding window, the fixed 10.0-second suppression period, the
+  300.0-second shed-log cooldown, and the collapsed-section options UI.
+  OQ-001 remains open as a recorded assumption about undocumented Hostaway
+  token-endpoint behaviour. It does not block planning
   or implementation, because the conservative path is correct under either
   answer.
-- Unverified Hostaway behaviour is separated from documented behaviour in the
+- Documented Hostaway behaviour, observed/inferred provenance, and the
+  remaining undocumented token-endpoint assumption are separated in the
   Assumptions section, as required.
+- Design-review remediation is in progress. The previously checked
+  "requirements are testable and unambiguous" and "success criteria are
+  measurable" items are intentionally unchecked until a human re-reviews the
+  amended operation-wide deadline, custom-fields first-refresh asymmetry,
+  gate-scoped suppression, shared-IP budget, anti-starvation aging, endpoint
+  classification, diagnostics payload, and success-criteria wording.
