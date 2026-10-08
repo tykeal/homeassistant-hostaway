@@ -421,8 +421,10 @@ suppressed for the indicated or inferred period.
   permit an immediate double-rate burst against a server that is still counting
   the prior window.
 - **Home Assistant restart.** After a restart the limiter necessarily starts
-  with no memory of pre-restart traffic. The startup burst must be bounded
-  conservatively rather than assuming a clean slate.
+  with no memory of pre-restart traffic, so an empty window could immediately
+  admit another full local budget inside a server window that is still
+  counting. The startup burst must be bounded conservatively rather than
+  assuming a clean slate (FR-038).
 - **Clock behavior.** The window must be measured on a monotonic basis so that
   a system clock adjustment cannot grant or withhold budget spuriously.
 - **An interactive call that is itself enormous.** `get_reservations` invoked
@@ -649,8 +651,11 @@ suppressed for the indicated or inferred period.
   the listings and reservations coordinators, which setup awaits with
   `async_config_entry_first_refresh()`, the first refresh MUST either fetch
   real data or fail through Home Assistant's retryable `ConfigEntryNotReady`
-  path; successful setup MUST NOT publish `None`, empty, or partial data for
-  those coordinators. The custom-fields coordinator MUST remain asynchronous
+  path; successful setup MUST NOT publish `None`, partial data, or an empty
+  *placeholder* for those coordinators. An empty dataset legitimately returned
+  by a **successful** fetch — for example when no listings are selected — is
+  valid and MUST be published normally. The prohibition is on emptiness that
+  stands in for an absent or failed fetch, not on emptiness as a real result. The custom-fields coordinator MUST remain asynchronous
   and non-blocking during setup so a custom-fields outage does not fail the
   whole integration. Its first refresh MUST still use the first-refresh wait
   policy and never shed, but a timeout or failure MUST leave an explicit
@@ -658,6 +663,14 @@ suppressed for the indicated or inferred period.
   the condition, and schedule bounded retries on subsequent refresh intervals
   until real definitions are fetched. Successful setup MUST NOT treat the
   initial `[]` placeholder as initialized custom-field data.
+- **FR-038**: Because limiter state is deliberately **not persisted** across a
+  restart, a freshly created gate MUST begin in a conservative startup hold
+  rather than at full capacity: for the first full window after creation it
+  MUST behave as though half of its effective budget were already consumed.
+  The hold MUST expire naturally once that first window has elapsed, MUST NOT
+  apply to a gate merely reconfigured in place (a reload reuses the existing
+  gate and its recorded admissions), and MUST NOT delay the first refresh
+  beyond its wait policy.
 
 #### Observability
 
@@ -821,8 +834,10 @@ suppressed for the indicated or inferred period.
   coordinator, service, or public API method code.
 - **SC-015**: With the budget saturated at config entry setup, listings and
   reservations first refreshes are never shed: across 100% of trials setup
-  either succeeds with real fetched data or fails through a
-  `ConfigEntryNotReady`-style retryable setup failure. The custom-fields
+  either succeeds with a genuinely fetched dataset — which may legitimately be
+  empty, such as when no listings are selected — or fails through a
+  `ConfigEntryNotReady`-style retryable setup failure. No trial produces a
+  successful setup whose data is an unfetched placeholder. The custom-fields
   coordinator remains non-blocking; across 100% of trials, setup success leaves
   it in an explicit not-yet-loaded state rather than treating `[]` as
   successfully initialized data, and a later bounded retry converges when

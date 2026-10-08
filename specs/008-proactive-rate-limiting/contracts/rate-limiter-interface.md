@@ -147,13 +147,32 @@ class BudgetGate(Protocol):
     def next_available(self, now: float) -> float | None: ...
     def suppress_until(self, until: float) -> None: ...
 
-def classify_request(method: str, path: str) -> tuple[BudgetGate, ...]: ...
+class BucketId(StrEnum):
+    ACCOUNT_GENERAL = "account_general"
+    IP_GENERAL = "ip_general"
+    CONVERSATION_MESSAGES = "conversation_messages"
+    PRICE_DETAILS = "price_details"
+    CREATE_RESERVATION = "create_reservation"
+
+# Pure, stateless, and testable on its own: maps a request to *symbolic*
+# bucket identifiers. It deliberately does NOT return gate objects, because
+# the account-general gate belongs to one AccountRateLimiter while the IP
+# gate is process-wide; only the limiter can resolve a symbol to the right
+# instance, and doing so here would require hidden global state.
+def classify_request(method: str, path: str) -> tuple[BucketId, ...]: ...
+
+class AccountRateLimiter:
+    # Instance operation: resolves symbols against this limiter's own gates
+    # plus the shared process-wide gates.
+    def _gates_for(self, method: str, path: str) -> tuple[BudgetGate, ...]: ...
 ```
 
 | Behaviour | Requirement |
 |---|---|
 | All methods MUST be synchronous and non-blocking | R-012 |
 | `capacity_available` and `next_available` MUST be logically read-only; they may discard expired local timestamps but must not change effective capacity or block | correctness of the conjunction |
+| `classify_request` MUST be pure and return symbolic bucket identifiers, never gate instances | correctness with multiple accounts |
+| `_gates_for` MUST resolve symbols against the caller's own account gates and the shared process-wide gates | FR-005, FR-006 |
 | General requests MUST select account-general and IP-general gates | FR-007 |
 | Documented endpoint-specific requests MUST select their endpoint bucket instead of the general gates | FR-007 |
 | Admission MUST be the conjunction of selected gates | FR-007 |

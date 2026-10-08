@@ -153,9 +153,16 @@ admissions than the budget for either gate.
   200 ceiling; endpoint gates can represent documented buckets such as
   30/minute and 400/10 seconds. `capacity_available()` and
   `next_available()` are logically read-only but may discard expired entries —
+  A freshly **created** gate starts in a conservative startup hold, behaving
+  as though half its effective budget were already consumed for its first
+  full window, because limiter state is not persisted across a restart. The
+  hold expires naturally and is **not** applied when an existing gate is
+  merely reconfigured in place —
   `custom_components/hostaway/api/rate_limit.py`,
   `tests/api/test_rate_limit.py` — FR-009, FR-010, FR-011, FR-032, FR-034,
-  data-model §5 — **Verify**: tests prove sliding (not tumbling) semantics
+  FR-038, data-model §5 — **Verify**: a new gate admits only half its budget
+  in its first window and the full budget in the next; `reconfigure()` on an
+  existing gate re-arms **no** hold; tests prove sliding (not tumbling) semantics
   across a window boundary; the combined real and synthetic deques are bounded
   by `_max_budget`, not by the current budget; lowering the budget below the
   current in-window count discards **no** timestamps; server reconciliation
@@ -709,7 +716,7 @@ and the whole feature is proven not to have regressed anything.
 
 - [ ] T041 Update the traceability record: tick the two deferred items in
   `specs/008-proactive-rate-limiting/checklists/requirements.md` if the human
-  re-review passes, and confirm every FR-001–FR-037 and SC-001–SC-018 maps to
+  re-review passes, and confirm every FR-001–FR-038 and SC-001–SC-018 maps to
   a completed task using the coverage table below —
   `specs/008-proactive-rate-limiting/checklists/requirements.md`,
   `specs/008-proactive-rate-limiting/tasks.md` — **Verify**: this update lands
@@ -808,6 +815,7 @@ concurrently; Phase 7's T035 needs the coordinator shed counters from T027.
 | FR-035 | T037 |
 | FR-036 | T038 |
 | FR-037 | T006, T028, T029 |
+| FR-038 | T007, T024 |
 
 ### Success criteria
 
@@ -832,7 +840,7 @@ concurrently; Phase 7's T035 needs the coordinator shed counters from T027.
 | SC-017 | T033 |
 | SC-018 | T009 |
 
-**Uncovered requirements: none.** Every FR-001–FR-037 and SC-001–SC-018 maps
+**Uncovered requirements: none.** Every FR-001–FR-038 and SC-001–SC-018 maps
 to at least one task.
 
 ---

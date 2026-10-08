@@ -331,13 +331,23 @@ while _waiters:
         arm shared timer at earliest(_provider_suppression.until, wake_deadlines)
         return
     for candidate in ordered_waiters_with_aging(_waiters, now):
-        gates = classify(candidate.method, candidate.path)
-        suppressed_until = max(g.suppressed_until for g in gates)
+        gates = self._gates_for(candidate.method, candidate.path)
+        # Absent deadlines are None; filter before max() or Python cannot
+        # order None against float when only some gates are suppressed.
+        suppressed_until = max(
+            (g.suppressed_until for g in gates if g.suppressed_until is not None),
+            default=None,
+        )
         if suppressed_until is not None and now < suppressed_until:
             remember blocked wake-up at suppressed_until for this candidate
             continue
         if not all(g.capacity_available(now) for g in gates):
-            remember blocked wake-up at max(g.next_available(now) for g in gates)
+            next_free = max(
+                (g.next_available(now) for g in gates
+                 if g.next_available(now) is not None),
+                default=None,
+            )
+            remember blocked wake-up at next_free if next_free is not None
             continue
         remove candidate from heap
         for g in gates:
