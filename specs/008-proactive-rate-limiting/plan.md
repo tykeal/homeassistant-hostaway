@@ -173,7 +173,9 @@ custom_components/hostaway/
 │   ├── client.py              # EDIT acquire inside the retry loop; 429 feedback
 │   ├── auth.py                # EDIT acquire in _request_token; 429 feedback
 │   ├── redaction.py           # EDIT +account_handle digest helper
-│   └── retry.py               # UNCHANGED (FR-013)
+│   └── retry.py               # EDIT header parsing only (FR-013); the
+│                              #      backoff curve, MAX_RETRIES, MAX_BACKOFF
+│                              #      and jitter are preserved unchanged
 ├── diagnostics.py             # NEW  async_get_config_entry_diagnostics
 ├── const.py                   # EDIT +CONF_RATE_LIMIT_BUDGET, +DATA_RATE_LIMITERS
 ├── __init__.py                # EDIT limiter registry, injection, lifecycle,
