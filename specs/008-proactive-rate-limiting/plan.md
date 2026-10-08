@@ -57,9 +57,12 @@ exposed through a new diagnostics module with credential material digested
 rather than emitted.
 
 The general Hostaway model is represented as two active gates: one
-per-account gate and one process-wide per-IP gate. The IP gate's effective
-budget is the minimum configured budget across currently loaded entries and is
-recomputed in place without clearing admissions. A request classifier preserves
+per-account gate and one process-wide per-IP gate. The account gate's effective
+budget is the minimum configured budget across active entries sharing the same
+account key. The IP gate's effective budget is the minimum configured budget
+across active entries, preserving a reloading entry's contribution until setup
+replaces it, and is recomputed in place without clearing admissions. A request
+classifier preserves
 the seam for future endpoint-specific counters: general endpoints use the
 general gates, while a documented endpoint-specific endpoint will use its own
 account bucket instead of the general pool.
@@ -130,7 +133,7 @@ assumption that it does; see "Assumptions carried, not resolved" below.
 | V. Pre-Commit Integrity (NON-NEGOTIABLE) | PASS | No `--no-verify`. ruff, ruff-format, mypy, interrogate, reuse-tool, markdownlint, codespell all run as normal. |
 | VI. Agent Co-Authorship & DCO (NON-NEGOTIABLE) | PASS | `git commit -s` plus the `Co-authored-by` trailer on every commit. |
 | VII. UX Consistency | PASS | The budget is a standard options-flow field with translated label, description, and error, following the existing `invalid_scan_interval` pattern. No entity naming or state-attribute change. Shed cycles keep entities available rather than flipping them unavailable — a deliberate UX choice (SC-005). |
-| VIII. Performance Requirements | PASS | This principle literally requires "the client MUST NOT exceed Hostaway's published rate limits"; the feature is the mechanism. Admission is O(log n) on a heap bounded by in-flight waiters, memory is bounded at 200 timestamps per gate, and an idle limiter costs zero wakeups (SC-008). No blocking call is introduced. |
+| VIII. Performance Requirements | PASS | This principle literally requires "the client MUST NOT exceed Hostaway's published rate limits"; the feature is the mechanism. Admission is O(log n) on a heap bounded by in-flight waiters, memory is bounded by each documented gate ceiling, and an idle limiter costs zero wakeups (SC-008). No blocking call is introduced. |
 | IX. Phased Development | PASS | Seven phases with explicit checkpoints, documented below and to be mirrored in `tasks.md`. The pure limiter lands and is proven before any HA wiring depends on it. |
 | X. Security & Credential Management (NON-NEGOTIABLE) | PASS | The limiter's account key is `CONF_CLIENT_ID` — half the credential pair. It is never logged, never in `__repr__`, and diagnostics emit only a truncated SHA-256 handle. No change to token handling. |
 
@@ -140,7 +143,8 @@ table is therefore empty.
 **Post-design re-check**: PASS. The design adds no new dependency, keeps the
 Hostaway API logic library-extractable and HA-free, preserves every existing
 coordinator, service, and sensor behaviour for installations below budget, and
-leaves the reactive retry layer untouched.
+preserves the reactive retry constants, jitter, and backoff curve while
+correcting Hostaway rate-limit header parsing.
 
 ## Project Structure
 
@@ -381,10 +385,14 @@ now decided them, so they are fixed inputs rather than open questions.
    torn down on true entry removal.
 6. `diagnostics.py` is added because FR-029 requires diagnostics and the
    integration has no diagnostics surface today.
-7. The process-wide IP budget is the minimum configured budget across loaded
-   config entries, recomputed in place without clearing admissions; transient
-   config-flow limiters do not participate.
-8. Scheduled fairness uses aging: 1.0 second or 20 consecutive interactive
+7. The process-wide IP budget is the minimum configured budget across active
+   config entries. A reload preserves the reloading entry's contribution
+   during unload until setup replaces it, so reload cannot raise capacity.
+   Transient config-flow limiters do not participate.
+8. The per-account budget is likewise the minimum configured budget across
+   active entries sharing the account key, recomputed in place without
+   clearing admissions; transient config-flow limiters do not participate.
+9. Scheduled fairness uses aging: 1.0 second or 20 consecutive interactive
    admissions before the oldest scheduled waiter must be served.
 
 ## Spec ambiguities and contradictions found

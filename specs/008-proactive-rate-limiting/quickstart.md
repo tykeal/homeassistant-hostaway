@@ -57,7 +57,7 @@ may only grow (SC-011).
                                ▼      ▼
                           httpx shared client  ──▶  Hostaway
                                │
-                      429 ─────┴──▶ limiter.note_rate_limited(applied_counter, retry_at)
+                      429 ─────┴──▶ limiter.note_rate_limited(applied_counter, retry_at, limit, remaining)
 ```
 
 Saturation splits by caller:
@@ -136,8 +136,12 @@ other loaded entry shares the account key.
 
 Equally: on an options change, call `limiter.configure(...)` on the
 **existing** instance. Never construct a new one. The shared IP gate uses the
-minimum configured budget across loaded entries and re-pumps waiters without
-clearing admissions. Config-flow validation limiters do not participate.
+minimum configured budget across active entries, and same-account entries use
+the minimum account budget across that account key. During reload, keep the
+unloading entry's previous contributions active until setup replaces them, so
+the unload half cannot raise capacity. Config-flow validation limiters do not
+participate. Recompute in place and re-pump waiters without clearing
+admissions.
 
 ---
 
@@ -165,12 +169,12 @@ endpoints consume their endpoint account bucket only.
 | FR-002 chokepoint, FR-004 never send | `client.py::_request` |
 | FR-003 don't wrap the shared httpx client | by omission — verify nothing touches `self._http` config |
 | FR-005 account keying, FR-008 lifetime | `__init__.py` registry + `async_remove_entry` |
-| FR-006 per-IP general gate | shared IP gate with minimum loaded-entry budget + README (Phase G) |
+| FR-006 per-IP general gate | shared IP gate with minimum active-entry budget, reload contribution preservation, and README (Phase G) |
 | FR-007 endpoint-specific seam, SC-014 | method/path classifier + selected `BudgetGate` objects |
 | FR-009 sliding window, FR-011 monotonic | `rate_limit.py::SlidingWindowGate` |
 | FR-010 default 180 | `api/const.py::DEFAULT_RATE_LIMIT_BUDGET` |
 | FR-012 retries re-acquire, SC-010 | acquisition **inside** the `for attempt` loop |
-| FR-013 retry preserved | `retry.py` unchanged; assert constants untouched |
+| FR-013 retry preserved | `retry.py` header parsing corrected; assert constants, jitter, and backoff curve untouched |
 | FR-014..017 suppression | gate-scoped `note_rate_limited` + `_pump()` |
 | FR-018..020 priority & interactive deadline | contextvar + priority heap with aging + `INTERACTIVE_POLICY` |
 | FR-021..024 shedding | coordinator base class with cycle-wide deadline |

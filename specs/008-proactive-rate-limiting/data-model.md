@@ -147,9 +147,9 @@ appended to them.
 
 | Method | Contract |
 |---|---|
-| `capacity_available(now)` | Pure predicate. MUST NOT mutate. MUST NOT block. |
+| `capacity_available(now)` | Logically read-only predicate. It MUST NOT block or change effective capacity, but MAY discard expired timestamps from its own deque before answering. |
 | `record(now)` | Called exactly once per admission, on every selected gate, only after **all** selected gates returned `True`. |
-| `next_available(now)` | Monotonic instant at which this gate could next admit, or `None` if it can admit now. |
+| `next_available(now)` | Logically read-only monotonic instant at which this gate could next admit, or `None` if it can admit now. It MAY discard expired timestamps before answering. |
 | `suppress_until(until)` | Extends this gate's suppression and notifies all limiters waiting on it. |
 
 **Validation rules**:
@@ -177,29 +177,38 @@ The one concrete gate. Implements the spec's **Request budget** entity.
 
 | Field | Type | Meaning |
 |---|---|---|
-| `_budget` | `int` | Admissions permitted per window. Default `180`; for the IP gate this is the minimum across loaded entries. |
-| `_window` | `float` | Window length, `10.0` seconds. **Not** operator-configurable (FR-034). |
+| `_budget` | `int` | Admissions permitted per window. Default `180` for general gates; for the IP and account gates this is the minimum across active entries for the relevant scope. |
+| `_max_budget` | `int` | Per-gate ceiling. General gates use `200`; endpoint gates use their documented ceiling, for example `400`. |
+| `_window` | `float` | Window length for this gate. General gates use `10.0`; endpoint gates use their documented value, for example `60.0` for conversations. |
 | `_admissions` | `deque[float]` | Monotonic timestamp per admission inside the current window |
+| `_synthetic_admissions` | `deque[float]` | Synthetic monotonic timestamps added only to reconcile lower server-reported `X-RateLimit-Remaining` values |
 
 **Invariants**:
 
-- `1 <= _budget <= 200` (FR-032). `200` is `RATE_LIMIT_CEILING`.
-- `_window == 10.0` always. There is no setter.
-- `len(_admissions) <= _budget` at all times, after pruning.
+- `1 <= _budget <= _max_budget`. General gates set `_max_budget` to
+  `RATE_LIMIT_CEILING` (`200`); endpoint-specific gates set it to the
+  documented endpoint ceiling, such as `30`, `400`, or `200`.
+- `_window > 0`. It is configured when the gate is created. General gates
+  always use `10.0`; the window length is still not operator-configurable
+  (FR-034).
+- `len(_admissions) + len(_synthetic_admissions)` may exceed `_budget` after
+  a budget reduction or server reconciliation, but while it does the gate has
+  no capacity and MUST NOT discard timestamps to fit the budget.
 - Timestamps are `time.monotonic()` values, never wall clock (FR-011).
 - The deque is pruned (`popleft` while `now - _admissions[0] >= _window`) at
   the start of every `capacity_available`, `record`, and `next_available`
-  call, so memory is bounded by `_budget` entries (max 200 floats).
+  call, so memory is bounded by `_budget` entries.
 
 **Operations**:
 
 | Operation | Effect |
 |---|---|
-| `capacity_available(now)` | prune, then `len(_admissions) < _budget` |
+| `capacity_available(now)` | prune, then test `len(_admissions) + len(_synthetic_admissions) < _budget`. This is logically read-only even though pruning may discard expired entries. |
 | `record(now)` | prune, then `append(now)` |
-| `next_available(now)` | prune; `None` if capacity, else `_admissions[0] + _window` |
-| `reconfigure(budget)` | validates range, sets `_budget`. **Does not touch `_admissions`.** Re-pumps all queues waiting on the gate. |
+| `next_available(now)` | prune; `None` if capacity, else `_admissions[0] + _window`. This is logically read-only even though pruning may discard expired entries. |
+| `reconfigure(budget)` | validates range against `_max_budget`, sets `_budget`. **Does not touch `_admissions`.** Re-pumps all queues waiting on the gate. |
 | `suppress_until(until)` | extends gate-scoped suppression and re-pumps all waiting limiters when it changes or expires. |
+| `reconcile(limit, remaining)` | applies Hostaway feedback for this gate only; see §8. |
 
 **`reconfigure` is the FR-008 / SC-012 guarantee.** An options change reloads
 the entry, and the reload must *not* clear the window. Lowering the budget
@@ -254,8 +263,8 @@ no idea the caller gave up. At most one slot is conservatively wasted.
 ## 7. `AccountRateLimiter`
 
 The per-account aggregate and request classifier. One instance per Hostaway
-account id (FR-005), sharing the process-wide IP gate object with other
-accounts.
+account id (FR-005), sharing the process-wide IP gate object and provider
+suppression state with other accounts.
 
 | Field | Type | Meaning |
 |---|---|---|
@@ -265,7 +274,7 @@ accounts.
 | `_endpoint_gates` | `dict[EndpointKey, SlidingWindowGate]` | future endpoint-specific buckets selected by classifier |
 | `_waiters` | `list[Waiter]` (heap) | pending acquisitions |
 | `_sequence` | `int` | monotonic waiter counter |
-| `_global_suppressed_until` | `float \| None` | provider-wide suppression ends |
+| `_provider_suppression` | `ProviderSuppression` | shared process-wide provider suppression state |
 | `_timer` | timer handle `\| None` | single armed wake-up |
 | `_clock` | `Callable[[], float]` | injected, defaults `time.monotonic` |
 | `_schedule` | timer hook | injected, defaults to the running loop's `call_later` |
@@ -275,7 +284,7 @@ accounts.
 [contracts/rate-limiter-interface.md](contracts/rate-limiter-interface.md)):
 
 - `async acquire() -> None`
-- `note_rate_limited(applied_counter: str | None, retry_at: float | None, method: str, path: str) -> None`
+- `note_rate_limited(applied_counter: str | None, retry_at: float | None, method: str, path: str, limit: int | None = None, remaining: int | None = None) -> None`
 - `configure(*, account_budget: int, effective_ip_budget: int) -> None`
 - `snapshot() -> LimiterSnapshot`
 
@@ -297,25 +306,29 @@ accounts.
 ```text
 while _waiters:
     now = _clock()
-    if _global_suppressed_until is not None and now < _global_suppressed_until:
-        arm timer at _global_suppressed_until ; return   # provider suppression
-    gates = classify(waiter.method, waiter.path)
+    candidate = select_next_waiter_with_aging(_waiters, now)
+    if candidate.future.done():   # cancelled between arrival and pump
+        remove candidate from heap
+        continue
+    if _provider_suppression.active(now):
+        arm timer at _provider_suppression.until ; return
+    gates = classify(candidate.method, candidate.path)
     suppressed_until = max(g.suppressed_until for g in gates)
     if suppressed_until is not None and now < suppressed_until:
         arm timer at suppressed_until ; return           # FR-014, FR-016
     if not all(g.capacity_available(now) for g in gates):
         arm timer at max(g.next_available(now)) ; return # FR-009
-    waiter = select_next_waiter_with_aging(_waiters, now)
-    if waiter.future.done():      # cancelled between arrival and pump
-        continue
+    remove candidate from heap
     for g in gates:
         g.record(now)             # conjunction: record into every gate
-    waiter.future.set_result(None)
+    candidate.future.set_result(None)
 ```
 
 Because suppression is tested inside `_pump()`, it applies to interactive
 waiters identically — FR-016 falls out of the structure rather than from a
-special case.
+special case. Candidate selection happens before classification, and the same
+candidate is capacity-checked and admitted. If its gates are blocked, it stays
+queued; the pump must not classify one waiter and then admit a different one.
 
 ---
 
@@ -333,15 +346,27 @@ per-account limiter.
 
 - `note_rate_limited()` **extends** the selected gate or provider-global
   suppression, never shortens it. Two 429s in flight must not let the second
-  one shorten the first one's backoff.
+  one shorten the first one's backoff. Provider suppression is stored in the
+  shared `ProviderSuppression` object, so a provider 429 observed by one
+  account immediately blocks all Hostaway limiters in the process.
 - Suppression applies to all priority classes (FR-016).
 - `account` suppresses that account's general gate; `ip` suppresses the shared
   process-wide IP gate; `endpoint` suppresses the classified endpoint bucket;
-  `provider` sets global suppression across all Hostaway limiters.
+  `provider` sets process-wide global suppression across all Hostaway limiters.
+- `X-RateLimit-Limit` updates only the affected gate's runtime ceiling. The
+  update is one-way downward: `effective_ceiling = min(configured_budget,
+  observed_limit)`. A server-reported limit MUST NOT raise capacity above an
+  operator-configured budget, and higher later values are ignored until an
+  explicit operator reconfiguration or restart resets the runtime ceiling.
+- `X-RateLimit-Remaining` reconciles only downward. If the server reports
+  fewer remaining requests than the gate currently believes are available,
+  the gate adds synthetic in-window admission timestamps at `now` until local
+  available capacity is no greater than the server value. It never removes
+  local admissions in response to a larger server remaining value.
 - Suppression clears implicitly by time comparison in `_pump()` — no reload,
   no restart (FR-017, SC-007).
-- Changing suppression on a shared gate re-pumps every limiter waiting on that
-  gate, including expiry wakeups.
+- Changing suppression on a shared gate or the provider suppression object
+  re-pumps every limiter waiting on that state, including expiry wakeups.
 
 **Call sites** (both inside `api/`, neither visible to API-method authors):
 
@@ -554,7 +579,8 @@ RequestContext (ContextVar) is set by:
 |---|---|
 | First entry for an account set up | created, registered |
 | Second entry, same `CONF_CLIENT_ID` | **shared**, not duplicated (FR-005) |
-| Options changed → entry reload | **survives**; account gate reconfigured in place and the shared IP gate recomputes the minimum across loaded entries. Windows are **not** reset. |
-| Entry unloaded | **survives** for account windows needed by reload; the shared IP gate recomputes its minimum from remaining loaded entries and re-pumps waiters |
-| Entry removed (`async_remove_entry`) | account limiter dropped iff no other loaded entry shares the account key; shared IP gate recomputes its minimum |
+| Options changed → entry reload | **survives**; account gate reconfigured in place from the minimum across active same-account entries, and the shared IP gate recomputes the minimum across active entries while preserving the reloading entry's previous contribution until setup replaces it. Windows are **not** reset. |
+| Entry unloaded for reload | **survives**; budget contributions remain active until replacement setup completes, so the unload half cannot raise account or IP capacity |
+| Entry truly unloaded or removed | contribution removed; account and IP minima recompute in place, and waiters are re-pumped |
+| Entry removed (`async_remove_entry`) | account limiter dropped iff no other active entry shares the account key; shared IP gate recomputes its minimum |
 | Home Assistant restart | gone; starts empty (explicitly out of scope — "Persisting limiter state across restarts") |

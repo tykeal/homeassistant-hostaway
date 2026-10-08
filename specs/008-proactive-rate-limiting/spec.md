@@ -471,18 +471,26 @@ suppressed for the indicated or inferred period.
   the same account share exactly one account budget. The account identity MUST
   be derived from the configured Hostaway account credential (`CONF_CLIENT_ID`,
   which is the Hostaway account id), not from the config entry id, title, or
-  object identity.
+  object identity. The effective account budget is the minimum configured
+  budget across all active config entries sharing that account key, recomputed
+  in place without clearing recorded admissions or resetting the sliding
+  window. All queues waiting on that account gate MUST be re-pumped after an
+  effective account-budget change. Transient config-flow validation limiters
+  MUST NOT participate in the account-budget minimum.
 - **FR-006**: The limiter MUST include a process-wide per-IP general budget
   shared by all Hostaway config entries in the running Home Assistant process.
   A general-endpoint request MUST be admitted only when **both** the
   per-account gate and the per-IP gate have headroom. The effective IP budget
-  is the minimum configured budget across all currently loaded config entries,
-  recomputed in place on setup, reload, unload, and entry removal. Recomputing
-  MUST NOT clear recorded admissions or reset the sliding window, and all
-  queues waiting on the shared IP gate MUST be re-pumped after a budget change.
-  Transient config-flow validation limiters MUST NOT participate in this
-  process-wide minimum. This supersedes the earlier per-account-only scope
-  decision, which was made against stale published figures.
+  is the minimum configured budget across all active config entries, recomputed
+  in place on setup, reload, unload, and entry removal. A reload MUST be
+  distinguished from a true unload/removal: the reloading entry's existing
+  budget contribution remains active during the unload half until setup
+  replaces it, so reload cannot temporarily raise the shared IP budget.
+  Recomputing MUST NOT clear recorded admissions or reset the sliding window,
+  and all queues waiting on the shared IP gate MUST be re-pumped after a
+  budget change. Transient config-flow validation limiters MUST NOT participate
+  in this process-wide minimum. This supersedes the earlier per-account-only
+  scope decision, which was made against stale published figures.
 - **FR-007**: The limiter MUST classify each request at the enforcement point
   using its HTTP method and path. General endpoints use the per-account
   general gate plus the process-wide per-IP general gate. Hostaway endpoints
@@ -529,17 +537,29 @@ suppressed for the indicated or inferred period.
   adds a layer; it does not remove one. Header parsing MUST be corrected to
   use Hostaway's documented `X-RateLimit-*` headers on 429 responses without
   treating `X-RateLimit-Retry-After` as a raw seconds value.
-- **FR-014**: When a 429 is received, the limiter MUST consume the documented
-  `X-RateLimit-*` headers when present and enter suppression on the affected
-  gate scope: `account` suppresses that account's general gate, `ip` suppresses
-  the shared process-wide IP gate, `endpoint` suppresses the relevant
-  endpoint-specific account bucket, and `provider` is treated as global
-  suppression for all Hostaway traffic from this integration. Suppression MUST
-  prevent further requests that would hit the affected gate while leaving
-  unrelated gates usable. Missing or unrecognized applied-counter values MUST
-  fall back conservatively to suppressing all gates applicable to the request.
-  Any limiter waiting on a shared gate whose suppression or configuration
-  changes MUST be notified and re-pumped.
+- **FR-014**: When a 429 is received, the limiter MUST consume all four
+  documented `X-RateLimit-*` headers when present and enter suppression on the
+  affected gate scope: `account` suppresses that account's general gate, `ip`
+  suppresses the shared process-wide IP gate, `endpoint` suppresses the
+  relevant endpoint-specific account bucket, and `provider` is treated as
+  process-wide global suppression for all Hostaway traffic from this
+  integration. Provider suppression MUST be held in shared process-wide state,
+  not on any one account limiter. Setting or expiring provider suppression
+  MUST notify and re-pump every limiter queue. Suppression MUST prevent further
+  requests that would hit the affected gate while leaving unrelated gates
+  usable. Missing or unrecognized applied-counter values MUST fall back
+  conservatively to suppressing all gates applicable to the request. Any
+  limiter waiting on a shared gate whose suppression or configuration changes
+  MUST be notified and re-pumped. `X-RateLimit-Limit` and
+  `X-RateLimit-Remaining` MUST reconcile only the affected gate: an observed
+  limit lowers that gate's runtime ceiling to `min(configured_budget, limit)`
+  and never raises it above the operator-configured value; an observed
+  remaining count lower than the local view is represented by synthetic
+  in-window admissions so local available capacity is no greater than the
+  server reports. Higher observed limits or remaining counts do not delete
+  local admissions. These one-way adjustments converge downward and cannot
+  oscillate during a runtime; explicit operator reconfiguration or restart is
+  required to raise a lowered runtime ceiling.
 - **FR-015**: If a 429 carries `X-RateLimit-Retry-After`, the value MUST be
   interpreted as a Unix timestamp and converted to a delay relative to current
   wall-clock time before being applied to the limiter and retry layer. It MUST
@@ -629,9 +649,10 @@ suppressed for the indicated or inferred period.
 
 #### Observability
 
-- **FR-025**: Every shed scheduled cycle MUST emit a log record at
-  warning level that names the coordinator and states rate limiting as the
-  cause.
+- **FR-025**: Every shed scheduled cycle MUST emit a named log record that
+  names the coordinator and states rate limiting as the cause, and MUST
+  increment a shed counter for diagnostics. Warning-level frequency is
+  governed entirely by FR-026.
 - **FR-026**: Repeated consecutive skips MUST be rate-limited in the log
   using a **300.0-second** cooldown (log the first occurrence, demote repeats
   within the cooldown, then emit periodic summaries) so the log remains usable
@@ -702,7 +723,8 @@ suppressed for the indicated or inferred period.
 - **IP gate**: The process-wide general budget representing this Home
   Assistant instance's outbound IP counter. It is shared across all Hostaway
   config entries in the process, uses the minimum configured budget across
-  loaded entries, and re-pumps all affected queues when reconfigured or
+  active entries, preserves a reloading entry's contribution until replacement
+  setup completes, and re-pumps all affected queues when reconfigured or
   suppressed.
 - **Endpoint classifier**: The extension point for Hostaway endpoints with
   separate documented counters. It maps method and path to either the general

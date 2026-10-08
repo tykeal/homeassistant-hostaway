@@ -146,18 +146,25 @@ admissions than the budget for either gate.
   `asyncio.Task`s created inside it.
 
 - [ ] T007 [P] [US1] Implement `SlidingWindowGate` with a monotonic
-  `deque[float]`, pruning at the head of `capacity_available`, `record`, and
-  `next_available`, plus `reconfigure(budget)` that validates `1 <= budget <=
-  200` and **does not touch `_admissions`** —
+  `deque[float]`, gate-specific `window_seconds` and `max_budget`, pruning at
+  the head of `capacity_available`, `record`, and `next_available`, plus
+  `reconfigure(budget)` that validates `1 <= budget <= max_budget` and
+  **does not touch `_admissions`**. General gates use a 10-second window and a
+  200 ceiling; endpoint gates can represent documented buckets such as
+  30/minute and 400/10 seconds. `capacity_available()` and
+  `next_available()` are logically read-only but may discard expired entries —
   `custom_components/hostaway/api/rate_limit.py`,
   `tests/api/test_rate_limit.py` — FR-009, FR-010, FR-011, FR-032, FR-034,
   data-model §5 — **Verify**: tests prove sliding (not tumbling) semantics
   across a window boundary; `len(_admissions) <= budget`; lowering the budget
-  below the current in-window count discards **no** timestamps; all time
-  decisions use the injected clock (a wall-clock jump changes nothing).
+  below the current in-window count discards **no** timestamps; a 30/60 gate
+  and a 400/10 gate are representable; all time decisions use the injected
+  clock (a wall-clock jump changes nothing).
 
 - [ ] T008 [P] [US1] Implement the `BudgetGate` protocol (all methods
-  synchronous and side-effect-free except `record`) and
+  synchronous; `capacity_available` and `next_available` are logically
+  read-only but may prune expired local timestamps; only `record` consumes new
+  capacity) and
   `classify_request(method, path)` selecting account-general + IP-general for
   general endpoints, with a registry seam for the three documented
   endpoint-specific buckets (`POST /v1/conversations/{id}/messages` 30/min,
@@ -174,15 +181,18 @@ admissions than the budget for either gate.
 - [ ] T009 [US1] [US3] Implement `AccountRateLimiter.__init__`,
   `async acquire(method, path)`, the `Waiter` record, the
   `(priority, sequence)` heap, and the synchronous `_pump()` admission
-  decision with FR-019 aging (oldest scheduled waiter wins after 1.0 s queued
-  **or** 20 interactive admissions while queued), single-timer arming, and
-  conjunction `record()` across all selected gates —
+  decision. `_pump()` must select the candidate first (honouring priority and
+  FR-019 aging), classify and capacity-check that same candidate, leave it
+  queued if blocked, and only then remove and admit it. Include single-timer
+  arming and conjunction `record()` across all selected gates —
   `custom_components/hostaway/api/rate_limit.py`,
   `tests/api/test_rate_limit.py` — FR-001 (admission half), FR-007, FR-019,
   SC-003, SC-008, SC-018, data-model §6–§7, contract §1 — **Verify**: tests
   assert an interactive waiter is served before a scheduled one; FIFO holds
   within a class; **SC-018** — sustained interactive load plus one scheduled
-  waiter admits the scheduled waiter once aging is met; **SC-008** — a
+  waiter admits the scheduled waiter once aging is met; a test with an aged
+  scheduled waiter whose gates differ from the next interactive waiter proves
+  the pump does not classify one waiter and admit another; **SC-008** — a
   below-budget `acquire()` arms **no** timer and performs no deliberate
   suspension; at most one timer is armed at a time; no lock is held across an
   `await` (a nested token-acquire-inside-data-acquire test must not deadlock);
@@ -213,35 +223,49 @@ admissions than the budget for either gate.
   **Depends on T009.**
 
 - [ ] T012 [US5] Implement `note_rate_limited(applied_counter, retry_at,
-  method, path)` with **gate-scoped** suppression: `account` → that account's
-  general gate, `ip` → the shared process-wide IP gate, `endpoint` → the
-  classified endpoint bucket, `provider` → global; missing/unknown values fall
-  back to suppressing every gate selected for the request. Convert `retry_at`
-  from a **Unix timestamp** against wall-clock time once, clamp to
+  method, path, limit=None, remaining=None)` with **gate-scoped** suppression:
+  `account` → that account's general gate, `ip` → the shared process-wide IP
+  gate, `endpoint` → the classified endpoint bucket, `provider` → shared
+  process-wide provider suppression; missing/unknown values fall back to
+  suppressing every gate selected for the request. Convert `retry_at` from a
+  **Unix timestamp** against wall-clock time once, clamp to
   `min(max(delay, 0.1), MAX_BACKOFF)`, and fall back to
   `DEFAULT_SUPPRESSION_SECONDS` (10.0). Suppression **extends, never
   shortens**, applies to interactive callers identically, clears by time
   comparison in `_pump()`, and re-pumps every limiter waiting on a changed
-  shared gate — `custom_components/hostaway/api/rate_limit.py`,
+  shared gate or provider state. Consume `X-RateLimit-Limit` and
+  `X-RateLimit-Remaining` by reconciling only the affected gate: lower the
+  runtime ceiling to `min(configured_budget, limit)` without raising above the
+  operator-configured budget, and add synthetic in-window admissions only when
+  needed to make local available capacity no greater than the server-reported
+  remaining count — `custom_components/hostaway/api/rate_limit.py`,
   `tests/api/test_rate_limit.py` — FR-014, FR-015, FR-016, FR-017, SC-007,
   data-model §8, contract §1 — **Verify**: **SC-007** — inject a 429 with
   `X-RateLimit-Applied: account` and a timestamp 5 s in the future; assert no
   admission on that gate for ≥5 s, that the **IP** gate still admits, that an
   interactive waiter is *also* blocked, and that normal admission resumes with
-  no reload. Also assert negative, zero, `NaN`, and `inf` timestamps are
-  handled without raising and never produce a ~1.8-billion-second delay.
-  **Depends on T009.**
+  no reload. Add a multi-account regression test proving a `provider` 429
+  observed through account A suppresses account B and that every affected
+  queue is re-pumped when the provider suppression is set and when it expires.
+  Also assert negative, zero, `NaN`, and `inf` timestamps are handled without
+  raising and never produce a ~1.8-billion-second delay; server-reported
+  larger limits or remaining counts do not raise capacity or delete local
+  admissions, so feedback cannot oscillate. **Depends on T009.**
 
 - [ ] T013 [US1] Implement `configure(*, account_budget, effective_ip_budget)`
-  raising `ValueError` outside `1..200`, applying the process-wide **minimum**
-  to the shared IP gate, preserving all in-window admissions, re-pumping every
-  queue on a changed gate, and being idempotent for unchanged values —
+  raising `ValueError` outside `1..200` for general gates, applying the
+  effective account budget (minimum across active same-account entries) to the
+  account gate and the process-wide **minimum** to the shared IP gate,
+  preserving all in-window admissions, re-pumping every queue on a changed
+  gate, and being idempotent for unchanged values —
   `custom_components/hostaway/api/rate_limit.py`,
   `tests/api/test_rate_limit.py` — FR-006, FR-008, FR-032, SC-012, contract §1
   — **Verify**: tests assert `configure()` after recorded admissions leaves
   `admitted_in_window` unchanged, that waiters blocked under the old budget are
-  re-pumped when it rises, and that two limiters sharing one IP gate observe
-  each other's admissions. **Depends on T009.**
+  re-pumped when it rises, that two limiters sharing one IP gate observe each
+  other's admissions, and that two entries sharing one account key use the
+  lower configured account budget rather than last-writer-wins. **Depends on
+  T009.**
 
 - [ ] T014 [P] [US4] Implement `LimiterStats`, `GateSnapshot`,
   `LimiterSnapshot`, `snapshot()` (pure, prunes first), and `note_shed()` —
@@ -302,16 +326,19 @@ limiter-specific code and show its traffic is limited (SC-009).
   on 429 responses; call `limiter.note_rate_limited(...)` in the `429` branch
   **before** the retry-or-raise decision; replace the standard `Retry-After`
   read in `api/retry.py::_parse_retry_after` and `api/auth.py:164-169` with the
-  timestamp conversion, guarding negative and non-finite values —
+  timestamp conversion, guarding negative and non-finite values. Pass `Limit`
+  and `Remaining` into the limiter feedback contract so the affected gate can
+  converge downward to the server's view without ever exceeding the configured
+  budget —
   `custom_components/hostaway/api/client.py`,
   `custom_components/hostaway/api/retry.py`,
   `custom_components/hostaway/api/auth.py`, `tests/api/test_client.py` —
   FR-013, FR-014, FR-015 — **Verify**: tests assert `MAX_RETRIES`,
   `MAX_BACKOFF`, and the jittered backoff **curve** are unchanged (FR-013);
   a timestamp 5 s out produces a ~5 s delay, never ~1.8e9 s; a missing header
-  yields the 10.0 s default. **See "Owner decisions still needed", item 1 —
-  `plan.md` lists `retry.py` as UNCHANGED while FR-013 and the brief require
-  this fix.** **Depends on T012, T016.**
+  yields the 10.0 s default; observed `Limit` and `Remaining` adjust only the
+  affected gate and never raise an operator-configured budget. **Depends on
+  T012, T016.**
 
 - [ ] T019 [US1] Add the second enforcement point: optional `limiter`
   parameter on `HostawayTokenManager`, `await limiter.acquire(...)` before
@@ -368,27 +395,34 @@ admits no extra budget in the 10 s spanning it (SC-012).
   falsy after the last entry unloads — the trap in quickstart §4.
 
 - [ ] T023 Build the limiter registry in `async_setup_entry`: create or reuse
-  an `AccountRateLimiter` keyed by `CONF_CLIENT_ID`, share the process-wide IP
-  gate, and inject it into both `HostawayApiClient` and
+  an `AccountRateLimiter` keyed by `CONF_CLIENT_ID`, compute the effective
+  account budget as the minimum across active entries sharing that key, share
+  the process-wide IP gate, and inject it into both `HostawayApiClient` and
   `HostawayTokenManager` — `custom_components/hostaway/__init__.py`,
   `tests/test_init.py` — FR-005, FR-008 — **Verify**: two entries with the
-  same client id share **one** limiter object; two entries with different
-  client ids get two account limiters but the **same** IP gate object.
+  same client id share **one** limiter object and the lower account budget;
+  two entries with different client ids get two account limiters but the
+  **same** IP gate object.
   **Depends on T016, T019, T022.**
 
 - [ ] T024 Implement lifecycle: on options change/reload call
   `configure()` on the **existing** limiter (never construct a new one),
-  recompute the IP gate budget as the **minimum across currently loaded
-  entries** on setup/reload/unload/removal **without clearing admissions**,
-  keep the registry alive through `async_unload_entry`, and add
-  `async_remove_entry` dropping the account limiter only when no other loaded
-  entry shares the key — `custom_components/hostaway/__init__.py`,
-  `tests/test_init.py` — FR-006, FR-008, SC-012 — **Verify**: **SC-012** —
-  record admissions, reload the entry, and assert the number admissible in the
-  10 s spanning the reload did **not** increase; assert transient config-flow
-  validation limiters do **not** participate in the IP minimum; assert waiters
-  on the IP gate are re-pumped after a minimum change.
-  **Depends on T013, T023.**
+  recompute the account budget as the **minimum across active entries sharing
+  the account key** and the IP gate budget as the **minimum across active
+  entries** on setup/reload/unload/removal **without clearing admissions**.
+  Distinguish reload from true unload/removal by preserving the reloading
+  entry's previous account and IP contributions during the unload half until
+  setup replaces them. Keep the registry alive through `async_unload_entry`,
+  and add `async_remove_entry` dropping the account limiter only when no other
+  active entry shares the key — `custom_components/hostaway/__init__.py`,
+  `tests/test_init.py` — FR-005, FR-006, FR-008, SC-012 — **Verify**:
+  **SC-012** — record admissions, reload the entry, and assert the number
+  admissible in the 10 s spanning the reload did **not** increase; add a
+  regression test with two entries where the reloading entry has the lower
+  budget and the unload half does not temporarily raise the shared IP or
+  same-account budget; assert transient config-flow validation limiters do
+  **not** participate in either minimum; assert waiters on changed gates are
+  re-pumped after a minimum change. **Depends on T013, T023.**
 
 - [ ] T025 Set the interactive `RequestContext` in exactly four structural
   places: the single service-handler binder, the two config-flow validation
@@ -434,9 +468,10 @@ and assert the cycle is skipped, logged, data preserved, entities available.
   `_last_shed_log`, and `_SHED_LOG_COOLDOWN_SECONDS = 300.0`. Its
   `_async_update_data` opens a scheduled (or first-refresh) context, calls the
   subclass `_async_fetch_data()`, and on `HostawayRateLimitShedError`
-  **returns `self.data`**, calls `limiter.note_shed()`, and logs per the
-  cooldown rule (WARNING first/after cooldown with the coordinator name and
-  "rate limiting"; DEBUG within cooldown) —
+  **returns `self.data`**, calls `limiter.note_shed()`, increments the
+  per-coordinator shed counter, and logs a named record per the cooldown rule
+  (WARNING first/after cooldown with the coordinator name and "rate limiting";
+  DEBUG within cooldown) —
   `custom_components/hostaway/coordinator.py`, `tests/test_coordinator.py` —
   FR-021, FR-022, FR-023, FR-024, FR-025, FR-026, SC-005, SC-006, SC-016,
   data-model §10, contract §6 — **Verify**: `async_set_updated_data` appears
@@ -763,20 +798,14 @@ to at least one task.
 These are the only items the artifacts leave genuinely open. None blocks
 starting Phase 1.
 
-1. **`plan.md` lists `api/retry.py` as UNCHANGED, but FR-013 and the
-   implementation brief both require fixing
-   `api/retry.py::_parse_retry_after`** (and `api/auth.py:164-169`) to stop
-   reading a standard `Retry-After` header Hostaway does not send. T018 assumes
-   the fix lands and that "unchanged" means the **retry constants and backoff
-   curve**, not the file. Confirm that reading.
-2. **OQ-001 remains open** (T039): whether `POST /v1/accessTokens` counts
+1. **OQ-001 remains open** (T039): whether `POST /v1/accessTokens` counts
    against a bucket. The conservative assume-it-counts stance stands; someone
    must own asking Hostaway support or observing live headers.
-3. **FR-022 offers two behaviours and the spec does not choose.** The plan
+2. **FR-022 offers two behaviours and the spec does not choose.** The plan
    takes "abandon the cycle leaving prior data intact"; T028 implements that.
    Confirm the alternative (publishing last-known values per unreached
    listing, which would interact with feature 007's write-generation
    preservation) is not wanted.
-4. **`checklists/requirements.md` has two items deliberately unchecked**
+3. **`checklists/requirements.md` has two items deliberately unchecked**
    pending a human re-review of the amended design. T041 ticks them only if
    that review passes — it is a human gate, not an agent one.

@@ -39,7 +39,13 @@ class AccountRateLimiter:
 
     async def acquire(self, method: str, path: str) -> None: ...
     def note_rate_limited(
-        self, applied_counter: str | None, retry_at: float | None, method: str, path: str
+        self,
+        applied_counter: str | None,
+        retry_at: float | None,
+        method: str,
+        path: str,
+        limit: int | None = None,
+        remaining: int | None = None,
     ) -> None: ...
     def note_shed(self) -> None: ...
     def configure(self, *, account_budget: int, effective_ip_budget: int) -> None: ...
@@ -77,14 +83,15 @@ spent queued. `HostawayRateLimitWaitTimeout`'s message MUST name rate limiting
 as the cause in operator-readable terms (FR-020: "explicit, actionable error
 identifying rate limiting as the cause").
 
-### `note_rate_limited(applied_counter, retry_at) -> None`
+### `note_rate_limited(applied_counter, retry_at, ..., limit, remaining) -> None`
 
 `applied_counter` is Hostaway's documented `X-RateLimit-Applied` value
 (`endpoint`, `account`, `ip`, or `provider`) when present. `retry_at` is the
-`X-RateLimit-Retry-After` Unix timestamp when present. `method` and `path` are
-used to find the affected endpoint bucket when `applied_counter == "endpoint"`
-and to find the conservative fallback gates when the value is absent or
-unknown.
+`X-RateLimit-Retry-After` Unix timestamp when present. `limit` and `remaining`
+come from `X-RateLimit-Limit` and `X-RateLimit-Remaining`. `method` and
+`path` are used to find the affected endpoint bucket when
+`applied_counter == "endpoint"` and to find the conservative fallback gates
+when the value is absent or unknown.
 
 | Behaviour | Requirement |
 |---|---|
@@ -92,9 +99,14 @@ unknown.
 | MUST clamp the converted delay to the same sane bound as the retry layer, with `MAX_BACKOFF` (`30.0`) as the ceiling | FR-015, SC-007 |
 | With no usable timestamp, MUST suppress for `DEFAULT_SUPPRESSION_SECONDS` (`10.0`) | FR-015 |
 | MUST use `applied_counter` to suppress the affected gate: account, shared IP, endpoint bucket, or provider-global | FR-014 |
+| MUST hold provider-global suppression in process-wide shared state, not on one account limiter | FR-014 |
 | MUST fall back conservatively to all gates selected for the request when the applied counter is missing or unknown | FR-014 |
+| MUST lower only the affected gate's runtime ceiling when `limit` is usable, using `min(configured_budget, limit)` | FR-014 |
+| MUST NOT let server-reported `limit` raise capacity above the operator-configured budget | FR-014, FR-032 |
+| MUST reconcile `remaining` only downward by adding synthetic in-window admissions when local availability is higher than the server-reported value | FR-014 |
+| MUST NOT remove local admissions or raise the runtime ceiling in response to larger `remaining` or `limit` values, preventing oscillation | FR-014 |
 | MUST extend, never shorten, an active suppression | concurrency safety |
-| MUST re-pump all limiters waiting on a shared gate whose suppression changes or expires | FR-014 |
+| MUST re-pump all limiters waiting on a shared gate or provider suppression whose state changes or expires | FR-014 |
 | MUST clear automatically on expiry with no reload or restart | FR-017, SC-007 |
 | MUST increment `rate_limited_total` and the applied-counter count when known | FR-029 |
 
@@ -108,7 +120,9 @@ Called by a coordinator that has decided to shed. Increments the integration-wid
 | Behaviour | Requirement |
 |---|---|
 | MUST raise `ValueError` for either budget `< 1` or `> 200` | FR-032 |
-| MUST apply account budget to this account gate and the process-wide minimum to the shared IP gate | FR-006 |
+| MUST apply the effective account budget, computed as the minimum across active entries sharing the account key, to this account gate | FR-005 |
+| MUST apply the process-wide minimum to the shared IP gate | FR-006 |
+| MUST preserve a reloading entry's prior contribution during the unload half of reload until setup replaces it | FR-006, SC-012 |
 | MUST NOT clear any in-window admission record | FR-008, SC-012 |
 | MUST re-pump all queues waiting on changed gates | FR-006 |
 | MUST be idempotent for unchanged values | reload safety |
@@ -137,7 +151,7 @@ def classify_request(method: str, path: str) -> tuple[BudgetGate, ...]: ...
 | Behaviour | Requirement |
 |---|---|
 | All methods MUST be synchronous and non-blocking | R-012 |
-| `capacity_available` MUST be side-effect free | correctness of the conjunction |
+| `capacity_available` and `next_available` MUST be logically read-only; they may discard expired local timestamps but must not change effective capacity or block | correctness of the conjunction |
 | General requests MUST select account-general and IP-general gates | FR-007 |
 | Documented endpoint-specific requests MUST select their endpoint bucket instead of the general gates | FR-007 |
 | Admission MUST be the conjunction of selected gates | FR-007 |
@@ -200,7 +214,7 @@ Then   its request is not sent until budget is available
 | The recursive re-entry from `_handle_forbidden_response` MUST re-acquire | FR-012 |
 | MUST call `limiter.note_rate_limited(...)` in the `429` branch before deciding to retry or raise | FR-014 |
 | MUST NOT wrap, subclass, replace, or reconfigure the injected `httpx.AsyncClient` | FR-003 |
-| MUST preserve the existing retry constants and backoff curve unchanged | FR-013 |
+| MUST preserve the existing retry constants, jitter, and backoff curve unchanged while correcting Hostaway header parsing | FR-013 |
 | The limiter MUST be optional in the constructor (`limiter: AccountRateLimiter \| None = None`), defaulting to unlimited, so existing unit tests construct a client without one | SC-011 |
 
 **Logging** (FR-027, FR-028):

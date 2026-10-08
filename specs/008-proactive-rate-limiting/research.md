@@ -348,7 +348,8 @@ conditional sprinkled through the limiter. Two fields in one immutable
 ## R-009: 429 feedback and suppression
 
 **Decision**: `_request`'s existing 429 branch calls
-`limiter.note_rate_limited(applied_counter, retry_at, method, path)` before
+`limiter.note_rate_limited(applied_counter, retry_at, method, path, limit,
+remaining)` before
 deciding whether to retry or raise. `retry_at` comes from Hostaway's
 `X-RateLimit-Retry-After` Unix timestamp. The implementation converts it to a
 delay relative to current wall-clock time, clamps that delay with
@@ -356,9 +357,16 @@ delay relative to current wall-clock time, clamps that delay with
 `X-RateLimit-Applied`: account suppresses the account general gate, IP
 suppresses the shared process-wide IP gate, endpoint suppresses the classified
 endpoint bucket, and provider suppresses all Hostaway traffic from this
-integration. Missing or unusable header data falls back conservatively to all
-gates selected for that request for 10.0 seconds. `_pump()` admits nobody for
-a suppressed selected gate and arms a `call_later` at the expiry instant.
+integration through shared process-wide provider state. Missing or unusable
+header data falls back conservatively to all gates selected for that request
+for 10.0 seconds. `X-RateLimit-Limit` and `X-RateLimit-Remaining` reconcile
+only the affected gate: `Limit` can lower that gate's runtime ceiling to
+`min(configured_budget, limit)` but can never raise it above the
+operator-configured value, and `Remaining` can add synthetic in-window
+admissions to reduce local availability but can never remove local admissions.
+Those one-way adjustments converge downward and avoid oscillation. `_pump()`
+admits nobody for a suppressed selected gate and arms a `call_later` at the
+expiry instant.
 
 **Rationale**:
 
@@ -374,9 +382,10 @@ a suppressed selected gate and arms a `call_later` at the expiry instant.
   `HostawayTokenManager._request_token`'s 429 branch, which raises
   `HostawayRateLimitError` directly. Verified by reading `auth.py`.
 - Clearing is implicit: `_pump()` compares `monotonic()` against each selected
-  gate's suppression deadline and the provider-global deadline, so suppression
-  expires with no reload and no restart (FR-017, SC-007). A changed shared
-  gate suppression re-pumps all limiters waiting on that gate.
+  gate's suppression deadline and the shared provider-global deadline, so
+  suppression expires with no reload and no restart (FR-017, SC-007). A
+  changed shared gate or provider suppression re-pumps all limiters waiting on
+  that state.
 
 **`DEFAULT_SUPPRESSION_SECONDS` is fixed at 10.0 seconds.** This owner
 decision equals one full documented general window — the shortest interval
@@ -417,9 +426,14 @@ a server 429.
 `entry.data[CONF_CLIENT_ID]`, plus one shared process-wide IP gate, stored
 under its **own** `hass.data` key (`DATA_RATE_LIMITERS =
 f"{DOMAIN}_rate_limiters"`), created lazily, and torn down only in a new
-`async_remove_entry` hook. The effective IP budget is recomputed in place as
-the minimum configured budget across currently loaded config entries;
-config-flow validation limiters do not participate in this minimum.
+`async_remove_entry` hook. The effective account budget is recomputed in
+place as the minimum configured budget across active entries sharing the
+account key. The effective IP budget is recomputed in place as the minimum
+configured budget across active config entries. During a reload, the unloading
+entry is marked reloading and its prior contribution remains active until
+replacement setup publishes the new contribution, so the unload half cannot
+transiently raise either minimum. Config-flow validation limiters do not
+participate in either minimum.
 
 **Rationale**:
 
@@ -437,14 +451,20 @@ config-flow validation limiters do not participate in this minimum.
   would reset the window and let a reload admit a second full budget inside
   the same 10 seconds — exactly what FR-008 and SC-012 forbid. The integration
   has no `async_remove_entry` today; one must be added. It should drop the
-  limiter only when no other *loaded* entry shares the same account key.
+  limiter only when no other *active* entry shares the same account key.
+- **Reload must be distinguished from true unload/removal.** During reload,
+  the entry's existing account and IP budget contributions remain active until
+  the setup half replaces them. A true unload or removal removes the
+  contribution and recomputes minima. This prevents the unload half of reload
+  from temporarily raising the shared IP budget or a shared account budget.
 - **Option changes must reconfigure in place, never recreate.** The existing
   `_async_update_listener` reloads the entry on any option change. On setup,
   `async_setup_entry` must call `limiter.configure(...)` on the
   already-registered instance rather than constructing a new one, for the same
-  FR-008/SC-012 reason. The account gate receives that entry's configured
-  budget; the shared IP gate receives the recomputed process-wide minimum.
-  Neither reconfiguration clears admissions, and both re-pump affected queues.
+  FR-008/SC-012 reason. The account gate receives the minimum configured
+  budget across active entries sharing that account key; the shared IP gate
+  receives the recomputed process-wide minimum. Neither reconfiguration clears
+  admissions, and both re-pump affected queues.
 
 **Accepted minor residue**: config-flow validation for a brand-new account
 creates a registry entry for an account that may never become a config entry
