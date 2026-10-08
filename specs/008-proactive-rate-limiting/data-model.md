@@ -312,14 +312,25 @@ suppression state with other accounts.
 ```text
 while _waiters:
     now = _clock()
+
+    # Expired waiters are resolved FIRST, unconditionally. Without this the
+    # timer wakes at an already-elapsed deadline, re-arms at that same
+    # instant and spins in a zero-delay callback loop.
+    for waiter in list(_waiters):
+        if waiter.future.done():      # cancelled between arrival and pump
+            remove waiter from heap
+            continue
+        if waiter.deadline is not None and now >= waiter.deadline:
+            remove waiter from heap
+            waiter.future.set_exception(waiter.timeout_exception())
+    if not _waiters:
+        return
+
     wake_deadlines = collect_queued_waiter_deadlines(_waiters)
     if _provider_suppression.active(now):
         arm shared timer at earliest(_provider_suppression.until, wake_deadlines)
         return
     for candidate in ordered_waiters_with_aging(_waiters, now):
-        if candidate.future.done():   # cancelled between arrival and pump
-            remove candidate from heap
-            continue
         gates = classify(candidate.method, candidate.path)
         suppressed_until = max(g.suppressed_until for g in gates)
         if suppressed_until is not None and now < suppressed_until:
@@ -336,6 +347,15 @@ while _waiters:
     arm shared timer at earliest remembered blocked wake-up or waiter deadline
     return
 ```
+
+Expired waiters are resolved before suppression is examined and before any
+capacity scan, so a deadline that elapses while a gate is still blocked
+produces the required timeout — `HostawayRateLimitShedError` for a scheduled
+waiter, `HostawayRateLimitWaitTimeout` for an interactive one — rather than an
+immediate re-arm. The armed timer is therefore always strictly in the future:
+every remaining waiter has `deadline > now`, and every remembered blocked
+wake-up is a suppression expiry or `next_available()` value that is itself in
+the future.
 
 Because suppression is tested inside `_pump()`, it applies to interactive
 waiters identically — FR-016 falls out of the structure rather than from a

@@ -220,7 +220,11 @@ admissions than the budget for either gate.
   receives a fresh 30 s or 2 s wait**; a scheduled waiter queued behind a
   10-second capacity block raises `HostawayRateLimitShedError` exactly at its
   2-second deadline, proving the shared timer wakes for waiter deadlines and
-  not only for capacity or suppression expiry. **Depends on T009.**
+  not only for capacity or suppression expiry. `_pump()` MUST resolve expired
+  waiters **before** the provider-suppression early return and before any
+  capacity scan; a test asserts that a deadline elapsing while a gate is still
+  blocked raises once and does **not** spin — count fake-clock timer arms and
+  prove no zero-delay re-arm occurs. **Depends on T009.**
 
 - [ ] T011 [US1] Handle waiter cancellation and timeout removal: a waiter
   removed before its future resolved consumes **no** capacity; a waiter whose
