@@ -662,9 +662,12 @@ suppressed for the indicated or inferred period.
 #### Observability
 
 - **FR-025**: Every shed scheduled cycle MUST emit a named log record that
-  names the coordinator and states rate limiting as the cause, and MUST
-  increment a shed counter for diagnostics. Warning-level frequency is
-  governed entirely by FR-026.
+  identifies the coordinator and states rate limiting as the cause, and MUST
+  increment a shed counter for diagnostics. The coordinator MUST be identified
+  by a fixed label (`listings`, `reservations`, `custom_fields`) and MUST NOT
+  be identified by the generated coordinator name, which embeds the config
+  entry `unique_id` and is therefore credential material. Warning-level
+  frequency is governed entirely by FR-026.
 - **FR-026**: Repeated consecutive skips MUST be rate-limited in the log
   using a **300.0-second** cooldown (log the first occurrence, demote repeats
   within the cooldown, then emit periodic summaries) so the log remains usable

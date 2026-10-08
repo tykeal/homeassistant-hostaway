@@ -462,7 +462,13 @@ admits no extra budget in the 10 s spanning it (SC-012).
   and data requests acquire budget during config flow. Additional tests cover
   the existing-entry path reusing the shared limiter and the new-account path
   using a transient limiter that does **not** change the effective account or
-  IP minima. **Depends on T016, T019, T022, T023, T025.**
+  IP minima. The transient limiter MUST still share the **process-wide IP
+  gate**: it is excluded from the budget *minima* only, never given a private
+  IP gate, or config-flow requests would bypass admissions already consumed by
+  other accounts. **Verify** this by asserting the combined IP admission
+  history, not merely that the minima are unchanged — a config-flow request
+  made while another account has saturated the IP gate must wait.
+  **Depends on T016, T019, T022, T023, T025.**
 
 - [ ] T026 [US3] Audit every handler that catches `HostawayRateLimitError`
   and insert an earlier `except HostawayRateLimitWaitTimeout:` that re-raises
@@ -499,15 +505,20 @@ and assert the cycle is skipped, logged, data preserved, entities available.
   subclass `_async_fetch_data()`, and on `HostawayRateLimitShedError`
   **returns `self.data`**, calls `limiter.note_shed()`, increments the
   per-coordinator shed counter, and logs a named record per the cooldown rule
-  (WARNING first/after cooldown with the coordinator name and "rate limiting";
-  DEBUG within cooldown) —
+  (WARNING first/after cooldown, then DEBUG within cooldown). The record MUST
+  identify the coordinator by the fixed `listings`/`reservations`/
+  `custom_fields` label, **never** by `self.name`: the generated coordinator
+  names embed `entry.unique_id`, which is `CONF_CLIENT_ID`, so logging the
+  generated name would leak the credential —
   `custom_components/hostaway/coordinator.py`, `tests/test_coordinator.py` —
   FR-021, FR-022, FR-023, FR-024, FR-025, FR-026, SC-005, SC-006, SC-016,
   data-model §10, contract §6 — **Verify**: `async_set_updated_data` appears
   **nowhere** in the shed path (`rg async_set_updated_data
   custom_components/hostaway/coordinator.py` returns nothing); a shed does not
   publish a partial dataset and does not retry immediately or accumulate
-  backlog. **Depends on T004, T010.**
+  backlog; a caplog assertion proves the emitted record contains the fixed
+  label and does **not** contain `entry.data[CONF_CLIENT_ID]`.
+  **Depends on T004, T010.**
 
 - [ ] T028 [US2] Adapt the listings and reservations coordinators: rename each
   existing `_async_update_data` body to `_async_fetch_data`, inherit the base,
