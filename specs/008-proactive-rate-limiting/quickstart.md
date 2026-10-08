@@ -71,7 +71,7 @@ Saturation splits by caller:
 
 ---
 
-## Five traps that will bite you
+## Eight traps that will bite you
 
 Each of these is a silent-correctness failure, not a crash. They are in the
 plan and the data model too, repeated here because they are the ones easiest
@@ -161,11 +161,19 @@ general limit. Classify by method/path inside the enforcement point: general
 requests consume account-general plus IP-general; future documented special
 endpoints consume their endpoint account bucket only.
 
+### 8. Config-flow helpers need real limiter injection
+
+`_validate_credentials` and `_fetch_listings` construct `HostawayTokenManager`
+and `HostawayApiClient` directly. Setting an interactive context is not enough:
+those helpers must also pass a limiter into both objects. Reuse the shared
+limiter when a config entry for the account already exists; otherwise use a
+transient validation limiter that does not contribute to shared budget minima.
+
 ## Where each requirement lands
 
 | Requirement | Lands in |
 |---|---|
-| FR-001 coverage incl. token | `client.py::_request` + `auth.py::_request_token` |
+| FR-001 coverage incl. token and config flow | `client.py::_request` + `auth.py::_request_token` + limiter injection in config-flow helpers |
 | FR-002 chokepoint, FR-004 never send | `client.py::_request` |
 | FR-003 don't wrap the shared httpx client | by omission — verify nothing touches `self._http` config |
 | FR-005 account keying, FR-008 lifetime | `__init__.py` registry + `async_remove_entry` |

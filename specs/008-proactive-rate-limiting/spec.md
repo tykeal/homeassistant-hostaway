@@ -389,15 +389,19 @@ suppressed for the indicated or inferred period.
 **Acceptance Scenarios**:
 
 1. **Given** a 429 carrying `X-RateLimit-Retry-After`, **When** it is observed,
-   **Then** no further requests are admitted until that interval has elapsed.
+   **Then** no further requests that would hit the affected applied counter
+   are admitted until that interval has elapsed, while unrelated gates remain
+   usable according to `X-RateLimit-Applied`.
 2. **Given** a 429 with no usable `X-RateLimit-Retry-After`, **When** it is
    observed, **Then** admission is suppressed for a bounded, conservative default interval.
 3. **Given** a suppression period is active, **When** an interactive call
    arrives, **Then** it waits for the suppression to clear rather than bypassing
    it — the server's "no" outranks the interactive priority ordering.
 4. **Given** suppression has elapsed with no further 429s, **When** normal
-   operation resumes, **Then** the limiter returns to its configured budget
-   without requiring a restart or reload.
+   operation resumes, **Then** the affected gate returns to its current
+   effective runtime ceiling without requiring a restart or reload. A lower
+   server-reported limit that already reduced the runtime ceiling remains in
+   force until explicit reconfiguration or restart.
 
 ---
 
@@ -451,7 +455,12 @@ suppressed for the indicated or inferred period.
   MUST acquire rate-limit budget before being sent. This includes scheduled
   coordinator refreshes, paginated continuation requests, user-triggered
   service calls, authentication/token requests, connection tests performed
-  during config flow, and retry re-issues.
+  during config flow, listing fetches performed during config flow, and retry
+  re-issues. Config-flow helpers MUST inject a limiter into both the token
+  manager and API client they construct. If an active config entry for the
+  account already exists, validation MUST reuse that account's shared limiter;
+  otherwise it MUST use a transient validation limiter that is excluded from
+  the shared account and IP budget-minimum calculations.
 - **FR-002**: Enforcement MUST occur at the integration's HTTP chokepoints:
   `HostawayApiClient._request` for data traffic and
   `HostawayTokenManager._request_token` for token traffic while OQ-001 remains
@@ -570,7 +579,10 @@ suppressed for the indicated or inferred period.
   ones. A server-issued `X-RateLimit-Retry-After` outranks the integration's
   internal priority ordering.
 - **FR-017**: Suppression MUST clear automatically once elapsed, returning the
-  limiter to its configured budget with no reload or restart required.
+  affected gate to its current effective runtime ceiling with no reload or
+  restart required. Suppression expiry MUST NOT raise a gate whose runtime
+  ceiling was lowered by `X-RateLimit-Limit`; explicit operator
+  reconfiguration or restart is required to raise that lowered ceiling.
 
 #### Priority, shedding, and queueing
 

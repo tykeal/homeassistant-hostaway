@@ -98,7 +98,7 @@ Public API v1.
 **Performance Goals**: Never knowingly exceed 180 admitted requests in any
 rolling 10-second window per account (SC-001). Below budget, add no deliberate
 delay and no deliberate suspension while capacity exists — an idle limiter
-arms no timers (SC-008). The window deque is bounded at 200 floats per gate.
+arms no timers (SC-008). The gate timestamp deques are bounded by each documented gate ceiling (200 floats across real and synthetic admissions for general gates).
 
 **Constraints**: All I/O async; no blocking of the HA event loop. The limiter
 module must import nothing from `homeassistant` (Constitution II, the
@@ -128,13 +128,13 @@ assumption that it does; see "Assumptions carried, not resolved" below.
 |---|---|---|
 | I. Code Quality & Testing (NON-NEGOTIABLE) | PASS | Every unit is TDD-able with an injected clock and timer hook, so the limiter's window, priority, suppression, and cancellation behaviour get failing tests first with no `asyncio.sleep`. Docstrings on every new function and class for interrogate's 100% gate; full type annotations for mypy. |
 | II. API Client Design | PASS | `api/rate_limit.py` imports nothing from `homeassistant`, matching the `api/custom_fields.py` precedent. Enforcement is in the client layer, and the HA-aware registry and lifecycle stay in `__init__.py`. Constitution II already requires "rate limiting awareness"; this feature is the proactive half of it. |
-| III. Atomic Commit Discipline (NON-NEGOTIABLE) | PASS | Seven phases, each a self-contained, green increment. The removal of the stale `RATE_LIMIT_PER_IP` / `RATE_LIMIT_PER_ACCOUNT` constants is its own commit. `tasks.md` updates stay separate from code commits. |
+| III. Atomic Commit Discipline (NON-NEGOTIABLE) | PASS | Eight increments (a foundational setup phase plus phases A–G), each a self-contained, green increment. The removal of the stale `RATE_LIMIT_PER_IP` / `RATE_LIMIT_PER_ACCOUNT` constants is its own commit. `tasks.md` updates stay separate from code commits. |
 | IV. Licensing & Attribution (NON-NEGOTIABLE) | PASS | Two new Python files (`api/rate_limit.py`, `diagnostics.py`) plus new test modules get the inline SPDX header; new markdown carries the block-comment form. |
 | V. Pre-Commit Integrity (NON-NEGOTIABLE) | PASS | No `--no-verify`. ruff, ruff-format, mypy, interrogate, reuse-tool, markdownlint, codespell all run as normal. |
 | VI. Agent Co-Authorship & DCO (NON-NEGOTIABLE) | PASS | `git commit -s` plus the `Co-authored-by` trailer on every commit. |
 | VII. UX Consistency | PASS | The budget is a standard options-flow field with translated label, description, and error, following the existing `invalid_scan_interval` pattern. No entity naming or state-attribute change. Shed cycles keep entities available rather than flipping them unavailable — a deliberate UX choice (SC-005). |
 | VIII. Performance Requirements | PASS | This principle literally requires "the client MUST NOT exceed Hostaway's published rate limits"; the feature is the mechanism. Admission is O(log n) on a heap bounded by in-flight waiters, memory is bounded by each documented gate ceiling, and an idle limiter costs zero wakeups (SC-008). No blocking call is introduced. |
-| IX. Phased Development | PASS | Seven phases with explicit checkpoints, documented below and to be mirrored in `tasks.md`. The pure limiter lands and is proven before any HA wiring depends on it. |
+| IX. Phased Development | PASS | Eight increments with explicit checkpoints, documented below and to be mirrored in `tasks.md`. The foundational constants/exceptions land first, then the pure limiter lands and is proven before any HA wiring depends on it. |
 | X. Security & Credential Management (NON-NEGOTIABLE) | PASS | The limiter's account key is `CONF_CLIENT_ID` — half the credential pair. It is never logged, never in `__repr__`, and diagnostics emit only a truncated SHA-256 handle. No change to token handling. |
 
 **Gate Result**: PASS. No constitution violations; the Complexity Tracking
@@ -280,12 +280,21 @@ custom_components/ tests/`, and `uv run mypy custom_components/` all clean,
 with the test count only ever increasing (SC-011). TDD within every phase is
 non-negotiable (Constitution I).
 
+### Foundational Phase 1 — Setup scaffolding
+
+Capture the green baseline, add the corrected constants and dedicated
+rate-limit exceptions, remove the stale 15/20 constants in their own commit,
+and land the deterministic fake-clock harness. This phase changes no runtime
+behaviour but gives phases A–G stable imports and test tooling.
+
+*Checkpoint*: baseline recorded; constants, exceptions, and fake clock exist;
+full suite, ruff, and mypy remain clean.
+
 ### Phase A — Limiter core (no integration)
 
-New `api/rate_limit.py` and the two new exception types; new constants in
-`api/const.py` and removal of the stale `RATE_LIMIT_PER_IP` /
-`RATE_LIMIT_PER_ACCOUNT` pair in a separate commit. Pure unit tests with an
-injected clock and timer hook.
+New `api/rate_limit.py` using the foundational constants, exceptions, and
+fake clock from Phase 1. Pure unit tests with an injected clock and timer
+hook.
 
 *Checkpoint*: SC-001, SC-003, SC-007, SC-010 (limiter half), SC-014, SC-018,
 plus cancellation and monotonic-clock edge cases provable without Home
@@ -307,8 +316,11 @@ the retry constants and backoff curve are untouched.
 Registry under `DATA_RATE_LIMITERS`; creation, sharing by account key,
 in-place `configure()` on reload, new `async_remove_entry` teardown. Interactive
 context in `_bind_handler`, in the two config-flow validation helpers, and
-around the setup-time `test_connection()`. Retry sleeps are capped by the
-ambient operation deadline rather than receiving independent waits.
+around the setup-time `test_connection()`. The config-flow helpers also inject
+a limiter into the token manager and API client they construct, reusing an
+existing account limiter when one is loaded and otherwise using a transient
+validation limiter excluded from shared budget minima. Retry sleeps are capped
+by the ambient operation deadline rather than receiving independent waits.
 
 *Checkpoint*: SC-012 (reload admits no extra budget), FR-005 (two entries,
 one account, one budget), SC-004 priority ordering and operation-wide deadlines observable.

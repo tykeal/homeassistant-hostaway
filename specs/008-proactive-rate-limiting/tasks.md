@@ -53,7 +53,7 @@ SPDX-License-Identifier: Apache-2.0
 | 1 | Setup & foundational scaffolding | T001–T005 | — | baseline captured, constants and exceptions landed |
 | 2 (Plan A) | Limiter core, Home-Assistant-free | T006–T015 | US1, US3, US5 | SC-001, SC-002, SC-003, SC-007, SC-008, SC-014, SC-018 |
 | 3 (Plan B) | Chokepoint integration | T016–T021 | US1, US4, US5 | SC-002, SC-009, SC-010 end-to-end |
-| 4 (Plan C) | HA wiring, registry, priority contexts | T022–T026 | US3 | SC-004, SC-012, FR-005 |
+| 4 (Plan C) | HA wiring, registry, priority contexts | T022–T026, T042 | US3 | SC-004, SC-012, FR-001, FR-005 |
 | 5 (Plan D) | Coordinator shedding | T027–T030 | US2, US4 | SC-005, SC-006, SC-015, SC-016 |
 | 6 (Plan E) | Options flow | T031–T033 | — | SC-017 |
 | 7 (Plan F) | Diagnostics | T034–T036 | US4 | SC-013 |
@@ -156,10 +156,13 @@ admissions than the budget for either gate.
   `custom_components/hostaway/api/rate_limit.py`,
   `tests/api/test_rate_limit.py` — FR-009, FR-010, FR-011, FR-032, FR-034,
   data-model §5 — **Verify**: tests prove sliding (not tumbling) semantics
-  across a window boundary; `len(_admissions) <= budget`; lowering the budget
-  below the current in-window count discards **no** timestamps; a 30/60 gate
-  and a 400/10 gate are representable; all time decisions use the injected
-  clock (a wall-clock jump changes nothing).
+  across a window boundary; the combined real and synthetic deques are bounded
+  by `_max_budget`, not by the current budget; lowering the budget below the
+  current in-window count discards **no** timestamps; server reconciliation
+  can fill only `_synthetic_admissions` without making `next_available()`
+  index an empty `_admissions` deque; a 30/60 gate and a 400/10 gate are
+  representable; all time decisions use the injected clock (a wall-clock jump
+  changes nothing).
 
 - [ ] T008 [P] [US1] Implement the `BudgetGate` protocol (all methods
   synchronous; `capacity_available` and `next_available` are logically
@@ -181,10 +184,12 @@ admissions than the budget for either gate.
 - [ ] T009 [US1] [US3] Implement `AccountRateLimiter.__init__`,
   `async acquire(method, path)`, the `Waiter` record, the
   `(priority, sequence)` heap, and the synchronous `_pump()` admission
-  decision. `_pump()` must select the candidate first (honouring priority and
-  FR-019 aging), classify and capacity-check that same candidate, leave it
-  queued if blocked, and only then remove and admit it. Include single-timer
-  arming and conjunction `record()` across all selected gates —
+  decision. `_pump()` must order candidates first (honouring priority and
+  FR-019 aging), classify and capacity-check each candidate's own gates, admit
+  the highest-priority candidate whose complete gate set is currently
+  admissible, and retain blocked candidates in the queue so an unrelated
+  endpoint bucket is not head-of-line blocked. Include single-timer arming and
+  conjunction `record()` across all selected gates —
   `custom_components/hostaway/api/rate_limit.py`,
   `tests/api/test_rate_limit.py` — FR-001 (admission half), FR-007, FR-019,
   SC-003, SC-008, SC-018, data-model §6–§7, contract §1 — **Verify**: tests
@@ -192,9 +197,12 @@ admissions than the budget for either gate.
   within a class; **SC-018** — sustained interactive load plus one scheduled
   waiter admits the scheduled waiter once aging is met; a test with an aged
   scheduled waiter whose gates differ from the next interactive waiter proves
-  the pump does not classify one waiter and admit another; **SC-008** — a
-  below-budget `acquire()` arms **no** timer and performs no deliberate
-  suspension; at most one timer is armed at a time; no lock is held across an
+  the pump does not classify one waiter and admit another; a regression test
+  queues a blocked account-general waiter ahead of an endpoint-specific waiter
+  with an independent bucket and proves the endpoint waiter is admitted while
+  the blocked waiter stays queued; **SC-008** — a below-budget `acquire()`
+  arms **no** timer and performs no deliberate suspension; at most one timer
+  is armed at a time; no lock is held across an
   `await` (a nested token-acquire-inside-data-acquire test must not deadlock);
   there is no `release()` — admission is a rate reservation, not a pool.
   **Depends on T006, T007, T008.**
@@ -209,7 +217,10 @@ admissions than the budget for either gate.
   `tests/api/test_rate_limit.py` — FR-020, FR-021, SC-004, contract §1 —
   **Verify**: a test issues three acquisitions in one 30 s interactive context
   and proves the third sees a *reduced* remaining budget — **no acquisition
-  receives a fresh 30 s or 2 s wait**. **Depends on T009.**
+  receives a fresh 30 s or 2 s wait**; a scheduled waiter queued behind a
+  10-second capacity block raises `HostawayRateLimitShedError` exactly at its
+  2-second deadline, proving the shared timer wakes for waiter deadlines and
+  not only for capacity or suppression expiry. **Depends on T009.**
 
 - [ ] T011 [US1] Handle waiter cancellation and timeout removal: a waiter
   removed before its future resolved consumes **no** capacity; a waiter whose
@@ -268,12 +279,15 @@ admissions than the budget for either gate.
   T009.**
 
 - [ ] T014 [P] [US4] Implement `LimiterStats`, `GateSnapshot`,
-  `LimiterSnapshot`, `snapshot()` (pure, prunes first), and `note_shed()` —
+  `LimiterSnapshot`, `snapshot()` (pure, prunes first), `note_shed()`, and
+  per-applied-counter 429 storage —
   `custom_components/hostaway/api/rate_limit.py`,
   `tests/api/test_rate_limit.py` — FR-028, FR-029, data-model §9 —
-  **Verify**: `snapshot()` exposes `account` and `ip` gates independently and
-  contains **no** `account_key` or credential substring; `note_shed()` does not
-  affect admission. **Depends on T009.**
+  **Verify**: `snapshot()` exposes `account` and `ip` gates independently,
+  includes `shed_total`, `rate_limited_total`, and
+  `rate_limited_by_counter` broken down by applied counter, and contains
+  **no** `account_key` or credential substring; `note_shed()` does not affect
+  admission. **Depends on T009.**
 
 - [ ] T015 [US1] Add the deterministic over-budget simulator test: a workload
   demanding ≥2× budget driven entirely by the fake clock, with a Hostaway
@@ -435,6 +449,21 @@ admits no extra budget in the 10 s spanning it (SC-012).
   a test proves a service call issued while a poll saturates the budget is
   admitted ahead of the poll's remaining requests. **Depends on T006, T023.**
 
+- [ ] T042 [US1] Inject limiters into config-flow validation: in both
+  `_validate_credentials` and `_fetch_listings`, look up the limiter registry
+  by `CONF_CLIENT_ID`; if an active config entry for that account already
+  exists, reuse its shared `AccountRateLimiter`, otherwise create a transient
+  validation limiter that is excluded from the shared account and IP
+  budget-minimum calculations. Pass the selected limiter into both the
+  `HostawayTokenManager` and `HostawayApiClient` constructed by each helper —
+  `custom_components/hostaway/config_flow.py`, `tests/test_config_flow.py` —
+  FR-001, FR-005, FR-006, FR-018, FR-020 — **Verify**: one test covers
+  `_validate_credentials` and one covers `_fetch_listings`; each proves token
+  and data requests acquire budget during config flow. Additional tests cover
+  the existing-entry path reusing the shared limiter and the new-account path
+  using a transient limiter that does **not** change the effective account or
+  IP minima. **Depends on T016, T019, T022, T023, T025.**
+
 - [ ] T026 [US3] Audit every handler that catches `HostawayRateLimitError`
   and insert an earlier `except HostawayRateLimitWaitTimeout:` that re-raises
   or converts to `ServiceValidationError` **without** a service-level sleep or
@@ -587,8 +616,9 @@ of any credential substring.
   (`"default"` vs `"option"`), per-gate `account` and `ip` objects (budget,
   effective budget, window seconds, admitted in window, waiting interactive,
   waiting scheduled, suppressed, seconds until clear), `admitted_total`,
-  `rate_limited_total` with per-applied-counter counts when known,
-  `shed_total`, and `shed_by_coordinator` —
+  `rate_limited_total`, `rate_limited_by_counter` with per-applied-counter
+  counts (`account`, `ip`, `endpoint`, `provider`, `unknown`), `shed_total`,
+  and `shed_by_coordinator` —
   `custom_components/hostaway/diagnostics.py` (**new file, SPDX header**) —
   FR-029 — **Verify**: no `manifest.json` change is needed; the account key is
   **never** emitted raw. **Depends on T014, T024, T027, T034.**
@@ -598,7 +628,8 @@ of any credential substring.
   **Verify**: the payload contains both gate objects; a test creates
   **diverged** state (account utilization differs from IP utilization, or only
   one gate suppressed) and sees it in the payload; `json.dumps(payload)`
-  contains neither `entry.data[CONF_CLIENT_ID]` nor
+  contains `rate_limited_by_counter` with separate keys for applied counters
+  and contains neither `entry.data[CONF_CLIENT_ID]` nor
   `entry.data[CONF_CLIENT_SECRET]` nor any token. **Depends on T035.**
 
 **Checkpoint (Plan Phase F)**: SC-013 green.
@@ -679,6 +710,7 @@ Phase 3  T016 (needs T009) ──▶ T017, T020, T021
             │
 Phase 4  T022 [P] ──▶ T023 (needs T016, T019) ──▶ T024 (needs T013)
          T025 (needs T006, T023) ──▶ T026 (needs T004)
+         T042 (needs T016, T019, T022, T023, T025)
             │
 Phase 5  T027 (needs T004, T010) ──▶ T028, T029 ──▶ T030
             │
@@ -696,6 +728,7 @@ Phase 8  T037 [P] T038 [P] T039 [P] ──▶ T040 ──▶ T041
   touch separate regions and can be split across reviewers, though they share
   one file so coordinate or sequence the commits.
 - Phase 3: T017, T020, T021 after T016.
+- Phase 4: T042 can be reviewed after T025 without waiting for T026.
 - Phase 6: T032 runs alongside T031.
 - Phase 7: T034 runs alongside Phase 6.
 - Phase 8: T037, T038, T039 are fully independent.
@@ -711,12 +744,12 @@ concurrently; Phase 7's T035 needs the coordinator shed counters from T027.
 
 | FR | Task(s) |
 |---|---|
-| FR-001 | T016, T019 |
+| FR-001 | T016, T019, T042 |
 | FR-002 | T016 |
 | FR-003 | T021 |
 | FR-004 | T016 |
-| FR-005 | T023 |
-| FR-006 | T013, T024 |
+| FR-005 | T023, T042 |
+| FR-006 | T013, T024, T042 |
 | FR-007 | T008, T009 |
 | FR-008 | T013, T023, T024 |
 | FR-009 | T002, T007 |
@@ -728,9 +761,9 @@ concurrently; Phase 7's T035 needs the coordinator shed counters from T027.
 | FR-015 | T002, T012, T018 |
 | FR-016 | T012 |
 | FR-017 | T012 |
-| FR-018 | T006, T019, T025 |
+| FR-018 | T006, T019, T025, T042 |
 | FR-019 | T009 |
-| FR-020 | T010, T017, T026 |
+| FR-020 | T010, T017, T026, T042 |
 | FR-021 | T010, T017, T027 |
 | FR-022 | T027, T028 |
 | FR-023 | T027, T029 |

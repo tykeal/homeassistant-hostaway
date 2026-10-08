@@ -160,8 +160,11 @@ appended to them.
 - A request is admitted only when *every selected* gate reports capacity.
   General requests select account-general plus IP-general. A documented
   endpoint-specific request selects its endpoint bucket instead (FR-007).
-- The limiter arms its timer at `max()` of the non-`None` `next_available()`
-  values across gates.
+- For one blocked waiter, the gate-ready instant is the `max()` of the
+  non-`None` `next_available()` values across that waiter's selected gates.
+  The limiter's single shared timer is armed at the earliest relevant wake-up
+  across queued work: the earliest gate-ready instant for any blocked waiter,
+  provider or gate suppression expiry, or queued waiter deadline.
 
 Today classification selects the per-account general gate and the
 process-wide per-IP general gate for every implemented endpoint. A future
@@ -195,18 +198,21 @@ The one concrete gate. Implements the spec's **Request budget** entity.
   a budget reduction or server reconciliation, but while it does the gate has
   no capacity and MUST NOT discard timestamps to fit the budget.
 - Timestamps are `time.monotonic()` values, never wall clock (FR-011).
-- The deque is pruned (`popleft` while `now - _admissions[0] >= _window`) at
-  the start of every `capacity_available`, `record`, and `next_available`
-  call, so memory is bounded by `_budget` entries.
+- Both `_admissions` and `_synthetic_admissions` are pruned (`popleft` while
+  `now - deque[0] >= _window`) at the start of every `capacity_available`,
+  `record`, and `next_available` call. Memory is bounded by `_max_budget`
+  entries across the two deques, not by the current `_budget`, because a
+  budget reduction can intentionally retain more in-window timestamps than
+  the current budget permits.
 
 **Operations**:
 
 | Operation | Effect |
 |---|---|
-| `capacity_available(now)` | prune, then test `len(_admissions) + len(_synthetic_admissions) < _budget`. This is logically read-only even though pruning may discard expired entries. |
-| `record(now)` | prune, then `append(now)` |
-| `next_available(now)` | prune; `None` if capacity, else `_admissions[0] + _window`. This is logically read-only even though pruning may discard expired entries. |
-| `reconfigure(budget)` | validates range against `_max_budget`, sets `_budget`. **Does not touch `_admissions`.** Re-pumps all queues waiting on the gate. |
+| `capacity_available(now)` | prune both deques, then test `len(_admissions) + len(_synthetic_admissions) < _budget`. This is logically read-only even though pruning may discard expired entries. |
+| `record(now)` | prune both deques, then `append(now)` to `_admissions`. The append is permitted only after the limiter has confirmed capacity; implementations assert the combined deque length never exceeds `_max_budget`. |
+| `next_available(now)` | prune both deques; `None` if capacity, else take the earliest non-empty head across `_admissions` and `_synthetic_admissions` and return `head + _window`. It MUST NOT index either deque unless it is non-empty, because server feedback can fill only `_synthetic_admissions`. This is logically read-only even though pruning may discard expired entries. |
+| `reconfigure(budget)` | validates range against `_max_budget`, sets `_budget`. **Does not touch `_admissions` or `_synthetic_admissions`.** Re-pumps all queues waiting on the gate. |
 | `suppress_until(until)` | extends gate-scoped suppression and re-pumps all waiting limiters when it changes or expires. |
 | `reconcile(limit, remaining)` | applies Hostaway feedback for this gate only; see §8. |
 
@@ -306,29 +312,42 @@ suppression state with other accounts.
 ```text
 while _waiters:
     now = _clock()
-    candidate = select_next_waiter_with_aging(_waiters, now)
-    if candidate.future.done():   # cancelled between arrival and pump
-        remove candidate from heap
-        continue
+    wake_deadlines = collect_queued_waiter_deadlines(_waiters)
     if _provider_suppression.active(now):
-        arm timer at _provider_suppression.until ; return
-    gates = classify(candidate.method, candidate.path)
-    suppressed_until = max(g.suppressed_until for g in gates)
-    if suppressed_until is not None and now < suppressed_until:
-        arm timer at suppressed_until ; return           # FR-014, FR-016
-    if not all(g.capacity_available(now) for g in gates):
-        arm timer at max(g.next_available(now)) ; return # FR-009
-    remove candidate from heap
-    for g in gates:
-        g.record(now)             # conjunction: record into every gate
-    candidate.future.set_result(None)
+        arm shared timer at earliest(_provider_suppression.until, wake_deadlines)
+        return
+    for candidate in ordered_waiters_with_aging(_waiters, now):
+        if candidate.future.done():   # cancelled between arrival and pump
+            remove candidate from heap
+            continue
+        gates = classify(candidate.method, candidate.path)
+        suppressed_until = max(g.suppressed_until for g in gates)
+        if suppressed_until is not None and now < suppressed_until:
+            remember blocked wake-up at suppressed_until for this candidate
+            continue
+        if not all(g.capacity_available(now) for g in gates):
+            remember blocked wake-up at max(g.next_available(now) for g in gates)
+            continue
+        remove candidate from heap
+        for g in gates:
+            g.record(now)             # conjunction: record into every gate
+        candidate.future.set_result(None)
+        continue                      # another waiter may now be admissible
+    arm shared timer at earliest remembered blocked wake-up or waiter deadline
+    return
 ```
 
 Because suppression is tested inside `_pump()`, it applies to interactive
 waiters identically — FR-016 falls out of the structure rather than from a
-special case. Candidate selection happens before classification, and the same
-candidate is capacity-checked and admitted. If its gates are blocked, it stays
-queued; the pump must not classify one waiter and then admit a different one.
+special case. Candidate ordering happens before classification, and each
+candidate's own gates are classified and capacity-checked before that same
+candidate can be admitted. Blocked candidates stay queued, but a blocked
+candidate does **not** stop the scan if a lower-priority candidate uses an
+unrelated gate set that is currently admissible. The candidate admitted is
+therefore the highest-priority candidate, after FR-019 aging, whose complete
+gate set can admit now. This preserves the round-1 guard against classifying
+one waiter and admitting another while avoiding head-of-line blocking across
+independent endpoint buckets.
 
 ---
 
@@ -387,6 +406,7 @@ class LimiterStats:
     admitted_total: int
     shed_total: int                 # sheds reported back by coordinators
     rate_limited_total: int         # observed 429s
+    rate_limited_by_counter: dict[str, int]  # observed 429s by applied counter
     interactive_wait_total: float   # cumulative seconds
     scheduled_wait_total: float
 ```
@@ -408,7 +428,9 @@ class GateSnapshot:
 class LimiterSnapshot:
     gates: dict[str, GateSnapshot]
     admitted_total: int
+    shed_total: int
     rate_limited_total: int
+    rate_limited_by_counter: dict[str, int]
 ```
 
 `snapshot()` is a pure read; it prunes each gate's window first so
@@ -418,7 +440,11 @@ per-gate `admitted_in_window` values are accurate at the instant of the call.
 require the *coordinator name*. The shed counter therefore lives on the
 coordinator base (§10) and is aggregated into diagnostics alongside the
 limiter snapshot; `LimiterStats.shed_total` is the integration-wide roll-up fed by
-coordinators calling `limiter.note_shed()`.
+coordinators calling `limiter.note_shed()`. `rate_limited_by_counter` uses
+Hostaway's applied-counter names (`account`, `ip`, `endpoint`, `provider`)
+when known and an `unknown` bucket when the header is missing or unrecognized,
+so FR-029 and SC-013 can produce both the total and the per-counter break
+down.
 
 ---
 

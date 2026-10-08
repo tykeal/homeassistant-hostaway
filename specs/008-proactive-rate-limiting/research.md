@@ -98,11 +98,13 @@ acquisition from `_request_token` — a one-line, test-covered change.
 
 ## R-003: Sliding window algorithm
 
-**Decision**: A monotonic timestamp deque. `collections.deque[float]` holding
-one `time.monotonic()` value per admission. Before each admission decision,
-pop from the left while `now - deque[0] >= WINDOW_SECONDS` (10.0). Capacity is
-`budget - len(deque)`. The earliest moment capacity frees is `deque[0] +
-WINDOW_SECONDS`.
+**Decision**: Monotonic timestamp deques. `collections.deque[float]` holds one
+`time.monotonic()` value per real admission, and a second deque holds synthetic
+admissions created only from downward server feedback. Before each admission
+decision, pop from the left of **both** deques while
+`now - deque[0] >= WINDOW_SECONDS` (10.0). Capacity is
+`budget - len(real) - len(synthetic)`. The earliest moment capacity frees is
+the earliest non-empty head across both deques plus `WINDOW_SECONDS`.
 
 **Rationale**:
 
@@ -111,13 +113,15 @@ WINDOW_SECONDS`.
   double-admit across a boundary the way a tumbling counter can.
 - FR-011 mandates a monotonic time source. `time.monotonic()` is immune to
   system clock adjustment, unlike `time.time()` or `dt_util.utcnow()`.
-- Bounded memory: the deque never exceeds `budget` entries (max 200) because
-  entries older than the window are pruned on every decision, and no more than
-  `budget` admissions can exist inside one window by definition.
-- No polling. Rather than a `while True: await asyncio.sleep(...)` loop, the
-  limiter arms a single `loop.call_later(deque[0] + WINDOW - now, self._pump)`
-  timer when it is saturated with waiters pending. This is O(1) wakeups and
-  adds no idle event-loop cost, which SC-008 requires.
+- Bounded memory: the real and synthetic deques together never exceed the
+  gate's documented ceiling (`_max_budget`, max 200 for general gates). The
+  bound cannot be the current budget, because lowering the budget below the
+  retained in-window count must not discard timestamps.
+- No polling. Rather than a `while True: await asyncio.sleep(...)` loop, the limiter arms a
+  single `loop.call_later(...)` timer when waiters are pending, using the
+  earliest required wake-up across gate readiness, suppression expiry, and
+  waiter deadlines. This is O(1) wakeups and adds no idle event-loop cost,
+  which SC-008 requires.
 
 **Alternatives considered**:
 
@@ -189,8 +193,11 @@ interactive and `1` for scheduled; `sequence` is a monotonically increasing
 integer giving FIFO fairness within a class. Before admitting another
 interactive waiter, `_pump()` checks the oldest scheduled waiter. If that
 scheduled waiter is at least **1.0 second** old, or if **20** interactive
-admissions have occurred while it was queued, the next admission goes to the
-oldest scheduled waiter when its gates have capacity.
+admissions have occurred while it was queued, the ordered scan boosts that
+scheduled waiter ahead of newer interactive work when its gates have capacity.
+Blocked waiters remain queued, but do not prevent `_pump()` from admitting the
+highest-priority later waiter whose independent gate set is currently
+admissible.
 
 **Rationale**:
 
@@ -200,9 +207,10 @@ oldest scheduled waiter when its gates have capacity.
   waiters would repeatedly hit the 2-second grace and shed forever.
 - `asyncio.PriorityQueue` would work for ordering but needs a dedicated
   consumer task per limiter, which must be created, owned, and shut down. A
-  synchronous `_pump()` driven by (a) new arrivals, (b) a `call_later` timer
-  armed at the next capacity-free instant, and (c) suppression expiry needs no
-  background task at all and is trivially testable with a fake clock.
+  synchronous `_pump()` driven by (a) new arrivals and (b) one shared
+  `call_later` timer armed at the earliest pending wake-up — gate readiness,
+  suppression expiry, or a queued waiter's deadline — needs no background task
+  at all and is trivially testable with a fake clock.
 - The 1.0-second aging threshold is half of the scheduled 2.0-second grace,
   leaving room to admit the aged scheduled request before it sheds. The
   20-admission cap is a backstop for below-budget bursts where time has not
@@ -466,12 +474,13 @@ participate in either minimum.
   receives the recomputed process-wide minimum. Neither reconfiguration clears
   admissions, and both re-pump affected queues.
 
-**Accepted minor residue**: config-flow validation for a brand-new account
-creates a registry entry for an account that may never become a config entry
-(aborted flow). The residue is one object holding an empty deque. It is
-accepted rather than engineered away; creating an ephemeral limiter for the
-flow would mean a second config entry for an already-configured account did
-*not* share the budget during validation.
+**Config-flow validation path**: validation chooses between two limiter
+sources. If an active entry for the account exists, validation reuses that
+shared limiter so it participates in the already-loaded account and IP gates.
+If no entry exists, validation uses a transient limiter that is injected into
+the helpers' token manager and API client but is excluded from the active
+account and IP budget minimums. This avoids leaving registry entries behind
+for aborted flows while still limiting the FR-001 config-flow requests.
 
 ---
 
@@ -514,8 +523,10 @@ Hostaway's statement that such endpoints do not use the general limit. The
 selected gates use a `BudgetGate` `Protocol` with synchronous
 `capacity_available(now)`, `record(now)`, and `next_available(now)` methods.
 Admission requires every selected gate to report capacity, records into every
-selected gate, and arms its timer at `max(next_available(...))` across selected
-gates.
+selected gate, and computes one blocked waiter's gate-ready instant as
+`max(next_available(...))` across that waiter's selected gates. The limiter's
+single timer then wakes at the earliest pending reason across queued work:
+gate readiness, suppression expiry, or a queued waiter's operation deadline.
 
 **Rationale**: FR-007 requires that a future endpoint-specific dimension be
 addable at the same enforcement point, with zero changes to public call sites,
@@ -634,7 +645,8 @@ is already non-secret and is what operators correlate against. The existing
 Payload shape is specified in
 [contracts/rate-limiter-interface.md](contracts/rate-limiter-interface.md). It
 uses a `gates` object so diagnostics can show account and IP utilization or
-suppression diverging, which is the reason the gates are separate.
+suppression diverging, and a `rate_limited_by_counter` object so observed 429s
+are visible by applied counter rather than only as a total.
 
 ---
 

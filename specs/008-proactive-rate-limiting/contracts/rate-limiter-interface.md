@@ -68,11 +68,13 @@ call sites do not change.
 | MUST classify general requests to account-general + IP-general and endpoint-specific requests to their endpoint bucket instead | FR-007, SC-014 |
 | MUST NOT record an admission for a caller that times out or is cancelled before admission | spec edge case "Cancellation" |
 | MUST normally admit a waiting `INTERACTIVE` caller before a waiting `SCHEDULED` caller when capacity frees | FR-019, SC-003 |
-| MUST admit the oldest scheduled waiter once FR-019 aging is met and capacity exists | FR-019, SC-018 |
+| MUST admit the oldest scheduled waiter once FR-019 aging is met and that waiter's gates have capacity | FR-019, SC-018 |
+| MUST retain blocked waiters in the queue while continuing to scan for the highest-priority waiter whose complete gate set is currently admissible, so unrelated endpoint buckets are not head-of-line blocked | FR-014 |
 | MUST preserve FIFO order within one priority class | fairness; prevents starvation inside a class |
 | MUST raise `HostawayRateLimitShedError` when the operation-wide `SCHEDULED_POLICY` deadline has no remaining time | FR-021 |
 | MUST raise `HostawayRateLimitWaitTimeout` when the operation-wide `INTERACTIVE_POLICY` or `FIRST_REFRESH_POLICY` deadline has no remaining time | FR-020, FR-037, SC-004 |
 | MUST NOT give each acquisition a fresh timeout; queued waits consume `RequestContext.remaining(now)` | FR-020, FR-021 |
+| MUST use one shared timer per limiter, armed for the earliest gate availability, suppression expiry, or queued waiter deadline, so a waiter timeout fires even while capacity remains blocked | FR-020, FR-021 |
 | MUST NOT admit while a selected gate or provider-global suppression is active, **regardless of priority class** | FR-014, FR-016 |
 | MUST use the injected `clock` for every time decision, never wall clock | FR-011 |
 | MUST hold no lock across an `await`, so a nested acquisition (token request inside a data request) cannot deadlock | R-002 |
@@ -362,6 +364,13 @@ New module: `custom_components/hostaway/diagnostics.py`, exposing
     },
     "admitted_total": 10431,
     "rate_limited_total": 2,
+    "rate_limited_by_counter": {
+      "account": 1,
+      "ip": 0,
+      "endpoint": 0,
+      "provider": 1,
+      "unknown": 0
+    },
     "shed_total": 7,
     "shed_by_coordinator": {
       "hostaway_listings_<unique_id>": 0,
@@ -375,6 +384,7 @@ New module: `custom_components/hostaway/diagnostics.py`, exposing
 | Behaviour | Requirement |
 |---|---|
 | MUST include per-gate budget, current window utilization, waiting counts, and suppression state | FR-029, SC-013 |
+| MUST include `rate_limited_total` and `rate_limited_by_counter` broken down by applied counter (`account`, `ip`, `endpoint`, `provider`, and `unknown`) | FR-029, SC-013 |
 | MUST NOT include `client_id`, `client_secret`, or any token | FR-029, SC-013, Constitution X |
 | `account_handle` MUST be a non-reversible digest of the account key, not the key | FR-029 |
 | `budget_source` MUST distinguish `"default"` from `"option"` so an operator can see whether they changed it | diagnostic usefulness |
