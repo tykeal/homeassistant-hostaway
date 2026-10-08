@@ -373,9 +373,9 @@ New module: `custom_components/hostaway/diagnostics.py`, exposing
     },
     "shed_total": 7,
     "shed_by_coordinator": {
-      "hostaway_listings_<unique_id>": 0,
-      "hostaway_reservations_<unique_id>": 7,
-      "hostaway_custom_fields_<unique_id>": 0
+      "listings": 0,
+      "reservations": 7,
+      "custom_fields": 0
     }
   }
 }

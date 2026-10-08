@@ -501,7 +501,8 @@ credential pair. FR-029 forbids credentials in diagnostics.
 |---|---|
 | Never emit `account_key` verbatim | Not in diagnostics, not in `__repr__`, not in any log record |
 | Diagnostics identifier | `account_handle` = first 12 hex chars of `sha256(account_key)` |
-| Correlation | Diagnostics also carries the config entry's `unique_id`, which is already non-secret |
+| Correlation | Use `account_handle` only. The config entry `unique_id` MUST NOT be emitted: `config_flow.py:244` sets it from `CONF_CLIENT_ID`, so it is the credential itself |
+| Coordinator keys | Fixed labels (`listings`, `reservations`, `custom_fields`); never the generated coordinator names, which embed the unique id |
 
 The helper belongs in the existing `custom_components/hostaway/api/redaction.py`
 alongside the other redaction utilities.

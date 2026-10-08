@@ -621,7 +621,12 @@ of any credential substring.
   and `shed_by_coordinator` —
   `custom_components/hostaway/diagnostics.py` (**new file, SPDX header**) —
   FR-029 — **Verify**: no `manifest.json` change is needed; the account key is
-  **never** emitted raw. **Depends on T014, T024, T027, T034.**
+  **never** emitted raw. `shed_by_coordinator` uses the fixed labels
+  `listings`, `reservations`, `custom_fields` — **not** the generated
+  coordinator names, which embed the entry `unique_id`. The entry `unique_id`
+  MUST NOT appear anywhere in the payload: `config_flow.py:244` sets it from
+  `CONF_CLIENT_ID`, so emitting it would leak the credential.
+  **Depends on T014, T024, T027, T034.**
 
 - [ ] T036 [US4] Add the diagnostics tests —
   `tests/test_diagnostics.py` (**new file, SPDX header**) — **SC-013** —
@@ -630,7 +635,8 @@ of any credential substring.
   one gate suppressed) and sees it in the payload; `json.dumps(payload)`
   contains `rate_limited_by_counter` with separate keys for applied counters
   and contains neither `entry.data[CONF_CLIENT_ID]` nor
-  `entry.data[CONF_CLIENT_SECRET]` nor any token. **Depends on T035.**
+  `entry.data[CONF_CLIENT_SECRET]` nor `entry.unique_id` nor any token.
+  **Depends on T035.**
 
 **Checkpoint (Plan Phase F)**: SC-013 green.
 

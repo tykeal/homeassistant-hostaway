@@ -638,8 +638,13 @@ change.
 include credentials". The limiter's account key *is* `CONF_CLIENT_ID` — the
 Hostaway client id, half of the credential pair. It must **not** be emitted
 verbatim. Diagnostics should report a stable but non-reversible handle (a
-truncated SHA-256 of the account key) plus the entry's own `unique_id`, which
-is already non-secret and is what operators correlate against. The existing
+truncated SHA-256 of the account key) and nothing else that identifies the
+account. The config entry's `unique_id` **must not** be used for correlation
+either: `config_flow.py:244` calls `async_set_unique_id(self._client_id)`, so
+the unique id *is* the client id and emitting it would leak the same
+credential by another name. Coordinator keys in the payload must likewise use
+fixed labels such as `listings`, `reservations`, and `custom_fields` rather
+than the generated coordinator names, which embed the unique id. The existing
 `api/redaction.py` module is the natural home for the helper.
 
 Payload shape is specified in

@@ -270,8 +270,11 @@ Full rationale and the source verification behind each is in
    unconditional `return True`, so it hides nothing. This is an owner decision encoded in the spec.
 10. **Diagnostics digest the account key** (R-015, data-model §11). The
     account key *is* `CONF_CLIENT_ID`. FR-029 forbids credentials in
-    diagnostics, so only a truncated SHA-256 handle plus the already-public
-    `unique_id` are emitted.
+    diagnostics, so only a truncated SHA-256 handle is emitted. The config
+    entry `unique_id` is **not** a safe correlation field:
+    `config_flow.py:244` assigns it from `self._client_id`, so emitting it
+    would disclose the credential verbatim. Coordinator keys use fixed
+    labels instead of the generated names that embed it.
 
 ## Phased Implementation
 
