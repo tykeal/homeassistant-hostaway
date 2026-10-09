@@ -155,10 +155,11 @@ after the suppression ends.
 Download diagnostics from the integration's entry menu for a reading of
 the current state of each counter — its budget, how much of the window
 is already spent, how many requests are waiting on it, and whether it is
-suppressed right now — plus running totals since Home Assistant started:
-how many requests were admitted, how many refusals Hostaway attributed
-to each of its counters, and how many refresh cycles each coordinator
-dropped.
+suppressed right now — plus running totals. The admission and refusal
+totals belong to the limiter, which survives a reload, so they count
+from when the account was first set up. The per-coordinator count of
+dropped refresh cycles belongs to the coordinator, which is rebuilt on
+every reload, so it restarts at zero each time the entry reloads.
 
 These are a snapshot and a set of totals, not a history: they will not
 tell you which counter delayed one particular request earlier in the
