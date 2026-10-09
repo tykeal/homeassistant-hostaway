@@ -56,3 +56,46 @@ class HostawayResponseError(HostawayApiError):
 
 class HostawayMutationResultError(HostawayResponseError):
     """Successful mutation response had an unusable result payload."""
+
+
+class HostawayRateLimitWaitTimeout(HostawayRateLimitError):
+    """A caller's local wait for rate-limit budget expired.
+
+    Raised by the limiter, not by Hostaway: the request never left the
+    process. It subclasses HostawayRateLimitError so coordinators convert
+    it to an update failure like any other rate-limit problem, but callers
+    that retry on a server 429 must re-raise this first, since replaying a
+    request the server never saw cannot help.
+    """
+
+    def __init__(self, message: str, *, waited: float) -> None:
+        """Initialize with how long the caller queued.
+
+        Args:
+            message: Human-readable error description.
+            waited: Seconds spent waiting before the deadline expired.
+        """
+        super().__init__(message)
+        self.waited = waited
+
+
+class HostawayRateLimitShedError(Exception):
+    """A scheduled refresh was dropped to protect the rate-limit budget.
+
+    Deliberately **not** a HostawayApiError. Every coordinator turns that
+    base class into an UpdateFailed, which marks entities unavailable, but
+    shedding a low-priority refresh is a healthy outcome: the previous data
+    stays published and the next cycle tries again. Changing this base
+    class would silently break that guarantee.
+    """
+
+    def __init__(self, message: str, *, waited: float) -> None:
+        """Initialize with how long the refresh queued before being shed.
+
+        Args:
+            message: Human-readable description of what was shed.
+            waited: Seconds spent waiting before the refresh was dropped.
+        """
+        self.message = message
+        self.waited = waited
+        super().__init__(message)
