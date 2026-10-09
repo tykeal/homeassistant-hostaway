@@ -259,7 +259,10 @@ admissions than the budget for either gate.
   shortens**, applies to interactive callers identically, clears by time
   comparison in `_pump()`, and re-pumps every limiter waiting on a changed
   shared gate or provider state. Consume `X-RateLimit-Limit` and
-  `X-RateLimit-Remaining` by reconciling only the affected gate: lower the
+  `X-RateLimit-Remaining` only after validating each as a finite integer in
+  range (`Limit >= 1`, `Remaining >= 0`), ignoring any malformed or
+  out-of-range value entirely at debug level, then reconcile only the affected
+  gate: lower the
   runtime ceiling to `min(configured_budget, limit)` without raising above the
   operator-configured budget, and add synthetic in-window admissions only when
   needed to make local available capacity no greater than the server-reported
@@ -269,7 +272,10 @@ admissions than the budget for either gate.
   `X-RateLimit-Applied: account` and a timestamp 5 s in the future; assert no
   admission on that gate for ≥5 s, that the **IP** gate still admits, that an
   interactive waiter is *also* blocked, and that normal admission resumes with
-  no reload. Add a multi-account regression test proving a `provider` 429
+  no reload. Assert malformed headers are ignored conservatively: `Limit` of
+  `0`, negative, non-numeric, or non-finite leaves the runtime ceiling
+  untouched and never violates the gate's `1 <= budget` invariant, and a
+  negative `Remaining` adds **no** synthetic admissions and terminates. Add a multi-account regression test proving a `provider` 429
   observed through account A suppresses account B and that every affected
   queue is re-pumped when the provider suppression is set and when it expires.
   Also assert negative, zero, `NaN`, and `inf` timestamps are handled without
@@ -427,15 +433,19 @@ admits no extra budget in the 10 s spanning it (SC-012).
   account budget as the minimum across active entries sharing that key, share
   the process-wide IP gate, and inject it into both `HostawayApiClient` and
   `HostawayTokenManager` — `custom_components/hostaway/__init__.py`,
-  Refuse to register a **second persistent limiter for a different account
-  key**: log an error and reuse the existing one, because two persistent
-  queues on the shared IP gate would be served in callback order rather than
-  priority order. Exactly one entry is ever installed in practice —
+  Refuse an **additional config entry for a different account key** outright
+  rather than reusing the existing limiter, which would alias the second
+  account onto the first account's gate and let one account's 429 suppress
+  the other. Abort it in the config flow with `single_instance_allowed`, and
+  fail any entry that still reaches setup with a **non-retryable**
+  config-entry error, never a retryable not-ready error. Exactly one entry is
+  ever installed in practice —
   `custom_components/hostaway/__init__.py`,
   `tests/test_init.py` — FR-005, FR-008, FR-039 — **Verify**: two entries with
   the same client id share **one** limiter object and the lower account
-  budget; a second entry with a *different* client id is refused with an
-  error log and no second persistent limiter is created; the transient
+  budget; a second entry with a *different* client id is aborted by the
+  config flow and, if forced through, fails setup non-retryably with no
+  second persistent limiter created and no gate aliasing; the transient
   config-flow limiter of T042 remains permitted and still shares the IP gate.
   **Depends on T016, T019, T022.**
 
@@ -825,7 +835,7 @@ concurrently; Phase 7's T035 needs the coordinator shed counters from T027.
 | FR-036 | T038 |
 | FR-037 | T006, T028, T029 |
 | FR-038 | T007, T024 |
-| FR-039 | T023, T042 |
+| FR-039 | T023, T042, T022 |
 
 ### Success criteria
 

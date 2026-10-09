@@ -562,7 +562,17 @@ suppressed for the indicated or inferred period.
   conservatively to suppressing all gates applicable to the request. Any
   limiter waiting on a shared gate whose suppression or configuration changes
   MUST be notified and re-pumped. `X-RateLimit-Limit` and
-  `X-RateLimit-Remaining` MUST reconcile only the affected gate: an observed
+  `X-RateLimit-Remaining` MUST each be validated before use and are
+  **usable** only when they parse as a finite integer within range:
+  `Limit >= 1` and `Remaining >= 0`. A missing, non-numeric, non-finite, or
+  out-of-range value MUST be ignored entirely, leaving the gate untouched and
+  logging at debug level. This is required, not cosmetic: a `Limit` of `0` or
+  a negative value would violate the gate's `1 <= budget` invariant, and a
+  negative `Remaining` would demand more synthetic admissions than the gate
+  can hold, which cannot be satisfied and risks a non-terminating
+  reconciliation. Ignoring is the conservative choice because the local
+  budget already bounds traffic on its own. When usable, they MUST reconcile
+  only the affected gate: an observed
   limit lowers that gate's runtime ceiling to `min(configured_budget, limit)`
   and never raises it above the operator-configured value; an observed
   remaining count lower than the local view is represented by synthetic
@@ -707,9 +717,20 @@ suppressed for the indicated or inferred period.
   taken in timer-callback order rather than priority order — a scheduled
   waiter in one limiter could overtake an interactive waiter in the other, and
   each aging counter would be blind to the other's admissions. The
-  implementation MUST therefore refuse to register a second persistent limiter
-  for a different account key, logging an error and reusing the existing one
-  rather than silently creating a competing queue.
+  implementation MUST therefore **refuse the additional config entry itself**
+  rather than reusing the existing limiter for it. Reuse is not an option: it
+  would alias a second account onto the first account's gate, contradicting
+  FR-005, and an account-scoped 429 earned by one account would suppress the
+  other even though Hostaway counts them separately.
+
+  Enforcement MUST happen at both ends. The config flow MUST abort an attempt
+  to add a second entry with the standard `single_instance_allowed` reason;
+  today it only guards against a **duplicate** account, since its unique id is
+  the client id, so a different client id is currently accepted. Setup of an
+  additional entry that nonetheless reaches `async_setup_entry` MUST fail with
+  a **non-retryable** config-entry error naming the single-instance
+  constraint, never with a retryable not-ready error, because retrying cannot
+  resolve it.
 
   The short-lived config-flow limiter of FR-001 is the single permitted
   exception. It shares the process-wide IP gate, so budget correctness still

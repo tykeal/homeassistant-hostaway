@@ -125,6 +125,8 @@ Called by a coordinator that has decided to shed. Increments the integration-wid
 |---|---|
 | MUST raise `ValueError` for either budget `< 1` or `> 200` | FR-032 |
 | MUST apply the effective account budget, computed as the minimum across active entries sharing the account key, to this account gate | FR-005 |
+| MUST ignore `X-RateLimit-Limit` unless it parses as a finite integer `>= 1`, and `X-RateLimit-Remaining` unless a finite integer `>= 0` | FR-014 |
+| MUST NOT construct a second persistent limiter for a different account key; the additional entry is refused instead | FR-039 |
 | MUST apply the process-wide minimum to the shared IP gate | FR-006 |
 | MUST preserve a reloading entry's prior contribution during the unload half of reload until setup replaces it | FR-006, SC-012 |
 | MUST NOT clear any in-window admission record | FR-008, SC-012 |

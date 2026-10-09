@@ -636,7 +636,7 @@ RequestContext (ContextVar) is set by:
 |---|---|
 | First entry for an account set up | created, registered |
 | Second entry, same `CONF_CLIENT_ID` | **shared**, not duplicated (FR-005) |
-| Second entry, *different* `CONF_CLIENT_ID` | **refused** — a second persistent limiter would create a competing queue on the shared IP gate; log an error and reuse the existing limiter (FR-039). Not a supported configuration. |
+| Second entry, *different* `CONF_CLIENT_ID` | **entry refused** — aborted by the config flow as `single_instance_allowed`, and failed non-retryably if it reaches setup. The limiter is **not** reused for it, which would alias the accounts onto one gate (FR-005, FR-039). |
 | Options changed → entry reload | **survives**; account gate reconfigured in place from the minimum across active same-account entries, and the shared IP gate recomputes the minimum across active entries while preserving the reloading entry's previous contribution until setup replaces it. Windows are **not** reset. |
 | Entry unloaded for reload | **survives**; budget contributions remain active until replacement setup completes, so the unload half cannot raise account or IP capacity |
 | Entry truly unloaded or removed | contribution removed; account and IP minima recompute in place, and waiters are re-pumped |
