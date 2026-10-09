@@ -10,10 +10,77 @@ deliberately free of anything credential-bearing.
 from __future__ import annotations
 
 import asyncio
+import time
 from dataclasses import dataclass, field
 
 from ..exceptions import HostawayRateLimitShedError, HostawayRateLimitWaitTimeout
-from .context import RequestPriority
+from .context import RequestContext, RequestPriority
+
+
+def deadline_exception(*, shed_on_timeout: bool, waited: float) -> Exception:
+    """Build the error an operation fails with when its deadline expires.
+
+    The chokepoints enforce the same deadline the limiter does — a retry
+    backoff must not sleep past it — so they must fail in exactly the same
+    way, or a caller would see two different outcomes for one condition
+    depending on where it happened to be noticed.
+
+    Args:
+        shed_on_timeout: Whether the operation may be dropped rather than
+            reported as a failure.
+        waited: Real seconds spent waiting.
+
+    Returns:
+        A shed signal for sheddable work, otherwise a wait timeout.
+    """
+    if shed_on_timeout:
+        return HostawayRateLimitShedError(
+            "Skipped a scheduled Hostaway refresh to stay within the "
+            "API rate limit; the previous data is still current",
+            waited=waited,
+        )
+    return HostawayRateLimitWaitTimeout(
+        "Timed out waiting for Hostaway API rate limit capacity after "
+        f"{waited:.1f}s. The integration paces its own requests to stay "
+        "within Hostaway's published limits; raising the rate limit "
+        "budget option or reducing polling frequency may help",
+        waited=waited,
+    )
+
+
+async def sleep_within_deadline(delay: float, ctx: RequestContext) -> None:
+    """Sleep, unless doing so would outlive the operation's deadline.
+
+    Sleeping first and failing afterwards would only postpone the same
+    outcome, so a sleep that cannot complete in the time left is refused
+    outright.
+
+    Args:
+        delay: Seconds the caller wants to wait.
+        ctx: The ambient operation context.
+
+    Raises:
+        HostawayRateLimitShedError: If a sheddable operation has too little
+            time left.
+        HostawayRateLimitWaitTimeout: If any other operation has.
+    """
+    remaining = ctx.remaining(time.monotonic())
+    if delay >= remaining:
+        raise deadline_exception(
+            shed_on_timeout=ctx.policy.shed_on_timeout,
+            waited=ctx.policy.duration - remaining,
+        )
+    # The check above is not enough on its own: a busy event loop can
+    # resume the sleep well after the deadline, and returning then would
+    # break the contract just as surely as never checking.
+    try:
+        async with asyncio.timeout(remaining):
+            await asyncio.sleep(delay)
+    except TimeoutError as exc:
+        raise deadline_exception(
+            shed_on_timeout=ctx.policy.shed_on_timeout,
+            waited=ctx.policy.duration - ctx.remaining(time.monotonic()),
+        ) from exc
 
 
 @dataclass(order=True)
@@ -44,19 +111,7 @@ class Waiter:
         Returns:
             A shed signal for sheddable work, otherwise a wait timeout.
         """
-        if self.shed_on_timeout:
-            return HostawayRateLimitShedError(
-                "Skipped a scheduled Hostaway refresh to stay within the "
-                "API rate limit; the previous data is still current",
-                waited=waited,
-            )
-        return HostawayRateLimitWaitTimeout(
-            "Timed out waiting for Hostaway API rate limit capacity after "
-            f"{waited:.1f}s. The integration paces its own requests to stay "
-            "within Hostaway's published limits; raising the rate limit "
-            "budget option or reducing polling frequency may help",
-            waited=waited,
-        )
+        return deadline_exception(shed_on_timeout=self.shed_on_timeout, waited=waited)
 
 
 @dataclass(slots=True)

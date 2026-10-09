@@ -1,17 +1,28 @@
 # SPDX-FileCopyrightText: 2026 Andrew Grimberg <tykeal@bardicgrove.org>
 # SPDX-License-Identifier: Apache-2.0
-"""Token manager for Hostaway OAuth 2.0 Client Credentials flow."""
+"""Token manager for Hostaway OAuth 2.0 Client Credentials flow.
+
+OQ-001 (assumption, **not** documented Hostaway behaviour): Hostaway does
+not say whether ``POST /v1/accessTokens`` is charged against the general
+request counters. This module assumes it is. Assuming wrongly in this
+direction costs one request's worth of budget roughly twice a day;
+assuming wrongly in the other direction would spend budget the server is
+counting and we are not, which is exactly the failure the limiter exists
+to prevent. Revisit if Hostaway ever documents it.
+"""
 
 # aislop-ignore-file ai-slop/hallucinated-import -- in-repo component imports
 
 from __future__ import annotations
 
 import asyncio
-import contextlib
+import logging
+import time
 from datetime import UTC, datetime
 
 import httpx
 
+from custom_components.hostaway.api import retry as _retry
 from custom_components.hostaway.api.const import (
     GRANT_TYPE,
     SCOPE,
@@ -24,6 +35,21 @@ from custom_components.hostaway.api.exceptions import (
     HostawayResponseError,
 )
 from custom_components.hostaway.api.models import AccessToken
+from custom_components.hostaway.api.rate_limit import (
+    AccountRateLimiter,
+    RequestContext,
+    current_request_context,
+    deadline_exception,
+    ensure_request_context,
+    sleep_within_deadline,
+)
+from custom_components.hostaway.api.retry import parse_rate_limit_headers
+
+_LOGGER = logging.getLogger(__name__)
+
+#: The token endpoint, as the limiter classifies it.
+_TOKEN_METHOD = "POST"
+_TOKEN_PATH = "/v1/accessTokens"
 
 # Buffer seconds before expiry to trigger proactive refresh
 _REFRESH_BUFFER = 300
@@ -53,6 +79,7 @@ class HostawayTokenManager:
         http_client: httpx.AsyncClient,
         *,
         token_url: str = TOKEN_URL,
+        limiter: AccountRateLimiter | None = None,
     ) -> None:
         """Initialize HostawayTokenManager.
 
@@ -61,12 +88,14 @@ class HostawayTokenManager:
             client_secret: Client secret.
             http_client: Async HTTP client for token requests.
             token_url: OAuth token endpoint URL.
+            limiter: Paces token requests. Omitted means unlimited.
         """
         self._client_id = client_id
         self._client_secret = client_secret
         self._http = http_client
         self._token_url = token_url
         self._cached_token: AccessToken | None = None
+        self._limiter = limiter
         self._lock = asyncio.Lock()
 
     def seed_token(self, token: AccessToken) -> None:
@@ -111,22 +140,132 @@ class HostawayTokenManager:
         if cached is not None and not cached.is_expired(
             buffer_seconds=_REFRESH_BUFFER,
         ):
-            return cached.access_token
+            return await self._ready_token(cached)
 
-        async with self._lock:
-            cached = self._cached_token
-            if cached is not None and not cached.is_expired(
-                buffer_seconds=_REFRESH_BUFFER,
-            ):
-                return cached.access_token
+        with ensure_request_context() as ctx:
+            await self._acquire_lock(ctx)
+            try:
+                cached = self._cached_token
+                if cached is not None and not cached.is_expired(
+                    buffer_seconds=_REFRESH_BUFFER,
+                ):
+                    return await self._ready_token(cached)
 
-            token = await self._request_token()
-            # Enforce post-generation delay
-            delay = token.seconds_until_ready
-            if delay > 0:
-                await asyncio.sleep(delay)
-            self._cached_token = token
-            return token.access_token
+                token = await self._request_token()
+                # Cached before the readiness wait, not after. The token is
+                # already paid for in budget; discarding it because this
+                # caller ran out of time would buy another one on the next
+                # cycle and run out of time again.
+                self._cached_token = token
+                return await self._ready_token(token)
+            finally:
+                self._lock.release()
+
+    async def _ready_token(self, token: AccessToken) -> str:
+        """Return a token's value once Hostaway will accept it.
+
+        Args:
+            token: The token to hand out.
+
+        Returns:
+            The token string, usable immediately.
+
+        Raises:
+            HostawayRateLimitShedError: If a sheddable operation has too
+                little time left to wait out the readiness delay.
+            HostawayRateLimitWaitTimeout: If any other operation has.
+        """
+        delay = token.seconds_until_ready
+        if delay > 0:
+            # Charged against the ambient operation's deadline like any
+            # other wait: a caller with one second left must not spend it
+            # sleeping here and then fail at the next acquisition anyway.
+            with ensure_request_context() as ctx:
+                await self._post_generation_delay(delay, ctx)
+        return token.access_token
+
+    async def _acquire_lock(self, ctx: RequestContext) -> None:
+        """Take the refresh lock without outliving the operation's deadline.
+
+        Waiting behind another caller's token refresh is waiting all the
+        same. A sheddable refresh that queues here for longer than its
+        deadline would otherwise ignore the budget it was given, and a
+        later interactive caller could not overtake it.
+
+        Args:
+            ctx: The ambient operation context.
+
+        Raises:
+            HostawayRateLimitShedError: If a sheddable operation runs out
+                of time waiting for the lock.
+            HostawayRateLimitWaitTimeout: If any other operation does.
+        """
+        if self._limiter is None:
+            await self._lock.acquire()
+            return
+        remaining = ctx.remaining(time.monotonic())
+        if remaining <= 0:
+            raise deadline_exception(
+                shed_on_timeout=ctx.policy.shed_on_timeout,
+                waited=ctx.policy.duration,
+            )
+        try:
+            async with asyncio.timeout(remaining):
+                await self._lock.acquire()
+        except TimeoutError as exc:
+            raise deadline_exception(
+                shed_on_timeout=ctx.policy.shed_on_timeout,
+                waited=ctx.policy.duration - ctx.remaining(time.monotonic()),
+            ) from exc
+
+    async def _post_generation_delay(self, delay: float, ctx: RequestContext) -> None:
+        """Wait out Hostaway's mandatory post-generation delay.
+
+        Args:
+            delay: Seconds the token is not yet usable for.
+            ctx: The ambient operation context.
+
+        Raises:
+            HostawayRateLimitShedError: If a sheddable operation has too
+                little time left to wait it out.
+            HostawayRateLimitWaitTimeout: If any other operation has.
+        """
+        if self._limiter is None:
+            await asyncio.sleep(delay)
+            return
+        await sleep_within_deadline(delay, ctx)
+
+    async def _acquire(self) -> None:
+        """Wait for rate-limit capacity before asking for a token.
+
+        OQ-001: the token endpoint is assumed to count against the general
+        counters. See the module docstring; this is a conservative guess,
+        not documented Hostaway behaviour.
+
+        Raises:
+            HostawayRateLimitShedError: If a sheddable operation ran out of
+                time while queued.
+            HostawayRateLimitWaitTimeout: If any other operation did.
+        """
+        if self._limiter is None:
+            return
+        started = time.monotonic()
+        await self._limiter.acquire(_TOKEN_METHOD, _TOKEN_PATH)
+        if not _LOGGER.isEnabledFor(logging.DEBUG):
+            return
+        gates = self._limiter.snapshot().gates
+        _LOGGER.debug(
+            "Admitted %s %s (%s) after %.3fs; remaining this window: %s",
+            _TOKEN_METHOD,
+            _TOKEN_PATH,
+            current_request_context().priority.name.lower(),
+            time.monotonic() - started,
+            ", ".join(
+                f"{name} {max(gate.effective_budget - gate.admitted_in_window, 0)}"
+                f"/{gate.effective_budget}"
+                for name, gate in sorted(gates.items())
+            ),
+        )
 
     async def _request_token(self) -> AccessToken:
         """Request a new token from the Hostaway token endpoint.
@@ -139,6 +278,7 @@ class HostawayTokenManager:
             HostawayConnectionError: On network failure.
             HostawayResponseError: On unexpected response format.
         """
+        await self._acquire()
         try:
             response = await self._http.post(
                 self._token_url,
@@ -162,14 +302,31 @@ class HostawayTokenManager:
             raise HostawayAuthError("Invalid client credentials")
 
         if response.status_code == 429:
-            retry_after: float | None = None
-            header = response.headers.get("Retry-After")
-            if header is not None:
-                with contextlib.suppress(ValueError):
-                    retry_after = float(header)
+            headers = parse_rate_limit_headers(response)
+            if self._limiter is None:
+                _LOGGER.warning(
+                    "Hostaway refused the token request with HTTP 429. Counter: %s",
+                    headers.applied or "unreported",
+                )
+            else:
+                _LOGGER.warning(
+                    "Hostaway refused the token request with HTTP 429: this "
+                    "is server pushback, not the integration's own pacing. "
+                    "Counter: %s",
+                    headers.applied or "unreported",
+                )
+            if self._limiter is not None:
+                self._limiter.note_rate_limited(
+                    headers.applied,
+                    headers.retry_at,
+                    _TOKEN_METHOD,
+                    _TOKEN_PATH,
+                    limit=headers.limit,
+                    remaining=headers.remaining,
+                )
             raise HostawayRateLimitError(
                 "Token endpoint rate limited",
-                retry_after=retry_after,
+                retry_after=_retry._parse_retry_after(response),
             )
 
         if response.status_code != 200:

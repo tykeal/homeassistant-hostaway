@@ -145,6 +145,7 @@ class AccountRateLimiter:
         clock: Callable[[], float] = time.monotonic,
         schedule: TimerScheduler | None = None,
         wall_clock: Callable[[], float] = time.time,
+        startup_hold: bool = True,
     ) -> None:
         """Create a limiter.
 
@@ -158,6 +159,9 @@ class AccountRateLimiter:
             schedule: Timer hook, injected for testing.
             wall_clock: Wall clock, used only to interpret the server's
                 absolute ``Retry-After`` timestamps.
+            startup_hold: Whether the account gate begins half-consumed.
+                Production always wants this; a test with a tiny budget
+                would otherwise start with no capacity at all.
         """
         self.account_key = account_key
         self._clock = clock
@@ -168,6 +172,7 @@ class AccountRateLimiter:
             GateScope.ACCOUNT,
             budget=account_budget,
             created_at=clock(),
+            startup_hold=startup_hold,
         )
         self._ip_general_gate = (
             ip_gate if ip_gate is not None else shared_ip_gate(clock())

@@ -154,6 +154,40 @@ def current_request_context(now: float | None = None) -> RequestContext:
     )
 
 
+@contextmanager
+def ensure_request_context(now: float | None = None) -> Iterator[RequestContext]:
+    """Install a synthesised context when the caller established none.
+
+    ``current_request_context`` synthesises a fresh context on every call,
+    which would hand each stage of a multi-request operation its own
+    deadline. Installing the synthesised context once means a token
+    refresh, every retry, and a recursive re-entry after a 403 all share
+    the single deadline the operation is entitled to.
+
+    Args:
+        now: Current monotonic time, used only when synthesising. Defaults
+            to ``time.monotonic()``.
+
+    Yields:
+        The ambient context, which is left untouched when one already
+        exists.
+    """
+    existing = _REQUEST_CONTEXT.get()
+    if existing is not None:
+        yield existing
+        return
+    ctx = RequestContext.start(
+        RequestPriority.SCHEDULED,
+        SCHEDULED_POLICY,
+        time.monotonic() if now is None else now,
+    )
+    token = _REQUEST_CONTEXT.set(ctx)
+    try:
+        yield ctx
+    finally:
+        _REQUEST_CONTEXT.reset(token)
+
+
 def start_interactive_context(now: float | None = None) -> RequestContext:
     """Create a context for user-visible work.
 

@@ -42,6 +42,7 @@ from .context import (
     RequestPriority,
     WaitPolicy,
     current_request_context,
+    ensure_request_context,
     request_context,
     start_first_refresh_context,
     start_interactive_context,
@@ -58,7 +59,14 @@ from .limiter import (
     shared_ip_gate,
     shared_provider_suppression,
 )
-from .queueing import GateSnapshot, LimiterSnapshot, LimiterStats, Waiter
+from .queueing import (
+    GateSnapshot,
+    LimiterSnapshot,
+    LimiterStats,
+    Waiter,
+    deadline_exception,
+    sleep_within_deadline,
+)
 from .suppression import ProviderSuppression
 
 __all__ = [
@@ -87,12 +95,15 @@ __all__ = [
     "Waiter",
     "classify_request",
     "current_request_context",
+    "deadline_exception",
+    "ensure_request_context",
     "register_endpoint_bucket",
     "registered_endpoint_buckets",
     "request_context",
     "reset_shared_state",
     "shared_ip_gate",
     "shared_provider_suppression",
+    "sleep_within_deadline",
     "start_first_refresh_context",
     "start_interactive_context",
     "start_scheduled_context",
