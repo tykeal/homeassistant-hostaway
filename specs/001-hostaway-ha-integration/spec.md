@@ -214,8 +214,10 @@ event is fired containing the reservation data.
 - **FR-004**: System MUST provide a multi-step config flow:
   credentials entry → listing selection.
 - **FR-005**: System MUST respect Hostaway API rate limits
-  (15 requests/10s per IP, 20 requests/10s per account) with
-  appropriate throttling and backoff.
+  (200 requests/10s per IP and 200 requests/10s per account,
+  each counted separately) with appropriate throttling and
+  backoff. The figures originally recorded here, 15/10s and
+  20/10s, were wrong and were corrected by feature 008.
 - **FR-006**: System MUST handle HTTP 429 responses with
   exponential backoff retry.
 - **FR-007**: System MUST expose listing data as sensor

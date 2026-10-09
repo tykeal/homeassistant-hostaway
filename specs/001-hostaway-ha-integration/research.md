@@ -36,13 +36,20 @@ backoff on HTTP 429 responses.
 
 **Rationale**: Hostaway enforces two concurrent rate limits:
 
-- 15 requests per 10 seconds per IP address
-- 20 requests per 10 seconds per account ID
+- ~~15 requests per 10 seconds per IP address~~
+- ~~20 requests per 10 seconds per account ID~~
 
-The stricter limit (15/10s = 1.5 req/s) governs single-instance deployments.
+> **Superseded — these figures were wrong.** Verification during feature
+> 008 (proactive rate limiting) established that Hostaway applies 200
+> requests per 10 seconds to *each* of the account and IP counters. The
+> struck-through figures above are retained only as a record of what this
+> research originally concluded; see
+> `specs/008-proactive-rate-limiting/research.md` for the corrected model.
+
 HTTP 429 response indicates rate limit exceeded.
 
-**Alternatives considered**:
+**Alternatives considered** (also superseded — feature 008 adopted the
+proactive approach rejected here):
 
 - Client-side token bucket: Considered for proactive limiting, but polling
   intervals (2-5 min) naturally keep well under limits. Reactive backoff on
@@ -53,7 +60,9 @@ HTTP 429 response indicates rate limit exceeded.
 
 - Exponential backoff: initial=1s, multiplier=2, max=30s, jitter=random(0,1)
 - Max retries: 3
-- No proactive token bucket needed — polling intervals keep requests sparse
+- ~~No proactive token bucket needed — polling intervals keep requests
+  sparse~~ — superseded: feature 008 added a proactive sliding-window
+  limiter in front of every call
 - Service calls (set_door_code) may burst slightly but stay within limits
 
 ## R-003: Hostaway API Pagination

@@ -69,6 +69,119 @@ Obtain API credentials from the
 | --- | --- | --- |
 | Listing scan interval | 5 min | 1 min |
 | Reservation scan interval | 2 min | 1 min |
+| Rate limit budget (advanced) | 180 | 1 |
+
+## Rate limits
+
+### How Hostaway counts requests
+
+Hostaway applies **two** counters to ordinary endpoint calls, and a
+request is charged to both of them:
+
+- an **account** counter — 200 requests per 10 seconds, shared by every
+  ordinary endpoint call made with your Client ID, including calls from
+  other software you run
+- an **IP** counter — 200 requests per 10 seconds, shared by everything
+  calling Hostaway from the same address, including other Home Assistant
+  integrations and other households behind the same connection
+
+The integration tracks both counters itself and paces its own outbound
+traffic to stay underneath them, rather than sending requests and
+reacting to refusals afterwards. Whether a token request
+(`POST /v1/accessTokens`) is charged to these counters is undocumented,
+so the integration assumes it is and paces it too. That assumption is
+deliberately conservative and has not been confirmed by Hostaway.
+
+### The budget, and why it is 180
+
+The default budget is **180 requests per 10 seconds**, which is a
+deliberate safety margin of roughly ten percent below the 200 Hostaway
+allows. **180 is not a Hostaway-published figure.** It exists because
+the integration cannot see traffic it did not send: the margin is the
+room left for everything else sharing your account or your address.
+
+The budget is in the **advanced** section of the integration's options.
+Lower it if you share the account or the address with other Hostaway
+software; there is rarely a reason to raise it. The 10-second window is
+Hostaway's and is not configurable.
+
+Even at a conservative budget, sharing an account or an IP address with
+other Hostaway clients can still produce server-side pushback that this
+integration cannot predict, because it can only count what it sends. It
+handles that pushback when it arrives.
+
+### When entities go stale
+
+If a scheduled refresh cannot get capacity within a couple of seconds,
+the integration **drops that cycle** rather than failing it. Entities
+stay *available* and keep showing the values from the previous
+successful poll, and the next scheduled refresh tries again.
+
+Work that must not be dropped silently is allowed to wait longer
+instead, up to 30 seconds, because no later cycle will quietly redo it
+and the caller is owed an answer either way: an action you trigger
+yourself such as a service call or a config flow, the connectivity
+check when you add the integration, and each coordinator's very first
+refresh after a restart. Startup can
+therefore take a little longer on a busy account, but it does not come
+back empty.
+
+So **stale-but-available entities are usually a capacity symptom rather
+than a fault.** Either way the log says what happened, naming the
+refresh that was dropped and how long it waited.
+
+Read the warnings just above that line before changing anything. A
+scheduled refresh also spends its two seconds retrying a network error
+or a 5xx response, and running the deadline out that way drops the
+cycle in exactly the same visible way. If those warnings are there, the
+problem is the network or Hostaway, and asking for less will not help.
+
+When the dropped cycle really is a capacity one, the remedy is to ask
+for less, not to file a bug:
+
+- lengthen the listing and reservation scan intervals
+- reduce the number of selected listings, since reservations are
+  fetched per listing
+
+Lowering the rate limit budget is not one of those remedies. It makes
+the shedding above more likely, not less, because it hands this
+integration a smaller share of the window. Lower it only when something
+else shares the account or the address, so that the two paced clients
+add up to less than 200 — and when you do, cut the request volume above
+by at least as much, or you have simply traded Hostaway's refusals for
+our own.
+
+There is one case you cannot tune away. When Hostaway refuses a request
+it may send an `X-RateLimit-Retry-After` telling us to stop for a
+while. The integration waits until that instant when it is a usable one. A
+missing or unreadable value becomes a ten-second pause instead, and no
+single suppression is allowed to last more than an hour — a server
+deadline beyond that is deliberately not waited out in full, because an
+integration that can be silenced for a day by one malformed header is
+worse than one that tries again. If a suppression
+runs longer than an interactive call's own 30-second deadline, the call fails
+with a wait timeout even though nothing is wrong with it and even though
+you have asked for very little — the integration is not permitted to
+send during the suppression, and the deadline expires inside it. Retry
+after the suppression ends.
+
+### Diagnostics
+
+Download diagnostics from the integration's entry menu for a reading of
+the current state of each counter — its budget, how much of the window
+is already spent, how many requests are waiting on it, and whether it is
+suppressed right now — plus running totals. Every total is held in
+memory only, so a Home Assistant restart starts them all over. Between
+restarts their lifetimes differ: the admission and refusal totals belong
+to the limiter, which outlives a reload, while the per-coordinator count
+of dropped refresh cycles belongs to the coordinator, which is rebuilt
+on every reload and so restarts at zero each time the entry reloads.
+
+These are a snapshot and a set of totals, not a history: they will not
+tell you which counter delayed one particular request earlier in the
+day, and a provider-wide suppression affecting all Hostaway clients is
+not reported. The payload contains no credentials and nothing
+identifying the account, so it is safe to attach to a support ticket.
 
 ## Entities
 
