@@ -109,14 +109,16 @@ def _make_entry(**overrides: object) -> MockConfigEntry:
         CONF_RESERVATION_SCAN_INTERVAL: DEFAULT_RESERVATION_SCAN_INTERVAL,
     }
     options.update(cast(dict[str, Any], overrides.pop("options", {})))
+    data: dict[str, Any] = {
+        CONF_CLIENT_ID: "test-client-id",
+        CONF_CLIENT_SECRET: "test-client-secret",
+        CONF_SELECTED_LISTINGS: [12345],
+    }
+    data.update(cast(dict[str, Any], overrides.pop("data", {})))
     return MockConfigEntry(
         domain=DOMAIN,
         title="Hostaway (test-cli...)",
-        data={
-            CONF_CLIENT_ID: "test-client-id",
-            CONF_CLIENT_SECRET: "test-client-secret",
-            CONF_SELECTED_LISTINGS: [12345],
-        },
+        data=data,
         unique_id="test-client-id",
         options=options,
         **overrides,  # type: ignore[arg-type]
@@ -893,6 +895,42 @@ class TestRateLimitBudgetOption:
 
         assert result["type"] is FlowResultType.CREATE_ENTRY
         assert result["data"][CONF_RATE_LIMIT_BUDGET] == 90
+
+    async def test_a_data_backed_budget_survives_the_form(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """SC-017: a budget stored in entry data is not quietly reset.
+
+        An entry may carry the budget in ``data`` rather than ``options``.
+        The form must offer that figure as the default and keep it when
+        the section is left collapsed, rather than falling back to 180
+        and raising the operator's allowance behind their back.
+
+        Args:
+            hass: Home Assistant instance.
+        """
+        entry = _make_entry(data={CONF_RATE_LIMIT_BUDGET: 120})
+        entry.add_to_hass(hass)
+
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+
+        advanced = _advanced_section(result["data_schema"])
+
+        assert advanced is not None
+        assert _section_default(advanced, CONF_RATE_LIMIT_BUDGET) == 120
+
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_SCAN_INTERVAL: 5,
+                CONF_RESERVATION_SCAN_INTERVAL: 2,
+            },
+        )
+
+        assert result["type"] is FlowResultType.CREATE_ENTRY
+        assert result["data"][CONF_RATE_LIMIT_BUDGET] == 120
+        assert entry_budget(entry) == 120
 
     async def test_the_setup_flow_never_asks_about_the_budget(
         self,

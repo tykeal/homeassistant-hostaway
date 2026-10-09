@@ -33,7 +33,6 @@ from homeassistant.helpers.selector import (
 from custom_components.hostaway.api.auth import HostawayTokenManager
 from custom_components.hostaway.api.client import HostawayApiClient
 from custom_components.hostaway.api.const import (
-    DEFAULT_RATE_LIMIT_BUDGET,
     RATE_LIMIT_CEILING,
 )
 from custom_components.hostaway.api.exceptions import (
@@ -69,7 +68,10 @@ from custom_components.hostaway.const import (
     MIN_SCAN_INTERVAL,
     OPTIONS_SECTION_ADVANCED,
 )
-from custom_components.hostaway.rate_limit_registry import validation_limiter
+from custom_components.hostaway.rate_limit_registry import (
+    entry_budget,
+    validation_limiter,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -453,10 +455,7 @@ class HostawayOptionsFlow(OptionsFlow):
             Config flow result (form or entry creation).
         """
         errors: dict[str, str] = {}
-        stored_budget = self._config_entry.options.get(
-            CONF_RATE_LIMIT_BUDGET,
-            DEFAULT_RATE_LIMIT_BUDGET,
-        )
+        stored_budget = entry_budget(self._config_entry)
 
         if user_input is not None:
             scan = user_input.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
