@@ -30,6 +30,7 @@ from custom_components.hostaway.api.const import (
     DEFAULT_RATE_LIMIT_BUDGET,
     RATE_LIMIT_WINDOW_SECONDS,
 )
+from custom_components.hostaway.api.exceptions import HostawayRateLimitWaitTimeout
 from custom_components.hostaway.api.rate_limit import (
     FIRST_REFRESH_POLICY,
     AccountRateLimiter,
@@ -306,6 +307,31 @@ class TestOneLimiterPerAccount:
         assert result["reason"] == "single_instance_allowed"
         # Turned away before spending a request on it.
         validate.assert_not_awaited()
+
+    async def test_a_paced_timeout_is_reported_as_a_rate_limit(
+        self, hass: HomeAssistant
+    ) -> None:
+        """Our own pacing giving up is not an unknown error.
+
+        Args:
+            hass: Home Assistant instance.
+        """
+        with patch(
+            "custom_components.hostaway.config_flow._validate_credentials",
+            new_callable=AsyncMock,
+            side_effect=HostawayRateLimitWaitTimeout("no capacity", waited=30.0),
+        ):
+            result = await hass.config_entries.flow.async_init(
+                DOMAIN,
+                context={"source": SOURCE_USER},
+                data={
+                    CONF_CLIENT_ID: _ACCOUNT,
+                    CONF_CLIENT_SECRET: "secret",
+                },
+            )
+
+        assert result["type"] is FlowResultType.FORM
+        assert result["errors"] == {"base": "rate_limited"}
 
     async def test_the_config_flow_still_allows_the_same_account(
         self, hass: HomeAssistant

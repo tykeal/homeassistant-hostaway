@@ -31,6 +31,7 @@ from custom_components.hostaway.api.client import HostawayApiClient
 from custom_components.hostaway.api.exceptions import (
     HostawayAuthError,
     HostawayConnectionError,
+    HostawayRateLimitError,
 )
 from custom_components.hostaway.api.models import HostawayListing
 from custom_components.hostaway.api.rate_limit import (
@@ -205,6 +206,8 @@ class HostawayConfigFlow(ConfigFlow, domain=DOMAIN):
                 errors["base"] = "invalid_auth"
             except HostawayConnectionError:
                 errors["base"] = "cannot_connect"
+            except HostawayRateLimitError:
+                errors["base"] = "rate_limited"
             except Exception:
                 _LOGGER.exception("Unexpected error during reauth")
                 errors["base"] = "unknown"
@@ -290,6 +293,8 @@ class HostawayConfigFlow(ConfigFlow, domain=DOMAIN):
                 errors["base"] = "invalid_auth"
             except HostawayConnectionError:
                 errors["base"] = "cannot_connect"
+            except HostawayRateLimitError:
+                errors["base"] = "rate_limited"
             except Exception:
                 _LOGGER.exception("Unexpected error during setup")
                 errors["base"] = "unknown"
@@ -345,6 +350,9 @@ class HostawayConfigFlow(ConfigFlow, domain=DOMAIN):
             except HostawayConnectionError:
                 _LOGGER.warning("Connection failed fetching listings")
                 return self.async_abort(reason="cannot_connect")
+            except HostawayRateLimitError:
+                _LOGGER.warning("Rate limited while fetching listings")
+                return self.async_abort(reason="rate_limited")
             except Exception:
                 _LOGGER.exception("Failed to fetch listings")
                 return self.async_abort(reason="unknown")
