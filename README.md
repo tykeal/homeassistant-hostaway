@@ -124,11 +124,18 @@ and each coordinator's very first refresh after a restart. Startup can
 therefore take a little longer on a busy account, but it does not come
 back empty.
 
-So **stale-but-available entities with no errors in the log are a
-capacity symptom, not a fault.** The log says so explicitly, naming the
+So **stale-but-available entities are usually a capacity symptom rather
+than a fault.** Either way the log says what happened, naming the
 refresh that was dropped and how long it waited.
 
-The remedy is to ask for less, not to file a bug:
+Read the warnings just above that line before changing anything. A
+scheduled refresh also spends its two seconds retrying a network error
+or a 5xx response, and running the deadline out that way drops the
+cycle in exactly the same visible way. If those warnings are there, the
+problem is the network or Hostaway, and asking for less will not help.
+
+When the dropped cycle really is a capacity one, the remedy is to ask
+for less, not to file a bug:
 
 - lengthen the listing and reservation scan intervals
 - reduce the number of selected listings, since reservations are

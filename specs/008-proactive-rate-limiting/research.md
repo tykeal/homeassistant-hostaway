@@ -103,11 +103,12 @@ following is done, neither of which blocks the feature:
    the general account and IP buckets, and record the answer here with a
    date; or
 2. Observe that a token request actually consumes capacity, on an otherwise
-   idle account: read the remaining capacity from a data response, issue only
-   a token request, then read it again. A decrement is the evidence. The mere
-   presence of `X-RateLimit-*` headers on the token response is not — an
-   exempt endpoint can still report the current state of a counter it does
-   not charge.
+   idle account. The probe itself costs a request, so measure the control
+   first: two consecutive data requests, and record how far the remaining
+   capacity falls. Then repeat with a token request inserted between them.
+   Only a *larger* fall than the control is evidence. The mere presence of
+   `X-RateLimit-*` headers on the token response is not — an exempt endpoint
+   can still report the current state of a counter it does not charge.
 
 Until then the conservative assume-it-counts behaviour stands unchanged.
 Guessing an answer is worse than the open question: paying for an admission
