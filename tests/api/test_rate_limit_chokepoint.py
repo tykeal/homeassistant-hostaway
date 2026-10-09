@@ -1038,6 +1038,34 @@ class TestChokepointObservability:
         assert "account" in refusals[0].getMessage()
         limiter.close()
 
+    async def test_an_unpaced_token_manager_claims_no_pacing(
+        self,
+        mock_httpx_client: httpx.AsyncClient,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """There is no pacing to contrast the refusal with.
+
+        Args:
+            mock_httpx_client: The transport fixture.
+            caplog: Captured log records.
+        """
+        respx.post("https://api.hostaway.com/v1/accessTokens").mock(
+            side_effect=_refuse_then_succeed(99)
+        )
+        manager = HostawayTokenManager("client-id", "secret", mock_httpx_client)
+
+        with (
+            caplog.at_level(
+                logging.WARNING, logger="custom_components.hostaway.api.auth"
+            ),
+            pytest.raises(HostawayRateLimitError),
+        ):
+            await manager.get_token()
+
+        refusals = [r for r in caplog.records if "HTTP 429" in r.getMessage()]
+        assert len(refusals) == 1
+        assert "own pacing" not in refusals[0].getMessage()
+
 
 class TestTheSharedTransportIsUntouched:
     """T021: the httpx client belongs to Home Assistant, not to us."""

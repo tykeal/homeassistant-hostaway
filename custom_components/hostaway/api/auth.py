@@ -303,12 +303,18 @@ class HostawayTokenManager:
 
         if response.status_code == 429:
             headers = parse_rate_limit_headers(response)
-            _LOGGER.warning(
-                "Hostaway refused the token request with HTTP 429: this is "
-                "server pushback, not the integration's own pacing. "
-                "Counter: %s",
-                headers.applied or "unreported",
-            )
+            if self._limiter is None:
+                _LOGGER.warning(
+                    "Hostaway refused the token request with HTTP 429. Counter: %s",
+                    headers.applied or "unreported",
+                )
+            else:
+                _LOGGER.warning(
+                    "Hostaway refused the token request with HTTP 429: this "
+                    "is server pushback, not the integration's own pacing. "
+                    "Counter: %s",
+                    headers.applied or "unreported",
+                )
             if self._limiter is not None:
                 self._limiter.note_rate_limited(
                     headers.applied,
