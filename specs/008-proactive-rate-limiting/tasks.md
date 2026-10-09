@@ -68,14 +68,14 @@ primitives every later phase imports. Nothing here changes runtime behaviour.
 
 **⚠️ Blocking**: no phase-2 work starts until T002 and T004 are green.
 
-- [ ] T001 Capture and record the green baseline: run `uv sync`,
+- [x] T001 Capture and record the green baseline: run `uv sync`,
   `uv run pytest tests/` (expect 493 passing),
   `uv run ruff check custom_components/ tests/`,
   `uv run mypy custom_components/` — no files changed — SC-011 —
   **Verify**: all three clean; note the exact test count in the PR
   description so later phases can prove the count only grew.
 
-- [ ] T002 [P] Add the documented rate-limit constants
+- [x] T002 [P] Add the documented rate-limit constants
   `RATE_LIMIT_WINDOW_SECONDS = 10.0`, `RATE_LIMIT_CEILING = 200`,
   `DEFAULT_RATE_LIMIT_BUDGET = 180`, `DEFAULT_SUPPRESSION_SECONDS = 10.0`,
   each with a docstring/comment stating that 180 is a deliberate safety
@@ -84,7 +84,7 @@ primitives every later phase imports. Nothing here changes runtime behaviour.
   — **Verify**: a unit test asserts each constant's value and that no
   window-length setter or option exists (FR-034).
 
-- [ ] T003 Remove the stale `RATE_LIMIT_PER_IP = 15` and
+- [x] T003 Remove the stale `RATE_LIMIT_PER_IP = 15` and
   `RATE_LIMIT_PER_ACCOUNT = 20` constants **in their own commit**, after
   confirming repo-wide they are unreferenced —
   `custom_components/hostaway/api/const.py` — R-016, spec "Provenance for
@@ -92,7 +92,7 @@ primitives every later phase imports. Nothing here changes runtime behaviour.
   `rg 'RATE_LIMIT_PER_(IP|ACCOUNT)' custom_components/ tests/` returns
   nothing; full suite still green. **Depends on T002.**
 
-- [ ] T004 [P] Add `HostawayRateLimitShedError(Exception)` — deliberately
+- [x] T004 [P] Add `HostawayRateLimitShedError(Exception)` — deliberately
   **not** a `HostawayApiError` subclass — and
   `HostawayRateLimitWaitTimeout(HostawayRateLimitError)`, both carrying
   `waited: float` — `custom_components/hostaway/api/exceptions.py`,
@@ -103,13 +103,16 @@ primitives every later phase imports. Nothing here changes runtime behaviour.
   two assertions are the structural guard for SC-005 and SC-015; they must
   never be relaxed.
 
-- [ ] T005 [P] Add the deterministic test harness: a `FakeClock` exposing
+- [x] T005 [P] Add the deterministic test harness: a `FakeClock` exposing
   `now`, a `call_later`-style `schedule` hook, and `advance(seconds)` that
   fires due timers in order — `tests/api/conftest.py` (or `tests/helpers.py`)
   — R-017, quickstart "Testing without waiting" — **Verify**: a self-test
   proves `advance()` fires timers in due order and that no limiter test in
   later phases contains `asyncio.sleep`
-  (`rg 'asyncio.sleep' tests/api/test_rate_limit.py` returns nothing).
+  (`rg 'asyncio.sleep' tests/api/test_rate_limit.py` returns nothing). The
+  harness must also fail loudly rather than hang when a callback re-arms at
+  zero delay, since a pump that wakes without making progress is exactly the
+  bug it exists to expose.
 
 **Checkpoint**: constants, exceptions, and the fake clock exist; behaviour
 unchanged; suite green.
@@ -541,8 +544,15 @@ and assert the cycle is skipped, logged, data preserved, entities available.
   names embed `entry.unique_id`, which is `CONF_CLIENT_ID`, so logging the
   generated name would leak the credential —
   `custom_components/hostaway/coordinator.py`, `tests/test_coordinator.py` —
+  Keeping `HostawayRateLimitShedError` outside the `HostawayApiError`
+  hierarchy is necessary but **not sufficient**: each subclass fetch path
+  also ends in a broad `except Exception` (for example `coordinator.py:102`)
+  that would convert the shed signal into an `UpdateFailed` anyway. The shed
+  signal MUST therefore be re-raised ahead of every such handler —
   FR-021, FR-022, FR-023, FR-024, FR-025, FR-026, SC-005, SC-006, SC-016,
-  data-model §10, contract §6 — **Verify**: `async_set_updated_data` appears
+  data-model §10, contract §6 — **Verify**: a shed raised from inside
+  `_async_fetch_data` reaches the base class and is **not** swallowed by the
+  broad handler; `async_set_updated_data` appears
   **nowhere** in the shed path (`rg async_set_updated_data
   custom_components/hostaway/coordinator.py` returns nothing); a shed does not
   publish a partial dataset and does not retry immediately or accumulate
