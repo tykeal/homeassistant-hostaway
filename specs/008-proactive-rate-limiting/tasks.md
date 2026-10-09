@@ -134,7 +134,7 @@ admissions than the budget for either gate.
 **Constraint**: this module MUST import nothing from `homeassistant`
 (Constitution II, R-011). Add a test that asserts it.
 
-- [ ] T006 [P] [US3] Implement `RequestPriority`, `WaitPolicy`, the three
+- [x] T006 [P] [US3] Implement `RequestPriority`, `WaitPolicy`, the three
   policy constants (`INTERACTIVE_POLICY` 30.0/no-shed, `SCHEDULED_POLICY`
   2.0/shed, `FIRST_REFRESH_POLICY` 30.0/no-shed), `RequestContext` with
   `start()`/`remaining()`, the `_REQUEST_CONTEXT` contextvar, the
@@ -149,7 +149,7 @@ admissions than the budget for either gate.
   False`; the context is restored on exception and propagates into
   `asyncio.Task`s created inside it.
 
-- [ ] T007 [P] [US1] Implement `SlidingWindowGate` with a monotonic
+- [x] T007 [P] [US1] Implement `SlidingWindowGate` with a monotonic
   `deque[float]`, gate-specific `window_seconds` and `max_budget`, pruning at
   the head of `capacity_available`, `record`, and `next_available`, plus
   `reconfigure(budget)` that validates `1 <= budget <= max_budget` and
@@ -175,7 +175,7 @@ admissions than the budget for either gate.
   representable; all time decisions use the injected clock (a wall-clock jump
   changes nothing).
 
-- [ ] T008 [P] [US1] Implement the `BudgetGate` protocol (all methods
+- [x] T008 [P] [US1] Implement the `BudgetGate` protocol (all methods
   synchronous; `capacity_available` and `next_available` are logically
   read-only but may prune expired local timestamps; only `record` consumes new
   capacity) and
@@ -192,7 +192,7 @@ admissions than the budget for either gate.
   leaves both general gates unchanged — with zero changes to `coordinator.py`,
   `services/`, or any public API method.
 
-- [ ] T009 [US1] [US3] Implement `AccountRateLimiter.__init__`,
+- [x] T009 [US1] [US3] Implement `AccountRateLimiter.__init__`,
   `async acquire(method, path)`, the `Waiter` record, the
   `(priority, sequence)` heap, and the synchronous `_pump()` admission
   decision. `_pump()` must order candidates first (honouring priority and
@@ -218,7 +218,7 @@ admissions than the budget for either gate.
   there is no `release()` — admission is a rate reservation, not a pool.
   **Depends on T006, T007, T008.**
 
-- [ ] T010 [US2] [US3] Enforce the operation-wide deadline inside `acquire()`:
+- [x] T010 [US2] [US3] Enforce the operation-wide deadline inside `acquire()`:
   queued waits consume `RequestContext.remaining(now)`, raising
   `HostawayRateLimitShedError` when a `shed_on_timeout` policy's deadline is
   exhausted and `HostawayRateLimitWaitTimeout` otherwise, both carrying the
@@ -237,7 +237,7 @@ admissions than the budget for either gate.
   blocked raises once and does **not** spin — count fake-clock timer arms and
   prove no zero-delay re-arm occurs. **Depends on T009.**
 
-- [ ] T011 [US1] Handle waiter cancellation and timeout removal: a waiter
+- [x] T011 [US1] Handle waiter cancellation and timeout removal: a waiter
   removed before its future resolved consumes **no** capacity; a waiter whose
   future already resolved in the same loop iteration keeps its recorded
   admission (never un-record); removal always re-pumps —
@@ -248,7 +248,7 @@ admissions than the budget for either gate.
   assert no `heapq` comparison ever reaches a `Future` object.
   **Depends on T009.**
 
-- [ ] T012 [US5] Implement `note_rate_limited(applied_counter, retry_at,
+- [x] T012 [US5] Implement `note_rate_limited(applied_counter, retry_at,
   method, path, limit=None, remaining=None)` with **gate-scoped** suppression:
   `account` → that account's general gate, `ip` → the shared process-wide IP
   gate, `endpoint` → the classified endpoint bucket, `provider` → shared
@@ -287,7 +287,7 @@ admissions than the budget for either gate.
   larger limits or remaining counts do not raise capacity or delete local
   admissions, so feedback cannot oscillate. **Depends on T009.**
 
-- [ ] T013 [US1] Implement `configure(*, account_budget, effective_ip_budget)`
+- [x] T013 [US1] Implement `configure(*, account_budget, effective_ip_budget)`
   raising `ValueError` outside `1..200` for general gates, applying the
   effective account budget (minimum across active same-account entries) to the
   account gate and the process-wide **minimum** to the shared IP gate,
@@ -302,7 +302,7 @@ admissions than the budget for either gate.
   lower configured account budget rather than last-writer-wins. **Depends on
   T009.**
 
-- [ ] T014 [P] [US4] Implement `LimiterStats`, `GateSnapshot`,
+- [x] T014 [P] [US4] Implement `LimiterStats`, `GateSnapshot`,
   `LimiterSnapshot`, `snapshot()` (pure, prunes first), `note_shed()`, and
   per-applied-counter 429 storage —
   `custom_components/hostaway/api/rate_limit.py`,
@@ -313,7 +313,7 @@ admissions than the budget for either gate.
   **no** `account_key` or credential substring; `note_shed()` does not affect
   admission. **Depends on T009.**
 
-- [ ] T015 [US1] Add the deterministic over-budget simulator test: a workload
+- [x] T015 [US1] Add the deterministic over-budget simulator test: a workload
   demanding ≥2× budget driven entirely by the fake clock, with a Hostaway
   sliding-window model that returns 429 when either documented counter is
   exceeded — `tests/api/test_rate_limit.py` — **SC-001**, **SC-002**
