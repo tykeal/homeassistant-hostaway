@@ -98,8 +98,8 @@ when the value is absent or unknown.
 | Behaviour | Requirement |
 |---|---|
 | MUST convert `retry_at` from a Unix timestamp to a delay relative to current wall-clock time before applying it | FR-015 |
-| MUST apply the **full** converted delay to the gate's suppression deadline, uncapped by `MAX_BACKOFF` | FR-015, SC-007 |
-| MUST reject a header that is non-numeric, not in the future, or more than one hour ahead, falling back to `10.0` seconds | FR-015 |
+| MUST apply the converted delay to the gate's suppression deadline uncapped by `MAX_BACKOFF`, bounded only by `MAX_SUPPRESSION_SECONDS` (`3600.0`) | FR-015, SC-007 |
+| MUST reject only a header that is non-numeric or not in the future, falling back to `10.0` seconds; a distant valid timestamp is capped, never discarded | FR-015 |
 | MUST allow the retry layer's own sleep to stay bounded by `MAX_BACKOFF`, re-acquiring and re-waiting if it wakes before the deadline | FR-013, FR-015 |
 | With no usable timestamp, MUST suppress for `DEFAULT_SUPPRESSION_SECONDS` (`10.0`) | FR-015 |
 | MUST use `applied_counter` to suppress the affected gate: account, shared IP, endpoint bucket, or provider-global | FR-014 |

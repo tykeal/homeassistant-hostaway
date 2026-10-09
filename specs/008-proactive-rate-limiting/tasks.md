@@ -252,7 +252,9 @@ admissions than the budget for either gate.
   suppressing every gate selected for the request. Convert `retry_at` from a
   **Unix timestamp** against wall-clock time once, suppress for the **full**
   remaining delay (explicitly **not** capped by `MAX_BACKOFF`, so suppression
-  never expires before the server's deadline), and fall back to
+  never expires before the server's deadline) bounded only by
+  `MAX_SUPPRESSION_SECONDS` (3600.0) as a corrupt-header safety net, and fall
+  back to
   `DEFAULT_SUPPRESSION_SECONDS` (10.0). Suppression **extends, never
   shortens**, applies to interactive callers identically, clears by time
   comparison in `_pump()`, and re-pumps every limiter waiting on a changed

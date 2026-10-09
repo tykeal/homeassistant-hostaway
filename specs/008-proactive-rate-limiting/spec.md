@@ -576,10 +576,11 @@ suppressed for the indicated or inferred period.
   wall-clock time before being applied to the limiter and retry layer, and
   MUST never be treated as a raw seconds value. The resulting delay MUST be
   applied to the two layers differently:
-  - The **gate suppression deadline** MUST retain the **full** server-derived
-    delay. It MUST NOT be clamped to `MAX_BACKOFF`, because truncating it
-    would admit a request before the moment the server told us to resume,
-    which is exactly the outcome this feature exists to prevent. This matters
+  - The **gate suppression deadline** MUST retain the server-derived delay up
+    to a single safety cap of `MAX_SUPPRESSION_SECONDS` (**3600.0**). It MUST
+    NOT be clamped to `MAX_BACKOFF`, because truncating it to 30 seconds would
+    admit a request before the moment the server told us to resume, which is
+    exactly the outcome this feature exists to prevent. This matters
     most for provider-level 429s and for endpoint buckets whose windows exceed
     `MAX_BACKOFF`, such as the documented 30-per-minute messages bucket.
   - The **retry layer's sleep** MAY remain bounded by the existing
@@ -589,11 +590,21 @@ suppressed for the indicated or inferred period.
 
   A waiter's operation-wide deadline MAY therefore expire while suppression is
   still in force; that case MUST surface as the normal wait-timeout path and
-  MUST NOT shorten or clear the gate's deadline for other callers. Only a
-  header that is absent, non-numeric, not in the future, or implausibly
-  distant (more than one hour ahead, indicating a corrupt or
-  wrong-unit value) is unusable; in that case suppression MUST last
-  **10.0 seconds**.
+  MUST NOT shorten or clear the gate's deadline for other callers.
+
+  The `MAX_SUPPRESSION_SECONDS` cap exists solely to bound a corrupt or
+  wrong-unit header — a value mistakenly sent as a raw seconds delay reads as
+  a timestamp roughly 56 years ahead and would otherwise wedge the integration
+  for the lifetime of the process. Hostaway documents no bucket remotely close
+  to an hour, so a legitimate deadline is never expected to reach the cap. A
+  capped suppression is **not** treated as honouring the server deadline: when
+  it expires, the single request admitted next simply earns a fresh 429 whose
+  header re-suppresses the gate, so traffic stays suppressed at the cost of
+  one probe per hour rather than resuming in full.
+
+  Only a header that is absent, non-numeric, or not in the future is
+  **unusable**; a distant-but-valid timestamp is used and capped, never
+  discarded. For an unusable header suppression MUST last **10.0 seconds**.
 - **FR-016**: Suppression MUST apply to **all** callers including interactive
   ones. A server-issued `X-RateLimit-Retry-After` outranks the integration's
   internal priority ordering.

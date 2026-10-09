@@ -361,8 +361,9 @@ remaining)` before
 deciding whether to retry or raise. `retry_at` comes from Hostaway's
 `X-RateLimit-Retry-After` Unix timestamp. The implementation converts it to a
 delay relative to current wall-clock time, suppresses for that delay's
-**full** length — uncapped, so suppression cannot expire before the server's
-deadline — on the gate scope identified by
+full length — uncapped by `MAX_BACKOFF`, so suppression cannot expire before
+the server's deadline, and bounded only by `MAX_SUPPRESSION_SECONDS` (3600.0)
+as a corrupt-header safety net — on the gate scope identified by
 `X-RateLimit-Applied`: account suppresses the account general gate, IP
 suppresses the shared process-wide IP gate, endpoint suppresses the classified
 endpoint bucket, and provider suppresses all Hostaway traffic from this
