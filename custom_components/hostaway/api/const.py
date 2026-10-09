@@ -40,8 +40,6 @@ DEFAULT_SUPPRESSION_SECONDS: float = 10.0
 # seconds delay reads as a timestamp decades ahead and would otherwise wedge
 # the integration for the life of the process.
 MAX_SUPPRESSION_SECONDS: float = 3600.0
-RATE_LIMIT_PER_IP: int = 15  # per 10 seconds
-RATE_LIMIT_PER_ACCOUNT: int = 20  # per 10 seconds
 DEFAULT_PAGE_LIMIT: int = 100
 GRANT_TYPE: str = "client_credentials"
 SCOPE: str = "general"

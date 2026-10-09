@@ -60,3 +60,12 @@ class TestWindowLengthIsNotConfigurable:
             n for n in names if "WINDOW" in n and n != "RATE_LIMIT_WINDOW_SECONDS"
         ]
         assert not any(callable(getattr(const, n)) for n in names)
+
+
+class TestStaleConstantsRemoved:
+    """Hostaway corrected its published limits on 2026-08-20."""
+
+    def test_superseded_limits_are_gone(self) -> None:
+        """The 15/IP and 20/account figures predate the correction."""
+        assert not hasattr(const, "RATE_LIMIT_PER_IP")
+        assert not hasattr(const, "RATE_LIMIT_PER_ACCOUNT")
