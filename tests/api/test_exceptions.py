@@ -159,12 +159,16 @@ class TestHostawayRateLimitShedError:
         assert not issubclass(HostawayRateLimitShedError, HostawayApiError)
 
     def test_carries_the_time_waited(self) -> None:
-        """Diagnostics and logs report how long the caller queued."""
+        """It can report how long the caller queued before being shed."""
         error = HostawayRateLimitShedError("shed refresh", waited=1.5)
         assert error.waited == 1.5
 
     def test_is_catchable_on_its_own(self) -> None:
-        """Coordinators catch it explicitly, before any broad handler."""
+        """It can be caught by its own type, independently of any base.
+
+        Nothing raises or catches it yet; the coordinator wiring that will
+        do so is T027.
+        """
         with pytest.raises(HostawayRateLimitShedError):
             raise HostawayRateLimitShedError("shed refresh", waited=0.0)
 
@@ -185,16 +189,18 @@ class TestHostawayRateLimitWaitTimeout:
         assert issubclass(HostawayRateLimitWaitTimeout, HostawayApiError)
 
     def test_carries_the_time_waited(self) -> None:
-        """The deadline that expired is reported to the caller."""
+        """It can report the deadline's elapsed wait to the caller."""
         error = HostawayRateLimitWaitTimeout("deadline expired", waited=30.0)
         assert error.waited == 30.0
 
     def test_distinguishable_from_a_server_429(self) -> None:
-        """A local timeout is not a server refusal.
+        """A local timeout is distinguishable from a server refusal.
 
         services/custom_fields.py catches HostawayRateLimitError and
         replays the whole read/merge/write. Replaying on a local timeout
-        would be wrong, so callers must be able to tell the two apart.
+        would be wrong, so the types must allow a caller to tell the two
+        apart. Adding that earlier handler is T026; this only proves the
+        hierarchy permits it.
         """
         server = HostawayRateLimitError("429 from Hostaway", retry_after=5.0)
         local = HostawayRateLimitWaitTimeout("deadline expired", waited=30.0)
