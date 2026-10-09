@@ -717,6 +717,13 @@ class TestInteractivePriorityIsStructural:
 
         clock = FakeClock(start=1000.0)
         limiter = make_limiter(clock, account_budget=5, ip_budget=5)
+        # The binder reads the real clock, and a CI runner's uptime can be
+        # lower than the fake clock's start, which would hand the service
+        # call a deadline it had already missed.
+        monotonic = patch(
+            "custom_components.hostaway.api.rate_limit.context.time.monotonic",
+            clock.now,
+        )
         order: list[str] = []
 
         async def poll() -> None:
@@ -744,7 +751,9 @@ class TestInteractivePriorityIsStructural:
         scheduled = asyncio.create_task(poll())
         await settle()
         bound = _bind_handler(hass, cast(Any, handler))
-        service = asyncio.create_task(bound(cast(Any, None)))
+        with monotonic:
+            service = asyncio.create_task(bound(cast(Any, None)))
+            await settle()
         await settle()
         assert not scheduled.done()
         assert not service.done()
