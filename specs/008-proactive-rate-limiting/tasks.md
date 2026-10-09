@@ -338,7 +338,7 @@ feeds back into it.
 **Independent Test**: add a throwaway method to `HostawayApiClient` with no
 limiter-specific code and show its traffic is limited (SC-009).
 
-- [ ] T016 [US1] Add an optional `limiter: AccountRateLimiter | None = None`
+- [x] T016 [US1] Add an optional `limiter: AccountRateLimiter | None = None`
   constructor parameter to `HostawayApiClient` (defaulting to unlimited) and
   `await self._limiter.acquire(method, path)` **inside** the existing retry
   loop, immediately before `self._http.request(...)`, so every retry attempt
@@ -351,14 +351,14 @@ limiter-specific code and show its traffic is limited (SC-009).
   tests construct the client without a limiter and keep passing.
   **Depends on T009.**
 
-- [ ] T017 [US3] Cap retry backoff sleeps by the ambient operation deadline's
+- [x] T017 [US3] Cap retry backoff sleeps by the ambient operation deadline's
   remaining time, raising the same shed/timeout exception the next acquisition
   would raise when no time remains — `custom_components/hostaway/api/client.py`
   — FR-020, FR-021, contract §4 — **Verify**: a test in a 2 s scheduled context
   asserts the retry sleep never exceeds `ctx.remaining(now)` and that the cycle
   sheds instead of sleeping past its deadline. **Depends on T016.**
 
-- [ ] T018 [US5] Correct the rate-limit header handling: read Hostaway's
+- [x] T018 [US5] Correct the rate-limit header handling: read Hostaway's
   documented `X-RateLimit-Limit`, `X-RateLimit-Remaining`,
   `X-RateLimit-Retry-After` (**a Unix timestamp**), and `X-RateLimit-Applied`
   on 429 responses; call `limiter.note_rate_limited(...)` in the `429` branch
@@ -378,7 +378,7 @@ limiter-specific code and show its traffic is limited (SC-009).
   affected gate and never raise an operator-configured budget. **Depends on
   T012, T016.**
 
-- [ ] T019 [US1] Add the second enforcement point: optional `limiter`
+- [x] T019 [US1] Add the second enforcement point: optional `limiter`
   parameter on `HostawayTokenManager`, `await limiter.acquire(...)` before
   `self._http.post(...)` in `_request_token` (~line 143), `note_rate_limited`
   in its own 429 branch, the post-generation delay consuming the ambient
@@ -391,7 +391,7 @@ limiter-specific code and show its traffic is limited (SC-009).
   data-request acquisition; a test asserts the OQ-001 comment text exists (or a
   reviewer checklist item covers it). **Depends on T009, T016.**
 
-- [ ] T020 [P] [US4] Add observability at the chokepoint: `DEBUG` per-request
+- [x] T020 [P] [US4] Add observability at the chokepoint: `DEBUG` per-request
   admission logging with priority class, wait duration, and remaining budget;
   a **distinguishable** `WARNING` for a 429 received despite proactive
   limiting whose wording makes clear this was **server pushback**, not
@@ -401,7 +401,7 @@ limiter-specific code and show its traffic is limited (SC-009).
   a proactive shed WARNING, and that nothing new is logged at default verbosity
   for a below-budget request. **Depends on T016.**
 
-- [ ] T021 [P] [US1] Add the FR-003 guard: assert the limiter never wraps,
+- [x] T021 [P] [US1] Add the FR-003 guard: assert the limiter never wraps,
   subclasses, replaces, or reconfigures the shared httpx client from
   `get_async_client(hass)` — `tests/api/test_client.py` — FR-003 —
   **Verify**: a test asserts the injected `AsyncClient` object identity and
