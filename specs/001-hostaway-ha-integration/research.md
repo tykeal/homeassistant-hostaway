@@ -48,7 +48,8 @@ backoff on HTTP 429 responses.
 
 HTTP 429 response indicates rate limit exceeded.
 
-**Alternatives considered**:
+**Alternatives considered** (also superseded — feature 008 adopted the
+proactive approach rejected here):
 
 - Client-side token bucket: Considered for proactive limiting, but polling
   intervals (2-5 min) naturally keep well under limits. Reactive backoff on
@@ -59,7 +60,9 @@ HTTP 429 response indicates rate limit exceeded.
 
 - Exponential backoff: initial=1s, multiplier=2, max=30s, jitter=random(0,1)
 - Max retries: 3
-- No proactive token bucket needed — polling intervals keep requests sparse
+- ~~No proactive token bucket needed — polling intervals keep requests
+  sparse~~ — superseded: feature 008 added a proactive sliding-window
+  limiter in front of every call
 - Service calls (set_door_code) may burst slightly but stay within limits
 
 ## R-003: Hostaway API Pagination

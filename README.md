@@ -138,9 +138,12 @@ The remedy is to ask for less, not to file a bug:
 
 There is one case you cannot tune away. When Hostaway refuses a request
 it may send an `X-RateLimit-Retry-After` telling us to stop for a
-while. The integration honours that instant when it is a usable one,
-falling back to ten seconds when the header is missing or unreadable
-and refusing to be held off for longer than an hour. If a suppression
+while. The integration waits until that instant when it is a usable one. A
+missing or unreadable value becomes a ten-second pause instead, and no
+single suppression is allowed to last more than an hour — a server
+deadline beyond that is deliberately not waited out in full, because an
+integration that can be silenced for a day by one malformed header is
+worse than one that tries again. If a suppression
 runs longer than an interactive call's own 30-second deadline, the call fails
 with a wait timeout even though nothing is wrong with it and even though
 you have asked for very little — the integration is not permitted to
@@ -149,11 +152,19 @@ after the suppression ends.
 
 ### Diagnostics
 
-Download diagnostics from the integration's entry menu to see which
-counter is actually holding things up: each counter is reported
-separately, along with how many refresh cycles each coordinator dropped
-and how many refusals Hostaway attributed to each of its counters. The
-payload contains no credentials and nothing identifying the account.
+Download diagnostics from the integration's entry menu for a reading of
+the current state of each counter — its budget, how much of the window
+is already spent, how many requests are waiting on it, and whether it is
+suppressed right now — plus running totals since Home Assistant started:
+how many requests were admitted, how many refusals Hostaway attributed
+to each of its counters, and how many refresh cycles each coordinator
+dropped.
+
+These are a snapshot and a set of totals, not a history: they will not
+tell you which counter delayed one particular request earlier in the
+day, and a provider-wide suppression affecting all Hostaway clients is
+not reported. The payload contains no credentials and nothing
+identifying the account, so it is safe to attach to a support ticket.
 
 ## Entities
 
