@@ -69,6 +69,80 @@ Obtain API credentials from the
 | --- | --- | --- |
 | Listing scan interval | 5 min | 1 min |
 | Reservation scan interval | 2 min | 1 min |
+| Rate limit budget (advanced) | 180 | 1 |
+
+## Rate limits
+
+### How Hostaway counts requests
+
+Hostaway applies **two** counters to ordinary endpoint calls, and a
+request is charged to both of them:
+
+- an **account** counter — 200 requests per 10 seconds, shared by
+  everything using your Client ID, including other software you run
+- an **IP** counter — 200 requests per 10 seconds, shared by everything
+  calling Hostaway from the same address, including other Home Assistant
+  integrations and other households behind the same connection
+
+The integration tracks both counters itself and paces its own outbound
+traffic to stay underneath them, rather than sending requests and
+reacting to refusals afterwards.
+
+### The budget, and why it is 180
+
+The default budget is **180 requests per 10 seconds**, which is a
+deliberate safety margin of roughly ten percent below the 200 Hostaway
+allows. **180 is not a Hostaway-published figure.** It exists because
+the integration cannot see traffic it did not send: the margin is the
+room left for everything else sharing your account or your address.
+
+The budget is in the **advanced** section of the integration's options.
+Lower it if you share the account or the address with other Hostaway
+software; there is rarely a reason to raise it. The 10-second window is
+Hostaway's and is not configurable.
+
+Even at a conservative budget, sharing an account or an IP address with
+other Hostaway clients can still produce server-side pushback that this
+integration cannot predict, because it can only count what it sends. It
+handles that pushback when it arrives.
+
+### When entities go stale
+
+If a scheduled refresh cannot get capacity within a couple of seconds,
+the integration **drops that cycle** rather than failing it. Entities
+stay *available* and keep showing the values from the previous
+successful poll, and the next scheduled refresh tries again. Only
+actions you trigger yourself — a service call, a config flow — are
+allowed to wait longer, up to 30 seconds.
+
+So **stale-but-available entities with no errors in the log are a
+capacity symptom, not a fault.** The log says so explicitly, naming the
+refresh that was dropped and how long it waited.
+
+The remedy is to ask for less, not to file a bug:
+
+- lengthen the listing and reservation scan intervals
+- reduce the number of selected listings, since reservations are
+  fetched per listing
+- lower the rate limit budget if something else shares the account or
+  the address, so that the two paced clients add up to less than 200
+
+There is one case you cannot tune away. When Hostaway refuses a request
+it may send an `X-RateLimit-Retry-After` telling us to stop for a
+while. The integration honours it exactly. If that suppression runs
+longer than an interactive call's own 30-second deadline, the call fails
+with a wait timeout even though nothing is wrong with it and even though
+you have asked for very little — the integration is not permitted to
+send during the suppression, and the deadline expires inside it. Retry
+after the suppression ends.
+
+### Diagnostics
+
+Download diagnostics from the integration's entry menu to see which
+counter is actually holding things up: each counter is reported
+separately, along with how many refresh cycles each coordinator dropped
+and which counter Hostaway named when it last refused a request. The
+payload contains no credentials and nothing identifying the account.
 
 ## Entities
 
