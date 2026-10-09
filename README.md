@@ -78,15 +78,19 @@ Obtain API credentials from the
 Hostaway applies **two** counters to ordinary endpoint calls, and a
 request is charged to both of them:
 
-- an **account** counter — 200 requests per 10 seconds, shared by
-  everything using your Client ID, including other software you run
+- an **account** counter — 200 requests per 10 seconds, shared by every
+  ordinary endpoint call made with your Client ID, including calls from
+  other software you run
 - an **IP** counter — 200 requests per 10 seconds, shared by everything
   calling Hostaway from the same address, including other Home Assistant
   integrations and other households behind the same connection
 
 The integration tracks both counters itself and paces its own outbound
 traffic to stay underneath them, rather than sending requests and
-reacting to refusals afterwards.
+reacting to refusals afterwards. Whether a token request
+(`POST /v1/accessTokens`) is charged to these counters is undocumented,
+so the integration assumes it is and paces it too. That assumption is
+deliberately conservative and has not been confirmed by Hostaway.
 
 ### The budget, and why it is 180
 
@@ -111,9 +115,14 @@ handles that pushback when it arrives.
 If a scheduled refresh cannot get capacity within a couple of seconds,
 the integration **drops that cycle** rather than failing it. Entities
 stay *available* and keep showing the values from the previous
-successful poll, and the next scheduled refresh tries again. Only
-actions you trigger yourself — a service call, a config flow — are
-allowed to wait longer, up to 30 seconds.
+successful poll, and the next scheduled refresh tries again.
+
+Work that nobody can usefully retry is allowed to wait longer instead,
+up to 30 seconds: an action you trigger yourself such as a service call
+or a config flow, the connectivity check when you add the integration,
+and each coordinator's very first refresh after a restart. Startup can
+therefore take a little longer on a busy account, but it does not come
+back empty.
 
 So **stale-but-available entities with no errors in the log are a
 capacity symptom, not a fault.** The log says so explicitly, naming the
