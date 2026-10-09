@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import time
 from contextlib import suppress
+from datetime import timedelta
 from typing import Any, cast
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -24,7 +25,11 @@ from homeassistant.config_entries import SOURCE_USER, ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.exceptions import ConfigEntryError
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from homeassistant.util import dt as dt_util
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_fire_time_changed,
+)
 
 from custom_components.hostaway.api.const import (
     DEFAULT_RATE_LIMIT_BUDGET,
@@ -101,6 +106,7 @@ def _no_traffic() -> Any:
         test_connection=AsyncMock(return_value=True),
         get_all_listings=AsyncMock(return_value=[]),
         get_all_reservations=AsyncMock(return_value=[]),
+        _request=AsyncMock(return_value={"status": "success", "result": []}),
     )
 
 
@@ -474,6 +480,39 @@ class TestReloadDoesNotRefundBudget:
         assert cautious.entry_id not in registry.contributions
         assert limiter.snapshot().gates["account"].effective_budget == 170
         assert limiter.snapshot().gates["ip"].effective_budget == 170
+
+    async def test_the_claim_lapses_without_anyone_asking(
+        self, hass: HomeAssistant
+    ) -> None:
+        """A loaded sibling talks to the limiter, never to the registry.
+
+        Args:
+            hass: Home Assistant instance.
+        """
+        cautious = _make_entry(unique_id="low", data={CONF_RATE_LIMIT_BUDGET: 20})
+        generous = _make_entry(unique_id="high", data={CONF_RATE_LIMIT_BUDGET: 170})
+        await _setup(hass, cautious)
+        await _setup(hass, generous)
+        limiter = get_registry(hass).limiters[_ACCOUNT]
+
+        await hass.config_entries.async_unload(cautious.entry_id)
+        await hass.async_block_till_done()
+
+        with (
+            _no_traffic(),
+            patch(
+                "custom_components.hostaway.rate_limit_registry._now",
+                return_value=time.monotonic() + RATE_LIMIT_WINDOW_SECONDS + 1,
+            ),
+        ):
+            async_fire_time_changed(
+                hass,
+                dt_util.utcnow() + timedelta(seconds=RATE_LIMIT_WINDOW_SECONDS + 1),
+            )
+            await hass.async_block_till_done()
+
+        # Nothing here consulted the registry; the timer did the work.
+        assert limiter.snapshot().gates["account"].effective_budget == 170
 
     async def test_a_reload_reclaims_its_pending_contribution(
         self, hass: HomeAssistant

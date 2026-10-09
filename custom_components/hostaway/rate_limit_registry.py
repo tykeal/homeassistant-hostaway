@@ -22,10 +22,12 @@ import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import CALLBACK_TYPE, HassJob, HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryError
+from homeassistant.helpers.event import async_call_later
 
 from custom_components.hostaway.api.const import (
     DEFAULT_RATE_LIMIT_BUDGET,
@@ -57,6 +59,8 @@ class LimiterRegistry:
     #: contribution stops counting. A reload clears the deadline long
     #: before it is reached.
     pending_release: dict[str, float] = field(default_factory=dict)
+    #: entry id -> the timer that will come back and honour that deadline.
+    release_timers: dict[str, CALLBACK_TYPE] = field(default_factory=dict)
 
 
 def _now() -> float:
@@ -116,6 +120,9 @@ def _drop(registry: LimiterRegistry, entry_id: str) -> bool:
         True if something was actually dropped.
     """
     registry.pending_release.pop(entry_id, None)
+    cancel = registry.release_timers.pop(entry_id, None)
+    if cancel is not None:
+        cancel()
     dropped = registry.contributions.pop(entry_id, None)
     if dropped is None:
         return False
@@ -130,10 +137,10 @@ def _drop(registry: LimiterRegistry, entry_id: str) -> bool:
 def _expire_pending(registry: LimiterRegistry) -> None:
     """Retire unloaded entries whose grace window has run out.
 
-    The grace window is evaluated lazily rather than on a timer: an
-    unloaded entry has no coordinators left to make requests, so the only
-    thing that can care about its contribution is another registry
-    operation, and each of those passes through here first.
+    A timer normally brings us here on time. The check is repeated on
+    every registry operation anyway, because a timer that was never
+    scheduled — or that fired while the registry was busy — must not be
+    the only thing standing between an unloaded entry and its claim.
 
     Args:
         registry: The registry to recompute.
@@ -198,6 +205,9 @@ def register_entry(hass: HomeAssistant, entry: ConfigEntry) -> AccountRateLimite
     registry = get_registry(hass)
     account_key = entry.data[CONF_CLIENT_ID]
     registry.pending_release.pop(entry.entry_id, None)
+    cancel = registry.release_timers.pop(entry.entry_id, None)
+    if cancel is not None:
+        cancel()
     established = _established_account(hass, registry)
     if established is not None and established != account_key:
         msg = (
@@ -235,6 +245,37 @@ def schedule_release(hass: HomeAssistant, entry: ConfigEntry) -> None:
     if entry.entry_id not in registry.contributions:
         return
     registry.pending_release[entry.entry_id] = _now() + RATE_LIMIT_WINDOW_SECONDS
+
+    previous = registry.release_timers.pop(entry.entry_id, None)
+    if previous is not None:
+        previous()
+
+    @callback
+    def _release_is_due(_fired_at: datetime) -> None:
+        """Honour the deadline even if nothing else asks the registry.
+
+        A same-account entry that is still loaded acquires straight from
+        the limiter and never touches the registry, so without this the
+        departed entry's lower budget could hold both minima down for as
+        long as the instance runs.
+
+        Args:
+            _fired_at: When the timer fired.
+        """
+        registry.release_timers.pop(entry.entry_id, None)
+        _expire_pending(get_registry(hass))
+
+    # Cancelled on shutdown: a Home Assistant that is stopping has no
+    # budget left to protect.
+    registry.release_timers[entry.entry_id] = async_call_later(
+        hass,
+        RATE_LIMIT_WINDOW_SECONDS,
+        HassJob(
+            _release_is_due,
+            "hostaway rate limit claim release",
+            cancel_on_shutdown=True,
+        ),
+    )
 
 
 def release_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
