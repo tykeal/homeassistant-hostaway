@@ -445,6 +445,14 @@ class HostawayApiClient:
             path: Path of the refused request.
         """
         headers = _retry.parse_rate_limit_headers(response)
+        if self._limiter is None:
+            _LOGGER.warning(
+                "Hostaway refused %s %s with HTTP 429. Counter: %s",
+                method,
+                path,
+                headers.applied or "unreported",
+            )
+            return
         _LOGGER.warning(
             "Hostaway refused %s %s with HTTP 429: this is server pushback, "
             "not the integration's own pacing. Counter: %s",
@@ -452,8 +460,6 @@ class HostawayApiClient:
             path,
             headers.applied or "unreported",
         )
-        if self._limiter is None:
-            return
         self._limiter.note_rate_limited(
             headers.applied,
             headers.retry_at,

@@ -883,6 +883,34 @@ class TestChokepointObservability:
         assert shed == []
         limiter.close()
 
+    async def test_an_unlimited_client_does_not_claim_to_pace_itself(
+        self,
+        mock_httpx_client: httpx.AsyncClient,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """There is no pacing to contrast the refusal with.
+
+        Args:
+            mock_httpx_client: The transport fixture.
+            caplog: Captured log records.
+        """
+        respx.get(f"{FAKE_BASE_URL}/v1/listings").mock(
+            side_effect=_refuse_then_succeed(1)
+        )
+        client = unlimited_client(mock_httpx_client)
+
+        with (
+            caplog.at_level(
+                logging.WARNING, logger="custom_components.hostaway.api.client"
+            ),
+            patch("asyncio.sleep", new_callable=AsyncMock),
+        ):
+            await client._request("GET", "/v1/listings")
+
+        refusals = [r for r in caplog.records if "HTTP 429" in r.getMessage()]
+        assert len(refusals) == 1
+        assert "own pacing" not in refusals[0].getMessage()
+
     async def test_a_below_budget_request_is_quiet(
         self,
         mock_httpx_client: httpx.AsyncClient,
