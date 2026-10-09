@@ -699,6 +699,23 @@ suppressed for the indicated or inferred period.
   apply to a gate merely reconfigured in place (a reload reuses the existing
   gate and its recorded admissions), and MUST NOT delay the first refresh
   beyond its wait policy.
+- **FR-039**: At most **one** persistent `AccountRateLimiter` MUST exist per
+  Home Assistant instance, so the shared process-wide IP gate has exactly one
+  persistent waiter queue. This makes the priority and aging ordering of
+  FR-018 and FR-019 a **total** order over all persistent IP-gated traffic.
+  Were two persistent limiters to queue on that gate, a freed IP slot would be
+  taken in timer-callback order rather than priority order — a scheduled
+  waiter in one limiter could overtake an interactive waiter in the other, and
+  each aging counter would be blind to the other's admissions. The
+  implementation MUST therefore refuse to register a second persistent limiter
+  for a different account key, logging an error and reusing the existing one
+  rather than silently creating a competing queue.
+
+  The short-lived config-flow limiter of FR-001 is the single permitted
+  exception. It shares the process-wide IP gate, so budget correctness still
+  holds; only ordering fairness against the entry's queue is unspecified, and
+  that exposure is bounded by the config flow's brief lifetime and by its
+  requests being interactive priority, which is the highest band anyway.
 
 #### Observability
 
@@ -886,6 +903,14 @@ suppressed for the indicated or inferred period.
 
 ## Assumptions
 
+- **Owner constraint — single installation**: by the nature of this
+  integration, exactly **one** Hostaway config entry is ever installed on a
+  Home Assistant instance. This is the deployment the design targets and the
+  basis of FR-039. The multi-entry language retained in FR-005 and in the
+  lifecycle tables is defensive bookkeeping so that duplicate or
+  mid-reload entries cannot raise a budget; it is not a supported
+  configuration and MUST NOT be read as a licence to run concurrent
+  persistent limiters.
 - **Documented by Hostaway**: Hostaway publishes separate counters at
   <https://api.hostaway.com/documentation>, including the general 200
   requests per 10 seconds per account counter and the general 200 requests per

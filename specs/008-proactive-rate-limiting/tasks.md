@@ -427,10 +427,16 @@ admits no extra budget in the 10 s spanning it (SC-012).
   account budget as the minimum across active entries sharing that key, share
   the process-wide IP gate, and inject it into both `HostawayApiClient` and
   `HostawayTokenManager` — `custom_components/hostaway/__init__.py`,
-  `tests/test_init.py` — FR-005, FR-008 — **Verify**: two entries with the
-  same client id share **one** limiter object and the lower account budget;
-  two entries with different client ids get two account limiters but the
-  **same** IP gate object.
+  Refuse to register a **second persistent limiter for a different account
+  key**: log an error and reuse the existing one, because two persistent
+  queues on the shared IP gate would be served in callback order rather than
+  priority order. Exactly one entry is ever installed in practice —
+  `custom_components/hostaway/__init__.py`,
+  `tests/test_init.py` — FR-005, FR-008, FR-039 — **Verify**: two entries with
+  the same client id share **one** limiter object and the lower account
+  budget; a second entry with a *different* client id is refused with an
+  error log and no second persistent limiter is created; the transient
+  config-flow limiter of T042 remains permitted and still shares the IP gate.
   **Depends on T016, T019, T022.**
 
 - [ ] T024 Implement lifecycle: on options change/reload call
@@ -719,7 +725,7 @@ and the whole feature is proven not to have regressed anything.
 
 - [ ] T041 Update the traceability record: tick the two deferred items in
   `specs/008-proactive-rate-limiting/checklists/requirements.md` if the human
-  re-review passes, and confirm every FR-001–FR-038 and SC-001–SC-018 maps to
+  re-review passes, and confirm every FR-001–FR-039 and SC-001–SC-018 maps to
   a completed task using the coverage table below —
   `specs/008-proactive-rate-limiting/checklists/requirements.md`,
   `specs/008-proactive-rate-limiting/tasks.md` — **Verify**: this update lands
@@ -819,6 +825,7 @@ concurrently; Phase 7's T035 needs the coordinator shed counters from T027.
 | FR-036 | T038 |
 | FR-037 | T006, T028, T029 |
 | FR-038 | T007, T024 |
+| FR-039 | T023, T042 |
 
 ### Success criteria
 
@@ -843,7 +850,7 @@ concurrently; Phase 7's T035 needs the coordinator shed counters from T027.
 | SC-017 | T033 |
 | SC-018 | T009 |
 
-**Uncovered requirements: none.** Every FR-001–FR-038 and SC-001–SC-018 maps
+**Uncovered requirements: none.** Every FR-001–FR-039 and SC-001–SC-018 maps
 to at least one task.
 
 ---

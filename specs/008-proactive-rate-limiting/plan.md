@@ -379,7 +379,7 @@ be written as documented Hostaway behaviour.
 | The token endpoint counts against the general account and IP budgets (**OQ-001, open**) | Undocumented. The conservative assumption that it *does* stands. | Only cost is slightly more headroom than needed. Relaxing it is removing one acquisition — a one-line, test-covered change. Does not block implementation. |
 | Hostaway uses a sliding window | Documented by Hostaway | Client uses the same documented model plus 10% headroom (FR-009, FR-010). |
 | `CONF_CLIENT_ID` uniquely identifies a Hostaway account | From the spec | Two entries for one account would get two budgets |
-| Per-IP limiting is in scope | Owner decision after corrected Hostaway documentation | The limiter tracks account and IP gates separately; multiple accounts share the IP gate. |
+| Per-IP limiting is in scope | Owner decision after corrected Hostaway documentation | The limiter tracks account and IP gates separately. Exactly one persistent limiter exists per HA instance (FR-039), so the shared IP gate has a single waiter queue and priority ordering over it is total. |
 
 ## Owner decisions now encoded
 
