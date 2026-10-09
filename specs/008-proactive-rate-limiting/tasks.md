@@ -705,7 +705,7 @@ of any credential substring.
 **Goal (US4)**: an operator can tell shed-induced staleness from an outage,
 and the whole feature is proven not to have regressed anything.
 
-- [ ] T037 [P] [US4] Document the rate-limit model in plain language:
+- [x] T037 [P] [US4] Document the rate-limit model in plain language:
   Hostaway applies **both** an account counter and an IP counter (200/10 s
   each) to ordinary endpoint calls, this integration tracks both, the default
   180 is a deliberate ~10% safety margin and not a Hostaway value, and sharing
@@ -714,7 +714,7 @@ and the whole feature is proven not to have regressed anything.
   **Verify**: markdownlint and codespell clean; no stale 15/20 figures remain
   anywhere in the repository.
 
-- [ ] T038 [P] [US4] Document the operator-facing symptom and remedy:
+- [x] T038 [P] [US4] Document the operator-facing symptom and remedy:
   stale-but-available entities can indicate shed cycles; the remedy is
   lengthening scan intervals or reducing selected listings, **not** filing a
   bug. Include the one case an operator cannot tune away — a long
@@ -723,7 +723,7 @@ and the whole feature is proven not to have regressed anything.
   FR-036 — **Verify**: the suppression-vs-deadline interaction is stated
   explicitly; markdownlint clean.
 
-- [ ] T039 [P] Record the **OQ-001 follow-up** as a non-blocking action: ask
+- [x] T039 [P] Record the **OQ-001 follow-up** as a non-blocking action: ask
   <support@hostaway.com> whether `POST /v1/accessTokens` counts against the
   general account and IP buckets, **or** empirically observe live
   `X-RateLimit-*` headers on a token response. **Do not guess an answer and do
@@ -733,7 +733,7 @@ and the whole feature is proven not to have regressed anything.
   **open**; no code comment or document states token counting as documented
   Hostaway behaviour.
 
-- [ ] T040 Full regression sweep — no new files — **SC-008**, **SC-011** —
+- [x] T040 Full regression sweep — no new files — **SC-008**, **SC-011** —
   **Verify**: `uv run pytest tests/` passes with a count **≥ 493** and no
   pre-existing test modified other than by addition;
   `uv run ruff check custom_components/ tests/` and
