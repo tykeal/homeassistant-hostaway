@@ -424,7 +424,7 @@ plumbing.
 `CONF_CLIENT_ID`; assert exactly one `AccountRateLimiter` exists and a reload
 admits no extra budget in the 10 s spanning it (SC-012).
 
-- [ ] T022 [P] Add `DATA_RATE_LIMITERS` (a **separate top-level** `hass.data`
+- [x] T022 [P] Add `DATA_RATE_LIMITERS` (a **separate top-level** `hass.data`
   key, deliberately **not** under `hass.data[DOMAIN]`) and
   `CONF_RATE_LIMIT_BUDGET = "rate_limit_budget"` —
   `custom_components/hostaway/const.py` — FR-031, R-010, data-model §12 —
@@ -432,7 +432,7 @@ admits no extra budget in the 10 s spanning it (SC-012).
   `if not hass.data.get(DOMAIN)` service-unregistration check still evaluates
   falsy after the last entry unloads — the trap in quickstart §4.
 
-- [ ] T023 Build the limiter registry in `async_setup_entry`: create or reuse
+- [x] T023 Build the limiter registry in `async_setup_entry`: create or reuse
   an `AccountRateLimiter` keyed by `CONF_CLIENT_ID`, compute the effective
   account budget as the minimum across active entries sharing that key, share
   the process-wide IP gate, and inject it into both `HostawayApiClient` and
@@ -453,7 +453,7 @@ admits no extra budget in the 10 s spanning it (SC-012).
   config-flow limiter of T042 remains permitted and still shares the IP gate.
   **Depends on T016, T019, T022.**
 
-- [ ] T024 Implement lifecycle: on options change/reload call
+- [x] T024 Implement lifecycle: on options change/reload call
   `configure()` on the **existing** limiter (never construct a new one),
   recompute the account budget as the **minimum across active entries sharing
   the account key** and the IP gate budget as the **minimum across active
@@ -472,7 +472,7 @@ admits no extra budget in the 10 s spanning it (SC-012).
   **not** participate in either minimum; assert waiters on changed gates are
   re-pumped after a minimum change. **Depends on T013, T023.**
 
-- [ ] T025 Set the interactive `RequestContext` in exactly four structural
+- [x] T025 Set the interactive `RequestContext` in exactly four structural
   places: the single service-handler binder, the two config-flow validation
   helpers, and the setup-time `test_connection()` probe —
   `custom_components/hostaway/services/__init__.py` (`_bind_handler`),
@@ -483,7 +483,7 @@ admits no extra budget in the 10 s spanning it (SC-012).
   a test proves a service call issued while a poll saturates the budget is
   admitted ahead of the poll's remaining requests. **Depends on T006, T023.**
 
-- [ ] T042 [US1] Inject limiters into config-flow validation: in both
+- [x] T042 [US1] Inject limiters into config-flow validation: in both
   `_validate_credentials` and `_fetch_listings`, look up the limiter registry
   by `CONF_CLIENT_ID`; if an active config entry for that account already
   exists, reuse its shared `AccountRateLimiter`, otherwise create a transient
@@ -504,7 +504,7 @@ admits no extra budget in the 10 s spanning it (SC-012).
   made while another account has saturated the IP gate must wait.
   **Depends on T016, T019, T022, T023, T025.**
 
-- [ ] T026 [US3] Audit every handler that catches `HostawayRateLimitError`
+- [x] T026 [US3] Audit every handler that catches `HostawayRateLimitError`
   and insert an earlier `except HostawayRateLimitWaitTimeout:` that re-raises
   or converts to `ServiceValidationError` **without** a service-level sleep or
   retry — specifically `custom_components/hostaway/services/custom_fields.py`
