@@ -16,6 +16,7 @@ import contextlib
 import heapq
 import logging
 import math
+import secrets
 import time
 from collections.abc import Callable
 
@@ -164,6 +165,10 @@ class AccountRateLimiter:
                 would otherwise start with no capacity at all.
         """
         self.account_key = account_key
+        # Allocated randomly, never derived from the account key: a Hostaway
+        # client id is a short numeric value, so any digest of it would be an
+        # offline-testable verifier for half the credential.
+        self.label = secrets.token_hex(6)
         self._clock = clock
         self._wall_clock = wall_clock
         self._schedule = schedule or _default_schedule
