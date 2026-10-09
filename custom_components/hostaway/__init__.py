@@ -128,6 +128,35 @@ async def async_setup_entry(
 ) -> bool:
     """Set up Hostaway from a config entry.
 
+    Home Assistant never unloads an entry that failed to load, so a setup
+    that raises would otherwise leave its claim on the account budget
+    forever — and a failed entry asking for a low budget would throttle
+    the entry that did load. A failure therefore starts the same grace
+    period an unload does.
+
+    Args:
+        hass: Home Assistant instance.
+        entry: The config entry to set up.
+
+    Returns:
+        True if setup succeeded.
+    """
+    try:
+        loaded = await _async_setup_entry(hass, entry)
+    except Exception:
+        schedule_release(hass, entry)
+        raise
+    if not loaded:
+        schedule_release(hass, entry)
+    return loaded
+
+
+async def _async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+) -> bool:
+    """Set up Hostaway from a config entry.
+
     Creates the HTTP client, token manager, API client, and
     coordinators. Seeds persisted token if available and validates
     connectivity.

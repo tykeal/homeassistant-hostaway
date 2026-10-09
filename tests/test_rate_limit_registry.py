@@ -30,7 +30,10 @@ from custom_components.hostaway.api.const import (
     DEFAULT_RATE_LIMIT_BUDGET,
     RATE_LIMIT_WINDOW_SECONDS,
 )
-from custom_components.hostaway.api.exceptions import HostawayRateLimitWaitTimeout
+from custom_components.hostaway.api.exceptions import (
+    HostawayConnectionError,
+    HostawayRateLimitWaitTimeout,
+)
 from custom_components.hostaway.api.rate_limit import (
     FIRST_REFRESH_POLICY,
     AccountRateLimiter,
@@ -492,6 +495,37 @@ class TestReloadDoesNotRefundBudget:
         assert not get_registry(hass).pending_release
         limiter = get_registry(hass).limiters[_ACCOUNT]
         assert limiter.snapshot().gates["account"].effective_budget == 20
+
+    async def test_a_failed_setup_does_not_hold_the_budget_forever(
+        self, hass: HomeAssistant
+    ) -> None:
+        """An entry that never loaded is never unloaded either.
+
+        Args:
+            hass: Home Assistant instance.
+        """
+        healthy = _make_entry(unique_id="high", data={CONF_RATE_LIMIT_BUDGET: 170})
+        await _setup(hass, healthy)
+        limiter = get_registry(hass).limiters[_ACCOUNT]
+
+        broken = _make_entry(unique_id="low", data={CONF_RATE_LIMIT_BUDGET: 20})
+        broken.add_to_hass(hass)
+        with patch(
+            "custom_components.hostaway.HostawayApiClient.test_connection",
+            side_effect=HostawayConnectionError("down"),
+        ):
+            await hass.config_entries.async_setup(broken.entry_id)
+            await hass.async_block_till_done()
+
+        assert broken.state is ConfigEntryState.SETUP_RETRY
+        with patch(
+            "custom_components.hostaway.rate_limit_registry._now",
+            return_value=time.monotonic() + RATE_LIMIT_WINDOW_SECONDS + 1,
+        ):
+            registry = get_registry(hass)
+
+        assert broken.entry_id not in registry.contributions
+        assert limiter.snapshot().gates["account"].effective_budget == 170
 
     async def test_removal_releases_the_limiter(self, hass: HomeAssistant) -> None:
         """Removal, unlike an unload, really is the end.
