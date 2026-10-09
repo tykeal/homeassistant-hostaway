@@ -11,6 +11,8 @@ from custom_components.hostaway.api.exceptions import (
     HostawayAuthError,
     HostawayConnectionError,
     HostawayRateLimitError,
+    HostawayRateLimitShedError,
+    HostawayRateLimitWaitTimeout,
     HostawayReservationLockedError,
     HostawayResponseError,
 )
@@ -141,3 +143,66 @@ class TestHostawayResponseError:
         """HostawayResponseError can be caught as HostawayApiError."""
         with pytest.raises(HostawayApiError):
             raise HostawayResponseError("invalid json")
+
+
+class TestHostawayRateLimitShedError:
+    """Tests for the coordinator-shed signal."""
+
+    def test_is_not_an_api_error(self) -> None:
+        """Structural guard for SC-005 and SC-015 — never relax this.
+
+        All three coordinators convert HostawayApiError into UpdateFailed,
+        which marks the entity unavailable. Shedding a scheduled refresh is
+        a deliberate, healthy outcome that must keep the last good data, so
+        this signal must stay outside that hierarchy.
+        """
+        assert not issubclass(HostawayRateLimitShedError, HostawayApiError)
+
+    def test_carries_the_time_waited(self) -> None:
+        """It can report how long the caller queued before being shed."""
+        error = HostawayRateLimitShedError("shed refresh", waited=1.5)
+        assert error.waited == 1.5
+
+    def test_is_catchable_on_its_own(self) -> None:
+        """It can be caught by its own type, independently of any base.
+
+        Nothing raises or catches it yet; the coordinator wiring that will
+        do so is T027.
+        """
+        with pytest.raises(HostawayRateLimitShedError):
+            raise HostawayRateLimitShedError("shed refresh", waited=0.0)
+
+
+class TestHostawayRateLimitWaitTimeout:
+    """Tests for the local queue-timeout signal."""
+
+    def test_inherits_from_rate_limit_error(self) -> None:
+        """Structural guard for SC-005 and SC-015 — never relax this.
+
+        A local wait timeout is a rate-limit outcome and must surface as a
+        genuine failure, unlike a shed refresh.
+        """
+        assert issubclass(HostawayRateLimitWaitTimeout, HostawayRateLimitError)
+
+    def test_is_an_api_error(self) -> None:
+        """It must reach the coordinators' UpdateFailed conversion."""
+        assert issubclass(HostawayRateLimitWaitTimeout, HostawayApiError)
+
+    def test_carries_the_time_waited(self) -> None:
+        """It can report the deadline's elapsed wait to the caller."""
+        error = HostawayRateLimitWaitTimeout("deadline expired", waited=30.0)
+        assert error.waited == 30.0
+
+    def test_distinguishable_from_a_server_429(self) -> None:
+        """A local timeout is distinguishable from a server refusal.
+
+        services/custom_fields.py catches HostawayRateLimitError and
+        replays the whole read/merge/write. Replaying on a local timeout
+        would be wrong, so the types must allow a caller to tell the two
+        apart. Adding that earlier handler is T026; this only proves the
+        hierarchy permits it.
+        """
+        server = HostawayRateLimitError("429 from Hostaway", retry_after=5.0)
+        local = HostawayRateLimitWaitTimeout("deadline expired", waited=30.0)
+        assert not isinstance(server, HostawayRateLimitWaitTimeout)
+        assert isinstance(local, HostawayRateLimitError)

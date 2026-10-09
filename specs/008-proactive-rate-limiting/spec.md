@@ -603,9 +603,11 @@ suppressed for the indicated or inferred period.
   MUST NOT shorten or clear the gate's deadline for other callers.
 
   The `MAX_SUPPRESSION_SECONDS` cap exists solely to bound a corrupt or
-  wrong-unit header — a value mistakenly sent as a raw seconds delay reads as
-  a timestamp roughly 56 years ahead and would otherwise wedge the integration
-  for the lifetime of the process. Hostaway documents no bucket remotely close
+  wrong-unit header — a timestamp sent in **milliseconds** reads, as seconds,
+  as a moment tens of thousands of years ahead and would otherwise wedge the
+  integration for the lifetime of the process. The opposite mistake, a raw
+  seconds delay such as `3600`, reads as a moment in 1970 and is already
+  rejected by the not-in-the-future rule below. Hostaway documents no bucket remotely close
   to an hour, so a legitimate deadline is never expected to reach the cap. A
   capped suppression is **not** treated as honouring the server deadline: when
   it expires, the single request admitted next simply earns a fresh 429 whose
