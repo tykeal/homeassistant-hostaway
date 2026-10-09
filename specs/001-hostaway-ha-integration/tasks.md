@@ -134,7 +134,8 @@ phase is complete
   `TOKEN_READY_DELAY` (1.0s), `MAX_RETRIES` (3),
   `INITIAL_BACKOFF` (1.0), `BACKOFF_MULTIPLIER` (2.0),
   `MAX_BACKOFF` (30.0), `RATE_LIMIT_PER_IP` (15/10s),
-  `RATE_LIMIT_PER_ACCOUNT` (20/10s),
+  `RATE_LIMIT_PER_ACCOUNT` (20/10s) — both figures were wrong and
+  both constants were removed by feature 008,
   `DEFAULT_PAGE_LIMIT` (100), `GRANT_TYPE`
   (`client_credentials`), `SCOPE` (`general`)
 - [x] T014 [P] Implement `AccessToken` frozen dataclass in

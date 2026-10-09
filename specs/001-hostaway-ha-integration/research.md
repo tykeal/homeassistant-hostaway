@@ -36,10 +36,16 @@ backoff on HTTP 429 responses.
 
 **Rationale**: Hostaway enforces two concurrent rate limits:
 
-- 15 requests per 10 seconds per IP address
-- 20 requests per 10 seconds per account ID
+- ~~15 requests per 10 seconds per IP address~~
+- ~~20 requests per 10 seconds per account ID~~
 
-The stricter limit (15/10s = 1.5 req/s) governs single-instance deployments.
+> **Superseded — these figures were wrong.** Verification during feature
+> 008 (proactive rate limiting) established that Hostaway applies 200
+> requests per 10 seconds to *each* of the account and IP counters. The
+> struck-through figures above are retained only as a record of what this
+> research originally concluded; see
+> `specs/008-proactive-rate-limiting/research.md` for the corrected model.
+
 HTTP 429 response indicates rate limit exceeded.
 
 **Alternatives considered**:

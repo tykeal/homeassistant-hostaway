@@ -94,6 +94,23 @@ documentation must describe this as an assumption, never as Hostaway
 behaviour. If it is ever disproved, the only change required is removing the
 acquisition from `_request_token` — a one-line, test-covered change.
 
+**OQ-001 follow-up (open, non-blocking)**: OQ-001 is **not** closed by the
+implementation, and nothing in the code or documentation may describe token
+counting as documented Hostaway behaviour. It stays open until one of the
+following is done, neither of which blocks the feature:
+
+1. Ask <support@hostaway.com> whether `POST /v1/accessTokens` counts against
+   the general account and IP buckets, and record the answer here with a
+   date; or
+2. Observe the `X-RateLimit-*` headers on a live token response and record
+   what they show — a token response that carries the same counters as a data
+   response is evidence that it is charged to them.
+
+Until then the conservative assume-it-counts behaviour stands unchanged.
+Guessing an answer is worse than the open question: paying for an admission
+that was never charged costs a little throughput, while skipping one that was
+charged earns a 429 the integration told itself could not happen.
+
 ---
 
 ## R-003: Sliding window algorithm
