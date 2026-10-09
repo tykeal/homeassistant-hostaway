@@ -969,6 +969,75 @@ class TestChokepointObservability:
         assert "ip 99/100" in message
         limiter.close()
 
+    async def test_a_token_admission_is_visible_at_debug(
+        self,
+        mock_httpx_client: httpx.AsyncClient,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Both chokepoints are paced, so both have to be observable.
+
+        Args:
+            mock_httpx_client: The transport fixture.
+            caplog: Captured log records.
+        """
+        respx.post("https://api.hostaway.com/v1/accessTokens").mock(
+            return_value=_token_response()
+        )
+        limiter = make_limiter()
+        manager = HostawayTokenManager(
+            "client-id", "secret", mock_httpx_client, limiter=limiter
+        )
+
+        with (
+            caplog.at_level(
+                logging.DEBUG, logger="custom_components.hostaway.api.auth"
+            ),
+            request_context(start_interactive_context()),
+            patch("asyncio.sleep", new_callable=AsyncMock),
+        ):
+            await manager.get_token()
+
+        admitted = [r for r in caplog.records if "Admitted" in r.getMessage()]
+        assert len(admitted) == 1
+        message = admitted[0].getMessage()
+        assert "/v1/accessTokens" in message
+        assert "interactive" in message
+        assert "account 99/100" in message
+        limiter.close()
+
+    async def test_a_refused_token_request_says_who_refused_it(
+        self,
+        mock_httpx_client: httpx.AsyncClient,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """An operator must be able to tell pushback from our own shedding.
+
+        Args:
+            mock_httpx_client: The transport fixture.
+            caplog: Captured log records.
+        """
+        respx.post("https://api.hostaway.com/v1/accessTokens").mock(
+            side_effect=_refuse_then_succeed(99, **{_retry.APPLIED_HEADER: "account"})
+        )
+        limiter = make_limiter()
+        manager = HostawayTokenManager(
+            "client-id", "secret", mock_httpx_client, limiter=limiter
+        )
+
+        with (
+            caplog.at_level(
+                logging.WARNING, logger="custom_components.hostaway.api.auth"
+            ),
+            request_context(start_interactive_context()),
+            pytest.raises(HostawayRateLimitError),
+        ):
+            await manager.get_token()
+
+        refusals = [r for r in caplog.records if "HTTP 429" in r.getMessage()]
+        assert len(refusals) == 1
+        assert "account" in refusals[0].getMessage()
+        limiter.close()
+
 
 class TestTheSharedTransportIsUntouched:
     """T021: the httpx client belongs to Home Assistant, not to us."""

@@ -16,6 +16,7 @@ to prevent. Revisit if Hostaway ever documents it.
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from datetime import UTC, datetime
 
@@ -37,11 +38,14 @@ from custom_components.hostaway.api.models import AccessToken
 from custom_components.hostaway.api.rate_limit import (
     AccountRateLimiter,
     RequestContext,
+    current_request_context,
     deadline_exception,
     ensure_request_context,
     sleep_within_deadline,
 )
 from custom_components.hostaway.api.retry import parse_rate_limit_headers
+
+_LOGGER = logging.getLogger(__name__)
 
 #: The token endpoint, as the limiter classifies it.
 _TOKEN_METHOD = "POST"
@@ -231,6 +235,38 @@ class HostawayTokenManager:
             return
         await sleep_within_deadline(delay, ctx)
 
+    async def _acquire(self) -> None:
+        """Wait for rate-limit capacity before asking for a token.
+
+        OQ-001: the token endpoint is assumed to count against the general
+        counters. See the module docstring; this is a conservative guess,
+        not documented Hostaway behaviour.
+
+        Raises:
+            HostawayRateLimitShedError: If a sheddable operation ran out of
+                time while queued.
+            HostawayRateLimitWaitTimeout: If any other operation did.
+        """
+        if self._limiter is None:
+            return
+        started = time.monotonic()
+        await self._limiter.acquire(_TOKEN_METHOD, _TOKEN_PATH)
+        if not _LOGGER.isEnabledFor(logging.DEBUG):
+            return
+        gates = self._limiter.snapshot().gates
+        _LOGGER.debug(
+            "Admitted %s %s (%s) after %.3fs; remaining this window: %s",
+            _TOKEN_METHOD,
+            _TOKEN_PATH,
+            current_request_context().priority.name.lower(),
+            time.monotonic() - started,
+            ", ".join(
+                f"{name} {max(gate.effective_budget - gate.admitted_in_window, 0)}"
+                f"/{gate.effective_budget}"
+                for name, gate in sorted(gates.items())
+            ),
+        )
+
     async def _request_token(self) -> AccessToken:
         """Request a new token from the Hostaway token endpoint.
 
@@ -242,10 +278,7 @@ class HostawayTokenManager:
             HostawayConnectionError: On network failure.
             HostawayResponseError: On unexpected response format.
         """
-        # OQ-001: assumed to count against the general counters. See the
-        # module docstring; this is a conservative guess, not documented.
-        if self._limiter is not None:
-            await self._limiter.acquire(_TOKEN_METHOD, _TOKEN_PATH)
+        await self._acquire()
         try:
             response = await self._http.post(
                 self._token_url,
@@ -270,6 +303,12 @@ class HostawayTokenManager:
 
         if response.status_code == 429:
             headers = parse_rate_limit_headers(response)
+            _LOGGER.warning(
+                "Hostaway refused the token request with HTTP 429: this is "
+                "server pushback, not the integration's own pacing. "
+                "Counter: %s",
+                headers.applied or "unreported",
+            )
             if self._limiter is not None:
                 self._limiter.note_rate_limited(
                     headers.applied,
