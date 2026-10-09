@@ -33,6 +33,10 @@ from custom_components.hostaway.api.exceptions import (
     HostawayConnectionError,
 )
 from custom_components.hostaway.api.models import HostawayListing
+from custom_components.hostaway.api.rate_limit import (
+    request_context,
+    start_interactive_context,
+)
 from custom_components.hostaway.const import (
     CONF_CACHED_TOKEN,
     CONF_CLIENT_ID,
@@ -54,6 +58,7 @@ from custom_components.hostaway.const import (
     DOMAIN,
     MIN_SCAN_INTERVAL,
 )
+from custom_components.hostaway.rate_limit_registry import validation_limiter
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -82,16 +87,20 @@ async def _validate_credentials(
         HostawayConnectionError: If the API is unreachable.
     """
     http_client = get_async_client(hass)
-    token_manager = HostawayTokenManager(
-        client_id=client_id,
-        client_secret=client_secret,
-        http_client=http_client,
-    )
-    api_client = HostawayApiClient(
-        token_manager=token_manager,
-        http_client=http_client,
-    )
-    await api_client.test_connection()
+    with validation_limiter(hass, client_id) as limiter:
+        token_manager = HostawayTokenManager(
+            client_id=client_id,
+            client_secret=client_secret,
+            http_client=http_client,
+            limiter=limiter,
+        )
+        api_client = HostawayApiClient(
+            token_manager=token_manager,
+            http_client=http_client,
+            limiter=limiter,
+        )
+        with request_context(start_interactive_context()):
+            await api_client.test_connection()
 
 
 async def _fetch_listings(
@@ -110,16 +119,20 @@ async def _fetch_listings(
         List of HostawayListing objects.
     """
     http_client = get_async_client(hass)
-    token_manager = HostawayTokenManager(
-        client_id=client_id,
-        client_secret=client_secret,
-        http_client=http_client,
-    )
-    api_client = HostawayApiClient(
-        token_manager=token_manager,
-        http_client=http_client,
-    )
-    return await api_client.get_all_listings()
+    with validation_limiter(hass, client_id) as limiter:
+        token_manager = HostawayTokenManager(
+            client_id=client_id,
+            client_secret=client_secret,
+            http_client=http_client,
+            limiter=limiter,
+        )
+        api_client = HostawayApiClient(
+            token_manager=token_manager,
+            http_client=http_client,
+            limiter=limiter,
+        )
+        with request_context(start_interactive_context()):
+            return await api_client.get_all_listings()
 
 
 class HostawayConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -222,6 +235,26 @@ class HostawayConfigFlow(ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    def _other_account_configured(self, client_id: str) -> bool:
+        """Report whether a *different* Hostaway account is already set up.
+
+        Hostaway counts requests per account and per source IP, and the
+        integration keeps exactly one limiter so that queue is a single
+        priority order. A second account cannot borrow the first one's
+        limiter without letting either account's refusal silence the
+        other, so it is turned away here rather than at setup.
+
+        Args:
+            client_id: The account the user is adding.
+
+        Returns:
+            True if an entry for some other account exists.
+        """
+        return any(
+            entry.data.get(CONF_CLIENT_ID) != client_id
+            for entry in self._async_current_entries(include_ignore=False)
+        )
+
     async def async_step_user(
         self,
         user_input: dict[str, Any] | None = None,
@@ -243,6 +276,9 @@ class HostawayConfigFlow(ConfigFlow, domain=DOMAIN):
 
             await self.async_set_unique_id(self._client_id)
             self._abort_if_unique_id_configured()
+
+            if self._other_account_configured(self._client_id):
+                return self.async_abort(reason="single_instance_allowed")
 
             try:
                 await _validate_credentials(

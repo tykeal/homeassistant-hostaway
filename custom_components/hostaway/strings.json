@@ -32,6 +32,7 @@
         },
         "abort": {
             "already_configured": "This Hostaway account is already configured.",
+            "single_instance_allowed": "Only one Hostaway account can be configured: the Hostaway rate limit is shared across accounts on this network, and a second account would have to pace itself against the first one's budget.",
             "invalid_auth": "Authentication failed while fetching listings.",
             "cannot_connect": "Unable to connect to Hostaway while fetching listings.",
             "no_active_listings": "No active listings found in your Hostaway account.",

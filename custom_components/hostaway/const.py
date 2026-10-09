@@ -22,6 +22,11 @@ DEFAULT_RESERVATION_SCAN_INTERVAL: int = 2  # minutes
 DEFAULT_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL: int = 15  # minutes
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 CONF_CACHED_TOKEN: str = "cached_token"
+CONF_RATE_LIMIT_BUDGET: str = "rate_limit_budget"
+#: Deliberately a top-level ``hass.data`` key rather than a member of
+#: ``hass.data[DOMAIN]``: unload consults that dict to decide whether the
+#: last entry has gone, and a limiter living there would never let it empty.
+DATA_RATE_LIMITERS: str = "hostaway_rate_limiters"
 CONF_FILTER_CANCELLED: str = "filter_cancelled"
 DEFAULT_FILTER_CANCELLED: bool = True
 CONF_CUSTOM_FIELD_WRITE_ACCOUNT_ID: str = "custom_field_write_account_id"

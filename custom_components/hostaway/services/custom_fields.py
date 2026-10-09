@@ -42,6 +42,7 @@ from custom_components.hostaway.api.exceptions import (
     HostawayConnectionError,
     HostawayMutationResultError,
     HostawayRateLimitError,
+    HostawayRateLimitWaitTimeout,
 )
 from custom_components.hostaway.api.models import HostawayListing, HostawayReservation
 from custom_components.hostaway.const import CONF_SELECTED_LISTINGS
@@ -321,6 +322,16 @@ async def _write_custom_field(
                 exc,
             )
             break
+        except HostawayRateLimitWaitTimeout as exc:
+            # Our own pacing gave up, so the request never left. Sleeping
+            # and running the read/merge/write again would spend the next
+            # window's budget re-asking a question nobody answered.
+            raise ServiceValidationError(
+                f"Unable to update {target_type} {target_id}: the "
+                f"integration is pacing itself to stay within Hostaway's "
+                f"rate limit and ran out of time waiting for capacity "
+                f"({exc})"
+            ) from exc
         except HostawayRateLimitError as exc:
             if attempt >= 1:
                 raise ServiceValidationError(

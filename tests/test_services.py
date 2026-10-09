@@ -157,7 +157,7 @@ class TestServiceLifecycle:
             domain=DOMAIN,
             title="Hostaway (client-2)",
             data={
-                CONF_CLIENT_ID: "test-client-id-2",
+                CONF_CLIENT_ID: "test-client-id-1",
                 CONF_CLIENT_SECRET: "test-client-secret-2",
                 CONF_SELECTED_LISTINGS: [67890],
             },
@@ -380,7 +380,7 @@ class TestSetDoorCode:
             domain=DOMAIN,
             title="Hostaway (client-2)",
             data={
-                CONF_CLIENT_ID: "test-client-id-2",
+                CONF_CLIENT_ID: "test-client-id-1",
                 CONF_CLIENT_SECRET: "test-client-secret-2",
                 CONF_SELECTED_LISTINGS: [67890],
             },
@@ -431,7 +431,7 @@ class TestSetDoorCode:
             domain=DOMAIN,
             title="Hostaway (client-2)",
             data={
-                CONF_CLIENT_ID: "test-client-id-2",
+                CONF_CLIENT_ID: "test-client-id-1",
                 CONF_CLIENT_SECRET: "test-client-secret-2",
                 CONF_SELECTED_LISTINGS: [67890],
             },
@@ -900,7 +900,7 @@ class TestGetReservations:
             domain=DOMAIN,
             title="Hostaway (client-2)",
             data={
-                CONF_CLIENT_ID: "test-client-id-2",
+                CONF_CLIENT_ID: "test-client-id-1",
                 CONF_CLIENT_SECRET: "test-client-secret-2",
                 CONF_SELECTED_LISTINGS: [67890],
             },
@@ -953,7 +953,7 @@ class TestGetReservations:
             domain=DOMAIN,
             title="Hostaway (client-2)",
             data={
-                CONF_CLIENT_ID: "test-client-id-2",
+                CONF_CLIENT_ID: "test-client-id-1",
                 CONF_CLIENT_SECRET: "test-client-secret-2",
                 CONF_SELECTED_LISTINGS: [67890],
             },
@@ -1238,7 +1238,7 @@ class TestFindReservation:
             domain=DOMAIN,
             title="Hostaway (client-2)",
             data={
-                CONF_CLIENT_ID: "test-client-id-2",
+                CONF_CLIENT_ID: "test-client-id-1",
                 CONF_CLIENT_SECRET: "test-client-secret-2",
                 CONF_SELECTED_LISTINGS: [67890],
             },
@@ -1282,7 +1282,7 @@ class TestFindReservation:
             domain=DOMAIN,
             title="Hostaway (client-2)",
             data={
-                CONF_CLIENT_ID: "test-client-id-2",
+                CONF_CLIENT_ID: "test-client-id-1",
                 CONF_CLIENT_SECRET: "test-client-secret-2",
                 CONF_SELECTED_LISTINGS: [67890],
             },
