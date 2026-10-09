@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import Any
 
 import httpx
@@ -38,6 +39,13 @@ from custom_components.hostaway.api.exceptions import (
     HostawayResponseError,
 )
 from custom_components.hostaway.api.models import HostawayListing, HostawayReservation
+from custom_components.hostaway.api.rate_limit import (
+    AccountRateLimiter,
+    RequestContext,
+    current_request_context,
+    ensure_request_context,
+    sleep_within_deadline,
+)
 from custom_components.hostaway.api.reservations import (
     fetch_all_reservations,
     fetch_reservation_items,
@@ -56,11 +64,25 @@ class HostawayApiClient:
         http_client: httpx.AsyncClient,
         *,
         base_url: str = BASE_URL,
+        limiter: AccountRateLimiter | None = None,
     ) -> None:
-        """Initialize the API client."""
+        """Initialize the API client.
+
+        Args:
+            token_manager: Supplies bearer tokens.
+            http_client: Home Assistant's shared httpx client. It is used
+                as given: the limiter sits in front of it rather than
+                wrapping it, so nothing here may subclass, re-configure or
+                attach hooks to a client the rest of Home Assistant shares.
+            base_url: API root.
+            limiter: Paces outbound requests. When omitted the client is
+                unlimited, which is what every non-Home-Assistant caller
+                and every existing test gets.
+        """
         self._token_manager = token_manager
         self._http = http_client
         self._base_url = base_url.rstrip("/")
+        self._limiter = limiter
 
     async def test_connection(self) -> bool:
         """Validate credentials with a lightweight API call."""
@@ -231,10 +253,55 @@ class HostawayApiClient:
         retry_ambiguous: bool = True,
     ) -> httpx.Response:
         """Make an authenticated API request with retries."""
+        # Installed once: the deadline covers the whole logical operation,
+        # so a caller that established no context must not have a fresh one
+        # synthesised for the token refresh, for every retry, and again for
+        # the recursive re-entry after a 403.
+        with ensure_request_context() as ctx:
+            return await self._attempt_request(
+                method,
+                path,
+                ctx,
+                params=params,
+                json=json,
+                _retried_auth=_retried_auth,
+                retry_ambiguous=retry_ambiguous,
+            )
+
+    async def _attempt_request(
+        self,
+        method: str,
+        path: str,
+        ctx: RequestContext,
+        *,
+        params: dict[str, Any] | None = None,
+        json: dict[str, Any] | None = None,
+        _retried_auth: bool = False,
+        retry_ambiguous: bool = True,
+    ) -> httpx.Response:
+        """Run the retry loop for one request under a fixed deadline.
+
+        Args:
+            method: HTTP method.
+            path: API path below the base URL.
+            ctx: The ambient operation context, already installed.
+            params: Query parameters.
+            json: JSON body.
+            _retried_auth: Whether a token refresh has already been tried.
+            retry_ambiguous: Whether a request whose outcome is unknown may
+                be retried.
+
+        Returns:
+            The successful response.
+        """
         url = f"{self._base_url}{path}"
         backoff = INITIAL_BACKOFF
         for attempt in range(MAX_RETRIES + 1):
             token = await self._token_manager.get_token()
+            # Inside the loop on purpose. Every attempt is a request the
+            # server will see and count, so every attempt must be paced —
+            # including the recursive re-entry after a 403 refresh.
+            await self._acquire(method, path)
             try:
                 response = await self._http.request(
                     method,
@@ -264,7 +331,7 @@ class HostawayApiClient:
                     MAX_RETRIES,
                     exc,
                 )
-                await asyncio.sleep(delay)
+                await self._backoff_sleep(delay, ctx)
                 backoff = min(backoff * BACKOFF_MULTIPLIER, MAX_BACKOFF)
                 continue
             if response.status_code == 403:
@@ -280,13 +347,17 @@ class HostawayApiClient:
             if response.status_code == 404:
                 raise HostawayResponseError(f"Resource not found: {path}")
             if response.status_code == 429:
+                # Feed the server's own view back before deciding whether
+                # to retry: the limiter must learn about the refusal even
+                # when this attempt is the one that gives up.
+                self._note_rate_limited(response, method, path)
                 delay = self._handle_rate_limit_response(
                     response,
                     attempt,
                     MAX_RETRIES if retry_ambiguous else 0,
                     backoff,
                 )
-                await asyncio.sleep(delay)
+                await self._backoff_sleep(delay, ctx)
                 backoff = min(backoff * BACKOFF_MULTIPLIER, MAX_BACKOFF)
                 continue
             if _retry._is_server_error(response.status_code):
@@ -297,7 +368,7 @@ class HostawayApiClient:
                 delay = self._handle_server_error(
                     response, attempt, MAX_RETRIES, backoff
                 )
-                await asyncio.sleep(delay)
+                await self._backoff_sleep(delay, ctx)
                 backoff = min(backoff * BACKOFF_MULTIPLIER, MAX_BACKOFF)
                 continue
             if not response.is_success:
@@ -308,6 +379,89 @@ class HostawayApiClient:
         raise HostawayResponseError(
             "Request loop exited without returning"
         )  # pragma: no cover
+
+    async def _acquire(self, method: str, path: str) -> None:
+        """Wait for rate-limit capacity before a request leaves the process.
+
+        Args:
+            method: HTTP method.
+            path: Request path.
+
+        Raises:
+            HostawayRateLimitShedError: If a sheddable operation ran out of
+                time while queued.
+            HostawayRateLimitWaitTimeout: If any other operation did.
+        """
+        if self._limiter is None:
+            return
+        started = time.monotonic()
+        await self._limiter.acquire(method, path)
+        if not _LOGGER.isEnabledFor(logging.DEBUG):
+            return
+        ctx = current_request_context()
+        gates = self._limiter.snapshot().gates
+        _LOGGER.debug(
+            "Admitted %s %s (%s) after %.3fs; remaining this window: %s",
+            method,
+            path,
+            ctx.priority.name.lower(),
+            time.monotonic() - started,
+            ", ".join(
+                f"{name} {max(gate.effective_budget - gate.admitted_in_window, 0)}"
+                f"/{gate.effective_budget}"
+                for name, gate in sorted(gates.items())
+            ),
+        )
+
+    async def _backoff_sleep(self, delay: float, ctx: RequestContext) -> None:
+        """Sleep before a retry without outliving the operation's deadline.
+
+        An unlimited client keeps its historical behaviour: the deadline is
+        a rate-limiting concept, and a caller that never opted into pacing
+        must not start failing on it.
+
+        Args:
+            delay: The backoff the retry policy asked for.
+            ctx: The ambient operation context.
+
+        Raises:
+            HostawayRateLimitShedError: If a sheddable operation cannot
+                finish the sleep in the time it has left.
+            HostawayRateLimitWaitTimeout: If any other operation cannot.
+        """
+        if self._limiter is None:
+            await asyncio.sleep(delay)
+            return
+        await sleep_within_deadline(delay, ctx)
+
+    def _note_rate_limited(
+        self, response: httpx.Response, method: str, path: str
+    ) -> None:
+        """Report a server refusal to the limiter.
+
+        Args:
+            response: The 429 response.
+            method: HTTP method of the refused request.
+            path: Path of the refused request.
+        """
+        headers = _retry.parse_rate_limit_headers(response)
+        _LOGGER.warning(
+            "Hostaway refused %s %s with HTTP 429: this is server pushback, "
+            "not the integration's own pacing. Counter: %s",
+            method,
+            path,
+            headers.applied or "unreported",
+        )
+        if self._limiter is None:
+            return
+        self._limiter.note_rate_limited(
+            headers.applied,
+            headers.retry_at,
+            method,
+            path,
+            limit=headers.limit,
+            remaining=headers.remaining,
+        )
 
     # aislop-ignore-next-line complexity/too-many-params -- carries request context
     async def _handle_forbidden_response(
