@@ -1529,3 +1529,39 @@ def test_a_limiter_defaults_to_the_shared_state() -> None:
     limiter = AccountRateLimiter("a")
     assert limiter._ip_general_gate is shared_ip_gate()
     assert limiter._provider_suppression is shared_provider_suppression()
+
+
+# ---------------------------------------------------------------------------
+# Limiter label (T034)
+# ---------------------------------------------------------------------------
+
+
+def test_a_limiter_label_is_stable_for_its_lifetime() -> None:
+    """Diagnostics pulled twice must name the same limiter the same way."""
+    limiter = AccountRateLimiter("a")
+    assert limiter.label == limiter.label
+
+
+def test_two_limiters_for_the_same_account_get_different_labels() -> None:
+    """The label is allocated, not derived.
+
+    A Hostaway client id is a short numeric account identifier, so any
+    digest of it would be an offline-testable verifier for half the
+    credential. Two limiters built from the same key must therefore not
+    agree on a label - including across processes, which is what this
+    asserts in miniature.
+    """
+    first = AccountRateLimiter("same-account")
+    second = AccountRateLimiter("same-account")
+
+    assert first.label != second.label
+
+
+def test_a_label_reveals_nothing_about_the_account_key() -> None:
+    """The label must not contain, or be, the key it belongs to."""
+    limiter = AccountRateLimiter("12345678")
+
+    assert limiter.label != limiter.account_key
+    assert limiter.account_key not in limiter.label
+    assert len(limiter.label) == 12
+    assert set(limiter.label) <= set("0123456789abcdef")

@@ -657,7 +657,7 @@ appears in it.
 the `rate_limit.gates.account` / `rate_limit.gates.ip` shape and the absence
 of any credential substring.
 
-- [ ] T034 [P] [US4] Add an opaque `limiter_label` allocated when an
+- [x] T034 [P] [US4] Add an opaque `limiter_label` allocated when an
   `AccountRateLimiter` is created: a `secrets.token_hex(6)` value stored on the
   limiter, **not derived from the account key in any way** —
   `custom_components/hostaway/api/rate_limit.py`, `tests/api/` — FR-029,
@@ -669,7 +669,7 @@ of any credential substring.
   identifiers, so a truncated hash would be an offline-testable verifier for
   the credential.
 
-- [ ] T035 [US4] Create `async_get_config_entry_diagnostics(hass, entry)`
+- [x] T035 [US4] Create `async_get_config_entry_diagnostics(hass, entry)`
   emitting the contract §8 payload: `limiter_label`, `budget_source`
   (`"default"` vs `"option"`), per-gate `account` and `ip` objects (budget,
   effective budget, window seconds, admitted in window, waiting interactive,
@@ -686,7 +686,7 @@ of any credential substring.
   `CONF_CLIENT_ID`, so emitting it would leak the credential.
   **Depends on T014, T024, T027, T034.**
 
-- [ ] T036 [US4] Add the diagnostics tests —
+- [x] T036 [US4] Add the diagnostics tests —
   `tests/test_diagnostics.py` (**new file, SPDX header**) — **SC-013** —
   **Verify**: the payload contains both gate objects; a test creates
   **diverged** state (account utilization differs from IP utilization, or only

@@ -81,15 +81,44 @@ def entry_budget(entry: ConfigEntry) -> int:
     Returns:
         The configured budget, or the default when absent or nonsensical.
     """
+    return _stored_budget(entry) or DEFAULT_RATE_LIMIT_BUDGET
+
+
+def _stored_budget(entry: ConfigEntry) -> int | None:
+    """Return the usable budget an entry stores, if it stores one.
+
+    Args:
+        entry: The config entry to read.
+
+    Returns:
+        The stored budget, or ``None`` when nothing usable is stored.
+    """
     value = entry.options.get(
         CONF_RATE_LIMIT_BUDGET,
-        entry.data.get(CONF_RATE_LIMIT_BUDGET, DEFAULT_RATE_LIMIT_BUDGET),
+        entry.data.get(CONF_RATE_LIMIT_BUDGET),
     )
     if isinstance(value, bool) or not isinstance(value, int):
-        return DEFAULT_RATE_LIMIT_BUDGET
+        return None
     if not 1 <= value <= RATE_LIMIT_CEILING:
-        return DEFAULT_RATE_LIMIT_BUDGET
+        return None
     return value
+
+
+def budget_source(entry: ConfigEntry) -> str:
+    """Report whether the budget in force was chosen or defaulted.
+
+    An operator reading diagnostics needs to know whether the figure
+    they are looking at is one they set. A stored value that is out of
+    range is not honoured, so it is reported as a default too.
+
+    Args:
+        entry: The config entry to read.
+
+    Returns:
+        ``"option"`` when the entry supplies a usable budget, else
+        ``"default"``.
+    """
+    return "option" if _stored_budget(entry) is not None else "default"
 
 
 def get_registry(hass: HomeAssistant) -> LimiterRegistry:
