@@ -47,6 +47,7 @@ from custom_components.hostaway.api.rate_limit import (
     current_request_context,
     request_context,
     shared_ip_gate,
+    start_first_refresh_context,
 )
 from custom_components.hostaway.const import (
     CONF_CLIENT_ID,
@@ -1005,3 +1006,48 @@ class TestTheBudgetOptionReachesTheLimiter:
 
         assert gates["account"].effective_budget == 60
         assert gates["ip"].effective_budget == 60
+
+
+class TestTheCommonPathIsFree:
+    """T040/SC-008: pacing must cost nothing when nothing is contended."""
+
+    async def test_a_below_budget_acquire_arms_no_timer(
+        self, hass: HomeAssistant
+    ) -> None:
+        """The assembled integration does not schedule work it will not do.
+
+        A limiter that armed a timer per admitted request would turn a
+        quiet installation into a stream of wakeups, which is the cost
+        this design exists to avoid. The assertion is structural rather
+        than a measurement, so it cannot pass by being fast.
+
+        Args:
+            hass: Home Assistant instance.
+        """
+        entry = _make_entry()
+        await _setup(hass, entry)
+        limiter = get_registry(hass).limiters[_ACCOUNT]
+        armed: list[float] = []
+        real_schedule = limiter._schedule
+
+        def _record(delay: float, callback: Any) -> Any:
+            """Note a timer being armed and arm it.
+
+            Args:
+                delay: Seconds until the callback should run.
+                callback: The callback the limiter wants to run.
+
+            Returns:
+                The handle the real scheduler returns.
+            """
+            armed.append(delay)
+            return real_schedule(delay, callback)
+
+        limiter._schedule = _record
+        before = limiter.snapshot().admitted_total
+
+        with request_context(start_first_refresh_context()):
+            await limiter.acquire("GET", "/v1/listings")
+
+        assert limiter.snapshot().admitted_total == before + 1
+        assert armed == []
