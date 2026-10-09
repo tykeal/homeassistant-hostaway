@@ -133,8 +133,13 @@ The remedy is to ask for less, not to file a bug:
 - lengthen the listing and reservation scan intervals
 - reduce the number of selected listings, since reservations are
   fetched per listing
-- lower the rate limit budget if something else shares the account or
-  the address, so that the two paced clients add up to less than 200
+Lowering the rate limit budget is not one of those remedies. It makes
+the shedding above more likely, not less, because it hands this
+integration a smaller share of the window. Lower it only when something
+else shares the account or the address, so that the two paced clients
+add up to less than 200 — and when you do, cut the request volume above
+by at least as much, or you have simply traded Hostaway's refusals for
+our own.
 
 There is one case you cannot tune away. When Hostaway refuses a request
 it may send an `X-RateLimit-Retry-After` telling us to stop for a
