@@ -18,8 +18,12 @@ from homeassistant.config_entries import (
     OptionsFlow,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.data_entry_flow import section
 from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.helpers.selector import (
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
     SelectOptionDict,
     SelectSelector,
     SelectSelectorConfig,
@@ -28,6 +32,10 @@ from homeassistant.helpers.selector import (
 
 from custom_components.hostaway.api.auth import HostawayTokenManager
 from custom_components.hostaway.api.client import HostawayApiClient
+from custom_components.hostaway.api.const import (
+    DEFAULT_RATE_LIMIT_BUDGET,
+    RATE_LIMIT_CEILING,
+)
 from custom_components.hostaway.api.exceptions import (
     HostawayAuthError,
     HostawayConnectionError,
@@ -46,6 +54,7 @@ from custom_components.hostaway.const import (
     CONF_CUSTOM_FIELD_WRITE_ACCOUNT_ID,
     CONF_FILTER_CANCELLED,
     CONF_LISTING_CUSTOM_FIELD_WRITES_ENABLED,
+    CONF_RATE_LIMIT_BUDGET,
     CONF_RESERVATION_CUSTOM_FIELD_RESIDUAL_RISK_ACCEPTED,
     CONF_RESERVATION_CUSTOM_FIELD_RISK_ACCEPTED_ACCOUNT_ID,
     CONF_RESERVATION_CUSTOM_FIELD_WRITES_ENABLED,
@@ -58,6 +67,7 @@ from custom_components.hostaway.const import (
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     MIN_SCAN_INTERVAL,
+    OPTIONS_SECTION_ADVANCED,
 )
 from custom_components.hostaway.rate_limit_registry import validation_limiter
 
@@ -390,6 +400,33 @@ class HostawayConfigFlow(ConfigFlow, domain=DOMAIN):
         )
 
 
+def _validated_budget(value: object) -> int | None:
+    """Return a submitted rate-limit budget, or ``None`` if unusable.
+
+    The budget is rejected rather than clamped: silently turning a typo
+    into a different number is how an operator ends up believing a limit
+    they do not have. A fractional request count means nothing to a
+    counter that admits whole requests, so it is a typo too.
+
+    Args:
+        value: The submitted value.
+
+    Returns:
+        A whole number from 1 to the Hostaway ceiling, or ``None``.
+    """
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, float):
+        if not value.is_integer():
+            return None
+        value = int(value)
+    if not isinstance(value, int):
+        return None
+    if 1 <= value <= RATE_LIMIT_CEILING:
+        return value
+    return None
+
+
 class HostawayOptionsFlow(OptionsFlow):
     """Handle options flow for the Hostaway integration."""
 
@@ -416,6 +453,10 @@ class HostawayOptionsFlow(OptionsFlow):
             Config flow result (form or entry creation).
         """
         errors: dict[str, str] = {}
+        stored_budget = self._config_entry.options.get(
+            CONF_RATE_LIMIT_BUDGET,
+            DEFAULT_RATE_LIMIT_BUDGET,
+        )
 
         if user_input is not None:
             scan = user_input.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
@@ -444,6 +485,12 @@ class HostawayOptionsFlow(OptionsFlow):
                 CONF_RESERVATION_CUSTOM_FIELD_RESIDUAL_RISK_ACCEPTED,
                 False,
             )
+            budget = _validated_budget(
+                (user_input.get(OPTIONS_SECTION_ADVANCED) or {}).get(
+                    CONF_RATE_LIMIT_BUDGET,
+                    stored_budget,
+                )
+            )
             accepted_account_id = self._config_entry.options.get(
                 CONF_RESERVATION_CUSTOM_FIELD_RISK_ACCEPTED_ACCOUNT_ID,
                 self._config_entry.data.get(
@@ -451,7 +498,9 @@ class HostawayOptionsFlow(OptionsFlow):
                 ),
             )
 
-            if (
+            if budget is None:
+                errors["base"] = "invalid_rate_limit_budget"
+            elif (
                 scan < MIN_SCAN_INTERVAL
                 or res_scan < MIN_SCAN_INTERVAL
                 or custom_field_scan < MIN_SCAN_INTERVAL
@@ -488,6 +537,7 @@ class HostawayOptionsFlow(OptionsFlow):
                         CONF_RESERVATION_CUSTOM_FIELD_RISK_ACCEPTED_ACCOUNT_ID: (
                             write_account_id if reservation_risk_accepted else None
                         ),
+                        CONF_RATE_LIMIT_BUDGET: budget,
                     },
                 )
 
@@ -576,6 +626,22 @@ class HostawayOptionsFlow(OptionsFlow):
                     CONF_RESERVATION_CUSTOM_FIELD_RESIDUAL_RISK_ACCEPTED,
                     default=current_reservation_risk_accepted,
                 ): bool,
+                vol.Optional(OPTIONS_SECTION_ADVANCED): section(
+                    vol.Schema(
+                        {
+                            vol.Optional(
+                                CONF_RATE_LIMIT_BUDGET,
+                                default=stored_budget,
+                            ): NumberSelector(
+                                NumberSelectorConfig(
+                                    mode=NumberSelectorMode.BOX,
+                                    step=1,
+                                ),
+                            ),
+                        }
+                    ),
+                    {"collapsed": True},
+                ),
             }
         )
 

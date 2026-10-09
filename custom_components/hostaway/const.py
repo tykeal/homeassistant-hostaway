@@ -23,6 +23,9 @@ DEFAULT_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL: int = 15  # minutes
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 CONF_CACHED_TOKEN: str = "cached_token"
 CONF_RATE_LIMIT_BUDGET: str = "rate_limit_budget"
+#: The options form groups the budget under a collapsed section so the
+#: operators who never need it never see it.
+OPTIONS_SECTION_ADVANCED: str = "advanced"
 #: Deliberately a top-level ``hass.data`` key rather than a member of
 #: ``hass.data[DOMAIN]``: unload consults that dict to decide whether the
 #: last entry has gone, and a limiter living there would never let it empty.
