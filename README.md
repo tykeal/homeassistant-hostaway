@@ -133,6 +133,7 @@ The remedy is to ask for less, not to file a bug:
 - lengthen the listing and reservation scan intervals
 - reduce the number of selected listings, since reservations are
   fetched per listing
+
 Lowering the rate limit budget is not one of those remedies. It makes
 the shedding above more likely, not less, because it hands this
 integration a smaller share of the window. Lower it only when something
