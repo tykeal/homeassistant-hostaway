@@ -32,11 +32,15 @@ from custom_components.hostaway.api.const import (
     RATE_LIMIT_CEILING,
     RATE_LIMIT_WINDOW_SECONDS,
 )
-from custom_components.hostaway.api.rate_limit import AccountRateLimiter
+from custom_components.hostaway.api.rate_limit import (
+    AccountRateLimiter,
+    shared_ip_gate,
+)
 from custom_components.hostaway.const import (
     CONF_CLIENT_ID,
     CONF_RATE_LIMIT_BUDGET,
     DATA_RATE_LIMITERS,
+    DOMAIN,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -150,6 +154,31 @@ def _expire_pending(registry: LimiterRegistry) -> None:
     apply_minima(registry)
 
 
+def _established_account(hass: HomeAssistant, registry: LimiterRegistry) -> str | None:
+    """Return the one account this instance has already committed to.
+
+    A registered entry settles the question outright. Failing that, the
+    oldest configured entry does, even if it is not loaded: an entry that
+    failed, was disabled, or was unloaded long enough for its claim to
+    lapse is still an account the user has configured, and the config
+    flow would have turned a second one away on its behalf.
+
+    Args:
+        hass: Home Assistant instance.
+        registry: The registry to consult first.
+
+    Returns:
+        The account key, or None if this instance has no Hostaway account.
+    """
+    for key, _ in registry.contributions.values():
+        return key
+    for other in hass.config_entries.async_entries(DOMAIN):
+        configured = other.data.get(CONF_CLIENT_ID)
+        if isinstance(configured, str):
+            return configured
+    return None
+
+
 def register_entry(hass: HomeAssistant, entry: ConfigEntry) -> AccountRateLimiter:
     """Attach a config entry to its account's limiter.
 
@@ -169,8 +198,8 @@ def register_entry(hass: HomeAssistant, entry: ConfigEntry) -> AccountRateLimite
     registry = get_registry(hass)
     account_key = entry.data[CONF_CLIENT_ID]
     registry.pending_release.pop(entry.entry_id, None)
-    known = {key for key, _ in registry.contributions.values()}
-    if known and account_key not in known:
+    established = _established_account(hass, registry)
+    if established is not None and established != account_key:
         msg = (
             "The Hostaway integration supports a single account: the rate "
             "limit is shared per account and per IP, and pacing a second "
@@ -235,6 +264,12 @@ def apply_minima(registry: LimiterRegistry) -> None:
         registry: The registry to recompute.
     """
     if not registry.contributions:
+        # Nothing is configured any more, so the only thing that could
+        # still consult the shared gate is a config flow. Leaving it at
+        # the departed entry's ceiling would hold a new account to a
+        # budget nobody chose; the in-window admissions stay, because
+        # those requests really were sent.
+        shared_ip_gate().reconfigure(DEFAULT_RATE_LIMIT_BUDGET)
         return
     ip_budget = min(budget for _, budget in registry.contributions.values())
     for account_key, limiter in registry.limiters.items():

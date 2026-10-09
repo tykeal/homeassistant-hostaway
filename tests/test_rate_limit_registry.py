@@ -31,9 +31,13 @@ from custom_components.hostaway.api.const import (
     RATE_LIMIT_WINDOW_SECONDS,
 )
 from custom_components.hostaway.api.rate_limit import (
+    FIRST_REFRESH_POLICY,
     AccountRateLimiter,
+    RequestContext,
     RequestPriority,
     current_request_context,
+    request_context,
+    shared_ip_gate,
 )
 from custom_components.hostaway.const import (
     CONF_CLIENT_ID,
@@ -49,7 +53,12 @@ from custom_components.hostaway.rate_limit_registry import (
     release_entry,
     validation_limiter,
 )
-from tests.helpers import FAKE_BASE_URL, FAKE_TOKEN_URL, make_token_response
+from tests.helpers import (
+    FAKE_BASE_URL,
+    FAKE_TOKEN_URL,
+    FakeClock,
+    make_token_response,
+)
 
 _ACCOUNT = "test-client-id"
 
@@ -216,6 +225,58 @@ class TestOneLimiterPerAccount:
 
         with pytest.raises(ConfigEntryError):
             register_entry(hass, second)
+
+    async def test_a_lapsed_entry_still_owns_the_instance(
+        self, hass: HomeAssistant
+    ) -> None:
+        """A configured account is still configured while it is unloaded.
+
+        Args:
+            hass: Home Assistant instance.
+        """
+        from custom_components.hostaway.rate_limit_registry import register_entry
+
+        first = _make_entry(unique_id="one")
+        await _setup(hass, first)
+        await hass.config_entries.async_unload(first.entry_id)
+        await hass.async_block_till_done()
+
+        with patch(
+            "custom_components.hostaway.rate_limit_registry._now",
+            return_value=time.monotonic() + RATE_LIMIT_WINDOW_SECONDS + 1,
+        ):
+            assert not get_registry(hass).contributions
+            intruder = _make_entry(
+                unique_id="two", data={CONF_CLIENT_ID: "a-different-account"}
+            )
+            intruder.add_to_hass(hass)
+
+            with pytest.raises(ConfigEntryError):
+                register_entry(hass, intruder)
+
+    async def test_the_last_account_to_leave_frees_the_ip_gate(
+        self, hass: HomeAssistant
+    ) -> None:
+        """A removed entry does not get to cap the next account forever.
+
+        Args:
+            hass: Home Assistant instance.
+        """
+        entry = _make_entry(data={CONF_RATE_LIMIT_BUDGET: 15})
+        await _setup(hass, entry)
+        limiter = get_registry(hass).limiters[_ACCOUNT]
+        await limiter.acquire("GET", "/v1/listings")
+        spent = shared_ip_gate().in_window(time.monotonic())
+
+        await hass.config_entries.async_remove(entry.entry_id)
+        await hass.async_block_till_done()
+
+        with validation_limiter(hass, "a-new-account") as transient:
+            gate = transient.snapshot().gates["ip"]
+
+        assert gate.effective_budget == DEFAULT_RATE_LIMIT_BUDGET
+        # The requests really were sent, so the window keeps them.
+        assert gate.admitted_in_window == spent
 
     async def test_the_config_flow_turns_a_second_account_away(
         self, hass: HomeAssistant
@@ -543,6 +604,59 @@ class TestInteractivePriorityIsStructural:
             await hass.async_block_till_done()
 
         assert seen == [RequestPriority.INTERACTIVE]
+
+    async def test_a_bound_service_overtakes_a_queued_poll(
+        self, hass: HomeAssistant
+    ) -> None:
+        """The binder's priority survives all the way into the queue.
+
+        Args:
+            hass: Home Assistant instance.
+        """
+        from custom_components.hostaway.services import _bind_handler
+        from tests.api.test_rate_limit import make_limiter, settle
+
+        clock = FakeClock(start=1000.0)
+        limiter = make_limiter(clock, account_budget=5, ip_budget=5)
+        order: list[str] = []
+
+        async def poll() -> None:
+            """Acquire as a routine refresh would."""
+            with request_context(
+                RequestContext.start(
+                    RequestPriority.SCHEDULED, FIRST_REFRESH_POLICY, clock.now()
+                )
+            ):
+                await limiter.acquire("GET", "/v1/listings")
+            order.append("poll")
+
+        async def handler(_hass: HomeAssistant, _call: Any) -> None:
+            """Stand in for a service that talks to Hostaway.
+
+            Args:
+                _hass: The bound Home Assistant instance.
+                _call: The service call.
+            """
+            await limiter.acquire("GET", "/v1/listings")
+            order.append("service")
+
+        limiter.note_rate_limited("account", clock.now() + 0.5, "GET", "/v1/listings")
+
+        scheduled = asyncio.create_task(poll())
+        await settle()
+        bound = _bind_handler(hass, cast(Any, handler))
+        service = asyncio.create_task(bound(cast(Any, None)))
+        await settle()
+        assert not scheduled.done()
+        assert not service.done()
+
+        clock.advance(0.6)
+        await settle()
+        await asyncio.gather(scheduled, service)
+
+        # Nothing in the handler said "interactive"; the binder did.
+        assert order == ["service", "poll"]
+        limiter.close()
 
 
 class TestConfigFlowValidationIsPaced:
