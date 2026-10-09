@@ -613,7 +613,7 @@ collapsed section, rejecting out-of-range values rather than clamping.
 **Independent Test**: submit 180, 200, and 201 through the options flow and
 assert accept/accept/reject-with-error.
 
-- [ ] T031 Add `rate_limit_budget` to `options.step.init` inside a
+- [x] T031 Add `rate_limit_budget` to `options.step.init` inside a
   `data_entry_flow.section` named `advanced` with `collapsed=True` —
   **never** `FlowHandler.show_advanced_options`, which is deprecated and
   unconditionally returns `True` in HA 2026.9.4. Validate `1 <= v <= 200`,
@@ -625,7 +625,7 @@ assert accept/accept/reject-with-error.
   stored budget loads and reads 180 with **no** migration (FR-033); the window
   length is not exposed (FR-034). **Depends on T022.**
 
-- [ ] T032 [P] Add the four translation keys —
+- [x] T032 [P] Add the four translation keys —
   `options.step.init.sections.advanced.name`,
   `...sections.advanced.data.rate_limit_budget`,
   `...sections.advanced.data_description.rate_limit_budget` (stating 180 is a
@@ -636,7 +636,7 @@ assert accept/accept/reject-with-error.
   Constitution VII, contract §7 — **Verify**: a test asserts `strings.json`
   and `translations/en.json` have identical key sets.
 
-- [ ] T033 Add the options-flow tests — `tests/test_config_flow.py` —
+- [x] T033 Add the options-flow tests — `tests/test_config_flow.py` —
   **SC-017** — **Verify**: default is 180; 200 is accepted; **201 and above
   are rejected** with `errors["base"] == "invalid_rate_limit_budget"` and
   **nothing is stored as 200**; 0 and negatives are rejected; submitting with
