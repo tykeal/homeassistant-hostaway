@@ -89,8 +89,9 @@ primitives every later phase imports. Nothing here changes runtime behaviour.
   confirming repo-wide they are unreferenced —
   `custom_components/hostaway/api/const.py` — R-016, spec "Provenance for
   corrected facts" — **Verify**:
-  `rg 'RATE_LIMIT_PER_(IP|ACCOUNT)' custom_components/ tests/` returns
-  nothing; full suite still green. **Depends on T002.**
+  `rg 'RATE_LIMIT_PER_(IP|ACCOUNT)' custom_components/` returns nothing. The
+  search is scoped to production code because the regression test that keeps
+  the names gone necessarily mentions both of them; full suite still green. **Depends on T002.**
 
 - [x] T004 [P] Add `HostawayRateLimitShedError(Exception)` — deliberately
   **not** a `HostawayApiError` subclass — and
