@@ -360,8 +360,9 @@ conditional sprinkled through the limiter. Two fields in one immutable
 remaining)` before
 deciding whether to retry or raise. `retry_at` comes from Hostaway's
 `X-RateLimit-Retry-After` Unix timestamp. The implementation converts it to a
-delay relative to current wall-clock time, clamps that delay with
-`MAX_BACKOFF`, and suppresses the gate scope identified by
+delay relative to current wall-clock time, suppresses for that delay's
+**full** length — uncapped, so suppression cannot expire before the server's
+deadline — on the gate scope identified by
 `X-RateLimit-Applied`: account suppresses the account general gate, IP
 suppresses the shared process-wide IP gate, endpoint suppresses the classified
 endpoint bucket, and provider suppresses all Hostaway traffic from this
@@ -378,9 +379,12 @@ expiry instant.
 
 **Rationale**:
 
-- FR-014 through FR-017. Reusing `MAX_BACKOFF = 30.0` as the suppression
-  ceiling (FR-015) keeps the proactive and reactive layers bounded by the same
-  constant, so they cannot disagree about how long a server "no" lasts.
+- FR-014 through FR-017. Note that `MAX_BACKOFF = 30.0` bounds only the retry
+  layer's **sleep**; the gate's suppression deadline keeps the full
+  server-derived delay so it can never expire early. A retry that wakes at the
+  `MAX_BACKOFF` ceiling simply re-acquires and waits again on the still-active
+  suppression, so the two layers cannot disagree about how long a server "no"
+  lasts (FR-015).
 - Suppression is checked in `_pump()`, which is the single admission decision
   point, so it applies to interactive waiters too — FR-016 — without a special
   case. Gate-scoped suppression is necessary because the process-wide IP gate

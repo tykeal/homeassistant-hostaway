@@ -573,10 +573,27 @@ suppressed for the indicated or inferred period.
   required to raise a lowered runtime ceiling.
 - **FR-015**: If a 429 carries `X-RateLimit-Retry-After`, the value MUST be
   interpreted as a Unix timestamp and converted to a delay relative to current
-  wall-clock time before being applied to the limiter and retry layer. It MUST
-  be clamped to a sane bound using the same `MAX_BACKOFF` ceiling the retry
-  layer applies, and MUST never be treated as a raw seconds value. If the
-  header is absent or unusable, suppression MUST last **10.0 seconds**.
+  wall-clock time before being applied to the limiter and retry layer, and
+  MUST never be treated as a raw seconds value. The resulting delay MUST be
+  applied to the two layers differently:
+  - The **gate suppression deadline** MUST retain the **full** server-derived
+    delay. It MUST NOT be clamped to `MAX_BACKOFF`, because truncating it
+    would admit a request before the moment the server told us to resume,
+    which is exactly the outcome this feature exists to prevent. This matters
+    most for provider-level 429s and for endpoint buckets whose windows exceed
+    `MAX_BACKOFF`, such as the documented 30-per-minute messages bucket.
+  - The **retry layer's sleep** MAY remain bounded by the existing
+    `MAX_BACKOFF` ceiling. A retry that wakes early simply re-acquires from
+    the limiter and waits on the still-active suppression, so the server
+    deadline is still honoured.
+
+  A waiter's operation-wide deadline MAY therefore expire while suppression is
+  still in force; that case MUST surface as the normal wait-timeout path and
+  MUST NOT shorten or clear the gate's deadline for other callers. Only a
+  header that is absent, non-numeric, not in the future, or implausibly
+  distant (more than one hour ahead, indicating a corrupt or
+  wrong-unit value) is unusable; in that case suppression MUST last
+  **10.0 seconds**.
 - **FR-016**: Suppression MUST apply to **all** callers including interactive
   ones. A server-issued `X-RateLimit-Retry-After` outranks the integration's
   internal priority ordering.

@@ -388,7 +388,7 @@ per-account limiter.
 
 | Trigger | Duration |
 |---|---|
-| 429 with `X-RateLimit-Retry-After: T` | Convert Unix timestamp `T` to a delay, then `min(max(delay, 0.1), MAX_BACKOFF)` (FR-015) |
+| 429 with `X-RateLimit-Retry-After: T` | Convert Unix timestamp `T` to a delay and suppress for its **full** length, uncapped by `MAX_BACKOFF`; fall back to `10.0` s if `T` is non-numeric, not in the future, or over an hour ahead (FR-015) |
 | 429 without `X-RateLimit-Retry-After` | `DEFAULT_SUPPRESSION_SECONDS` = **10.0** (one full documented general window) — *fixed by owner decision* |
 
 **Rules**:

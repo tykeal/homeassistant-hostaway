@@ -250,8 +250,9 @@ admissions than the budget for either gate.
   gate, `endpoint` → the classified endpoint bucket, `provider` → shared
   process-wide provider suppression; missing/unknown values fall back to
   suppressing every gate selected for the request. Convert `retry_at` from a
-  **Unix timestamp** against wall-clock time once, clamp to
-  `min(max(delay, 0.1), MAX_BACKOFF)`, and fall back to
+  **Unix timestamp** against wall-clock time once, suppress for the **full**
+  remaining delay (explicitly **not** capped by `MAX_BACKOFF`, so suppression
+  never expires before the server's deadline), and fall back to
   `DEFAULT_SUPPRESSION_SECONDS` (10.0). Suppression **extends, never
   shortens**, applies to interactive callers identically, clears by time
   comparison in `_pump()`, and re-pumps every limiter waiting on a changed
