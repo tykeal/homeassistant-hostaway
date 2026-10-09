@@ -267,6 +267,22 @@ def test_gate_next_available_is_none_when_capacity_exists() -> None:
     assert gate.next_available(0.0) is None
 
 
+def test_gate_next_available_accounts_for_a_lowered_budget() -> None:
+    """A budget cut below what is in flight needs more than one expiry."""
+    gate = SlidingWindowGate(
+        "a", GateScope.ACCOUNT, budget=4, window_seconds=10.0, startup_hold=False
+    )
+    for moment in (0.0, 1.0, 2.0, 3.0):
+        gate.record(moment)
+    gate.reconfigure(2)
+
+    # Three of the four must age out before a fifth fits, so the wake must
+    # be the third admission's expiry, not the first's.
+    assert gate.next_available(4.0) == pytest.approx(12.0)
+    assert not gate.capacity_available(11.5)
+    assert gate.capacity_available(12.1)
+
+
 def test_gate_rejects_an_out_of_range_budget() -> None:
     """A budget outside the documented range is refused up front."""
     with pytest.raises(ValueError, match="budget must be between"):

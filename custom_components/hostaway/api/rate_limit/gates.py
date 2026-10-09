@@ -13,6 +13,7 @@ import contextlib
 import logging
 from collections import deque
 from collections.abc import Callable
+from itertools import chain
 from typing import Protocol
 
 from ..const import (
@@ -223,17 +224,22 @@ class SlidingWindowGate:
             now: Current monotonic time.
 
         Returns:
-            The monotonic instant at which the oldest in-window admission
-            expires, or ``None`` if capacity is available now.
+            The monotonic instant at which enough of the window expires for
+            one admission to fit, or ``None`` if capacity is available now.
         """
-        if self.capacity_available(now):
+        occupied = self.in_window(now)
+        if occupied < self._budget:
             return None
-        heads = [d[0] for d in (self._admissions, self._synthetic_admissions) if d]
-        if not heads:
+        if not occupied:
             # Capacity is unavailable yet nothing occupies the window, which
             # means the budget itself is the blocker rather than time.
             return None
-        return min(heads) + self._window
+        # A budget lowered below what is already in flight needs more than
+        # the oldest entry to expire. Waking at the oldest would just find
+        # the gate still full and re-arm, once per surplus admission.
+        surplus = occupied - self._budget
+        merged = sorted(chain(self._admissions, self._synthetic_admissions))
+        return merged[surplus] + self._window
 
     def reconfigure(self, budget: int, *, notify: bool = True) -> None:
         """Set the operator-configured budget without disturbing the window.
