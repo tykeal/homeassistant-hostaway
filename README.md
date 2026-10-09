@@ -117,10 +117,12 @@ the integration **drops that cycle** rather than failing it. Entities
 stay *available* and keep showing the values from the previous
 successful poll, and the next scheduled refresh tries again.
 
-Work that nobody can usefully retry is allowed to wait longer instead,
-up to 30 seconds: an action you trigger yourself such as a service call
-or a config flow, the connectivity check when you add the integration,
-and each coordinator's very first refresh after a restart. Startup can
+Work that must not be dropped silently is allowed to wait longer
+instead, up to 30 seconds, because no later cycle will quietly redo it
+and the caller is owed an answer either way: an action you trigger
+yourself such as a service call or a config flow, the connectivity
+check when you add the integration, and each coordinator's very first
+refresh after a restart. Startup can
 therefore take a little longer on a busy account, but it does not come
 back empty.
 
