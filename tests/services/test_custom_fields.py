@@ -29,6 +29,7 @@ from custom_components.hostaway.api.exceptions import (
     HostawayConnectionError,
     HostawayMutationResultError,
     HostawayRateLimitError,
+    HostawayRateLimitWaitTimeout,
     HostawayResponseError,
 )
 from custom_components.hostaway.api.models import HostawayListing, HostawayReservation
@@ -1067,6 +1068,57 @@ async def test_set_custom_field_rate_limit_remerges_fresh_snapshot(
             {"customFieldId": 2, "value": "external-new"},
         ]
     }
+
+
+async def test_set_custom_field_wait_timeout_is_not_retried(
+    hass: HomeAssistant,
+) -> None:
+    """Our own pacing gave up, so the write never reached Hostaway.
+
+    Re-running read/merge/write would spend the next window's budget
+    re-asking a question nobody has answered.
+
+    Args:
+        hass: Home Assistant instance.
+    """
+    before = {
+        "id": 123,
+        "name": "Beach House",
+        "customFieldValues": [{"customFieldId": 1, "value": "old"}],
+    }
+    api_client = SimpleNamespace(
+        get_listing_payload=AsyncMock(return_value=before),
+        update_listing_custom_fields=AsyncMock(
+            side_effect=HostawayRateLimitWaitTimeout("no capacity", waited=30.0)
+        ),
+    )
+    hass.data.setdefault(DOMAIN, {})["entry-1"] = {
+        "api_client": api_client,
+        "custom_fields_coordinator": SimpleNamespace(
+            data=[_definition(1)],
+            last_refresh_succeeded=True,
+        ),
+        "custom_field_write_safety": _enabled_listing_gates(),
+        **_listing_write_identity(),
+    }
+
+    with (
+        patch("asyncio.sleep", new_callable=AsyncMock) as sleep,
+        pytest.raises(ServiceValidationError, match="rate limit"),
+    ):
+        await async_handle_set_custom_field(
+            hass,
+            {
+                "target_type": "listing",
+                "target_id": 123,
+                "customFieldId": 1,
+                "value": "new",
+            },
+        )
+
+    sleep.assert_not_awaited()
+    api_client.update_listing_custom_fields.assert_awaited_once()
+    api_client.get_listing_payload.assert_awaited_once()
 
 
 async def test_set_custom_field_long_rate_limit_fails_closed(

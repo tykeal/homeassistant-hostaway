@@ -27,13 +27,16 @@
         "error": {
             "invalid_auth": "Invalid credentials. Please check your client ID and secret.",
             "cannot_connect": "Unable to connect to the Hostaway API. Please check your network.",
+            "rate_limited": "Hostaway is rate limiting this account right now. Please try again in a moment.",
             "unknown": "An unexpected error occurred. Please try again.",
             "no_listings_selected": "At least one listing must be selected."
         },
         "abort": {
             "already_configured": "This Hostaway account is already configured.",
+            "single_instance_allowed": "Only one Hostaway account can be configured: the Hostaway rate limit is shared across accounts on this network, and a second account would have to pace itself against the first one's budget.",
             "invalid_auth": "Authentication failed while fetching listings.",
             "cannot_connect": "Unable to connect to Hostaway while fetching listings.",
+            "rate_limited": "Hostaway is rate limiting this account right now. Please try again in a moment.",
             "no_active_listings": "No active listings found in your Hostaway account.",
             "reauth_successful": "Re-authentication was successful.",
             "unknown": "An unexpected error occurred."

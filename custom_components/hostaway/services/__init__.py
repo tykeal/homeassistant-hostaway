@@ -18,6 +18,10 @@ from homeassistant.core import (
     SupportsResponse,
 )
 
+from custom_components.hostaway.api.rate_limit import (
+    request_context,
+    start_interactive_context,
+)
 from custom_components.hostaway.const import DOMAIN
 
 from .custom_fields import (
@@ -75,8 +79,14 @@ def _bind_handler(
     """Bind Home Assistant to a service handler."""
 
     async def _bound(call: ServiceCall) -> ServiceResult:
-        """Call a registered service handler with bound Home Assistant."""
-        return await handler(hass, call)
+        """Call a registered service handler with bound Home Assistant.
+
+        A service call is somebody waiting at a dashboard, so the whole
+        call runs at interactive priority. Doing it here rather than in
+        each handler is what makes a newly added service inherit it.
+        """
+        with request_context(start_interactive_context()):
+            return await handler(hass, call)
 
     return _bound
 

@@ -35,6 +35,10 @@ from custom_components.hostaway.api.exceptions import (
     HostawayRateLimitError,
 )
 from custom_components.hostaway.api.models import AccessToken
+from custom_components.hostaway.api.rate_limit import (
+    request_context,
+    start_interactive_context,
+)
 from custom_components.hostaway.const import (
     CONF_CACHED_TOKEN,
     CONF_CLIENT_ID,
@@ -51,6 +55,11 @@ from custom_components.hostaway.coordinator import (
     HostawayCustomFieldsCoordinator,
     HostawayListingsCoordinator,
     HostawayReservationsCoordinator,
+)
+from custom_components.hostaway.rate_limit_registry import (
+    register_entry,
+    release_entry,
+    schedule_release,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -119,6 +128,35 @@ async def async_setup_entry(
 ) -> bool:
     """Set up Hostaway from a config entry.
 
+    Home Assistant never unloads an entry that failed to load, so a setup
+    that raises would otherwise leave its claim on the account budget
+    forever — and a failed entry asking for a low budget would throttle
+    the entry that did load. A failure therefore starts the same grace
+    period an unload does.
+
+    Args:
+        hass: Home Assistant instance.
+        entry: The config entry to set up.
+
+    Returns:
+        True if setup succeeded.
+    """
+    try:
+        loaded = await _async_setup_entry(hass, entry)
+    except Exception:
+        schedule_release(hass, entry)
+        raise
+    if not loaded:
+        schedule_release(hass, entry)
+    return loaded
+
+
+async def _async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+) -> bool:
+    """Set up Hostaway from a config entry.
+
     Creates the HTTP client, token manager, API client, and
     coordinators. Seeds persisted token if available and validates
     connectivity.
@@ -134,11 +172,15 @@ async def async_setup_entry(
         ConfigEntryNotReady: If the API is unreachable.
     """
     http_client = get_async_client(hass)
+    # One limiter per account, created before anything can send: the
+    # server's counters are per account and per IP, not per config entry.
+    limiter = register_entry(hass, entry)
 
     token_manager = HostawayTokenManager(
         client_id=entry.data[CONF_CLIENT_ID],
         client_secret=entry.data[CONF_CLIENT_SECRET],
         http_client=http_client,
+        limiter=limiter,
     )
 
     # Restore persisted token if available
@@ -153,10 +195,12 @@ async def async_setup_entry(
     api_client = HostawayApiClient(
         token_manager=token_manager,
         http_client=http_client,
+        limiter=limiter,
     )
 
     try:
-        await api_client.test_connection()
+        with request_context(start_interactive_context()):
+            await api_client.test_connection()
     except HostawayAuthError as exc:
         raise ConfigEntryAuthFailed(
             f"Invalid Hostaway credentials: {exc}",
@@ -223,6 +267,7 @@ async def async_setup_entry(
             "reservation_custom_field_evidence": reservation_evidence,
             "custom_field_write_locks": CustomFieldWriteLockRegistry(),
             "custom_field_write_generations": CustomFieldWriteGenerationRegistry(),
+            "limiter": limiter,
         }
     )
 
@@ -255,6 +300,9 @@ async def async_unload_entry(
     """
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
+    if unload_ok:
+        schedule_release(hass, entry)
+
     if unload_ok and DOMAIN in hass.data:
         data = hass.data[DOMAIN].pop(entry.entry_id, None)
         if data:
@@ -277,6 +325,21 @@ async def async_unload_entry(
             async_unregister_services(hass)
 
     return unload_ok
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Drop an entry's claim on its account limiter.
+
+    Removal releases the budget at once. An unload only starts a grace
+    window, because it may be the first half of a reload and giving the
+    budget back in between would hand the next ten seconds more
+    admissions than the account is entitled to.
+
+    Args:
+        hass: Home Assistant instance.
+        entry: The entry being removed.
+    """
+    release_entry(hass, entry)
 
 
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
