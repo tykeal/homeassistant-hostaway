@@ -77,18 +77,31 @@ _SHARED_IP_GATE: SlidingWindowGate | None = None
 _SHARED_PROVIDER_SUPPRESSION: ProviderSuppression | None = None
 
 
-def shared_ip_gate() -> SlidingWindowGate:
+def shared_ip_gate(created_at: float | None = None) -> SlidingWindowGate:
     """Return the process-wide IP gate, creating it on first use.
 
     Hostaway counts per originating IP address, which every limiter in the
     process shares regardless of account.
+
+    Args:
+        created_at: The instant to date the startup hold to, in the caller's
+            monotonic domain. Defaults to the real monotonic clock. The
+            hold expires by ageing out of the window, so a timestamp from
+            the wrong clock domain is not merely cosmetic: dating it to
+            zero against a process whose monotonic clock is already hours
+            old prunes the entire hold on the first capacity check, leaving
+            the IP counter at full capacity exactly when it must not be.
 
     Returns:
         The shared gate.
     """
     global _SHARED_IP_GATE
     if _SHARED_IP_GATE is None:
-        _SHARED_IP_GATE = SlidingWindowGate("ip", GateScope.IP)
+        _SHARED_IP_GATE = SlidingWindowGate(
+            "ip",
+            GateScope.IP,
+            created_at=time.monotonic() if created_at is None else created_at,
+        )
     return _SHARED_IP_GATE
 
 
@@ -156,7 +169,9 @@ class AccountRateLimiter:
             budget=account_budget,
             created_at=clock(),
         )
-        self._ip_general_gate = ip_gate if ip_gate is not None else shared_ip_gate()
+        self._ip_general_gate = (
+            ip_gate if ip_gate is not None else shared_ip_gate(clock())
+        )
         self._provider_suppression = (
             provider_suppression
             if provider_suppression is not None

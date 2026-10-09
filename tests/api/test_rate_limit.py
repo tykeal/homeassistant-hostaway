@@ -1246,7 +1246,7 @@ async def test_configuring_the_ip_gate_resizes_its_startup_hold() -> None:
     """The shared gate is built before anyone knows the effective budget."""
     reset_shared_state()
     clock = FakeClock()
-    ip_gate = shared_ip_gate()
+    ip_gate = shared_ip_gate(clock.now())
     limiter = AccountRateLimiter(
         "acct",
         account_budget=50,
@@ -1262,6 +1262,37 @@ async def test_configuring_the_ip_gate_resizes_its_startup_hold() -> None:
     assert ip_gate.in_window(clock.now()) == 25
     limiter.close()
     reset_shared_state()
+
+
+async def test_the_shared_ip_hold_is_dated_in_the_limiters_clock_domain() -> None:
+    """A hold dated to zero would prune instantly on a real monotonic clock."""
+    reset_shared_state()
+    clock = FakeClock(start=86_400.0)
+    limiter = make_limiter_on_shared_gate(clock)
+
+    # The hold must still occupy the window a whole day into the process,
+    # not have aged out the moment anyone first asked for capacity.
+    assert limiter._ip_general_gate.in_window(clock.now()) > 0
+    limiter.close()
+    reset_shared_state()
+
+
+def make_limiter_on_shared_gate(clock: FakeClock) -> AccountRateLimiter:
+    """Build a limiter that adopts the process-wide IP gate.
+
+    Args:
+        clock: The fake clock driving both time and timers.
+
+    Returns:
+        A limiter whose IP gate is the shared singleton.
+    """
+    return AccountRateLimiter(
+        "acct",
+        provider_suppression=ProviderSuppression(),
+        clock=clock.now,
+        schedule=clock.schedule,
+        wall_clock=clock.now,
+    )
 
 
 async def test_closing_a_limiter_detaches_it_from_shared_state() -> None:
