@@ -50,9 +50,14 @@ class TestSafetyMarginIsDocumented:
 
 
 class TestWindowLengthIsNotConfigurable:
-    """FR-034: the window tracks the documented API, so it is fixed."""
+    """FR-034: the window tracks the documented API, so it is fixed.
 
-    def test_no_window_setter_or_option_exists(self) -> None:
+    Guarding only ``api.const`` would be hollow, since an operator-facing
+    option is declared in the integration's own ``const`` and surfaced by
+    the config flow. All three are checked.
+    """
+
+    def test_api_const_exposes_no_window_setter(self) -> None:
         """Only the budget is tunable; the window length never is."""
         names = [n for n in dir(const) if not n.startswith("_")]
         assert "RATE_LIMIT_WINDOW_SECONDS" in names
@@ -60,6 +65,36 @@ class TestWindowLengthIsNotConfigurable:
             n for n in names if "WINDOW" in n and n != "RATE_LIMIT_WINDOW_SECONDS"
         ]
         assert not any(callable(getattr(const, n)) for n in names)
+
+    def test_no_integration_option_constant_declares_a_window(self) -> None:
+        """An option would live here, so no CONF_ name may mention one."""
+        from custom_components.hostaway import const as integration_const
+
+        offenders = [
+            name
+            for name in dir(integration_const)
+            if name.startswith(("CONF_", "DEFAULT_")) and "WINDOW" in name
+        ]
+        assert not offenders
+
+    def test_config_flow_exposes_no_window_field(self) -> None:
+        """The operator-facing schema must offer no window control."""
+        import inspect
+
+        from custom_components.hostaway import config_flow
+
+        assert "window" not in inspect.getsource(config_flow).lower()
+
+    def test_translations_offer_no_window_control(self) -> None:
+        """A user-visible label would betray an option we must not have."""
+        import json
+        from pathlib import Path
+
+        import custom_components.hostaway as integration
+
+        strings = Path(integration.__file__).with_name("strings.json")
+        assert strings.is_file(), "the integration must ship strings.json"
+        assert "window" not in json.dumps(json.loads(strings.read_text())).lower()
 
 
 class TestStaleConstantsRemoved:

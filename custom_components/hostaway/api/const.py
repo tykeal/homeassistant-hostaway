@@ -36,9 +36,11 @@ DEFAULT_SUPPRESSION_SECONDS: float = 10.0
 
 # Upper bound on suppression derived from a server Retry-After timestamp.
 # Hostaway documents no bucket remotely near an hour, so this only ever
-# catches a corrupt or wrong-unit header: a value mistakenly sent as a raw
-# seconds delay reads as a timestamp decades ahead and would otherwise wedge
-# the integration for the life of the process.
+# catches a corrupt or wrong-unit header. The case it exists for is a
+# timestamp sent in milliseconds: read as seconds it lands tens of
+# thousands of years ahead and would otherwise wedge the integration for
+# the life of the process. The opposite mistake, a raw seconds delay such
+# as 3600, reads as a moment in 1970 and is simply rejected as past.
 MAX_SUPPRESSION_SECONDS: float = 3600.0
 DEFAULT_PAGE_LIMIT: int = 100
 GRANT_TYPE: str = "client_credentials"
