@@ -136,7 +136,7 @@ class HostawayTokenManager:
         if cached is not None and not cached.is_expired(
             buffer_seconds=_REFRESH_BUFFER,
         ):
-            return cached.access_token
+            return await self._ready_token(cached)
 
         with ensure_request_context() as ctx:
             await self._acquire_lock(ctx)
@@ -145,20 +145,40 @@ class HostawayTokenManager:
                 if cached is not None and not cached.is_expired(
                     buffer_seconds=_REFRESH_BUFFER,
                 ):
-                    return cached.access_token
+                    return await self._ready_token(cached)
 
                 token = await self._request_token()
-                # Enforce post-generation delay. It is charged against the
-                # ambient operation's deadline like any other wait: a caller
-                # with one second left must not spend it sleeping here and
-                # then fail at the next acquisition anyway.
-                delay = token.seconds_until_ready
-                if delay > 0:
-                    await self._post_generation_delay(delay, ctx)
+                # Cached before the readiness wait, not after. The token is
+                # already paid for in budget; discarding it because this
+                # caller ran out of time would buy another one on the next
+                # cycle and run out of time again.
                 self._cached_token = token
-                return token.access_token
+                return await self._ready_token(token)
             finally:
                 self._lock.release()
+
+    async def _ready_token(self, token: AccessToken) -> str:
+        """Return a token's value once Hostaway will accept it.
+
+        Args:
+            token: The token to hand out.
+
+        Returns:
+            The token string, usable immediately.
+
+        Raises:
+            HostawayRateLimitShedError: If a sheddable operation has too
+                little time left to wait out the readiness delay.
+            HostawayRateLimitWaitTimeout: If any other operation has.
+        """
+        delay = token.seconds_until_ready
+        if delay > 0:
+            # Charged against the ambient operation's deadline like any
+            # other wait: a caller with one second left must not spend it
+            # sleeping here and then fail at the next acquisition anyway.
+            with ensure_request_context() as ctx:
+                await self._post_generation_delay(delay, ctx)
+        return token.access_token
 
     async def _acquire_lock(self, ctx: RequestContext) -> None:
         """Take the refresh lock without outliving the operation's deadline.

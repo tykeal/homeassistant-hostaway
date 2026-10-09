@@ -46,6 +46,7 @@ from custom_components.hostaway.api.rate_limit import (
     SlidingWindowGate,
     current_request_context,
     request_context,
+    sleep_within_deadline,
     start_interactive_context,
 )
 from tests.helpers import FAKE_BASE_URL, FAKE_TOKEN
@@ -166,6 +167,25 @@ def _refuse_then_succeed(refusals: int, **extra: str) -> Any:
         return _refused(**extra) if served <= refusals else _ok()
 
     return respond
+
+
+def _token_response() -> httpx.Response:
+    """Build a successful token response.
+
+    Returns:
+        A 200 carrying a usable token.
+    """
+    return httpx.Response(
+        200,
+        json={
+            "status": "success",
+            "result": {
+                "access_token": "token-value",
+                "token_type": "Bearer",
+                "expires_in": 3600,
+            },
+        },
+    )
 
 
 def _ok() -> httpx.Response:
@@ -625,13 +645,30 @@ class TestTokenEndpointIsPaced:
             "client-id", "secret", mock_httpx_client, limiter=limiter
         )
 
+        priorities: list[RequestPriority] = []
+        admit = limiter.acquire
+
+        async def spy(method: str, path: str) -> None:
+            """Record the priority the token request was admitted at.
+
+            Args:
+                method: HTTP method.
+                path: Request path.
+            """
+            priorities.append(current_request_context().priority)
+            await admit(method, path)
+
         with (
             request_context(start_interactive_context()),
+            patch.object(limiter, "acquire", spy),
             patch("asyncio.sleep", new_callable=AsyncMock),
         ):
             await manager.get_token()
 
         assert limiter.snapshot().admitted_total == 1
+        # T019: the token request belongs to the operation that needed it,
+        # so it must not quietly queue behind scheduled work.
+        assert priorities == [RequestPriority.INTERACTIVE]
         limiter.close()
 
     async def test_a_token_refresh_and_its_data_request_are_both_paced(
@@ -765,6 +802,44 @@ class TestTokenEndpointIsPaced:
             await manager.get_token()
 
         assert not manager._lock.locked()
+        limiter.close()
+
+    async def test_a_token_survives_a_deadline_lost_to_its_readiness_wait(
+        self, mock_httpx_client: httpx.AsyncClient
+    ) -> None:
+        """A token is paid for in budget the moment it is issued.
+
+        Discarding one because this caller ran out of time would buy
+        another next cycle and run out of time again, forever.
+
+        Args:
+            mock_httpx_client: The transport fixture.
+        """
+        route = respx.post("https://api.hostaway.com/v1/accessTokens").mock(
+            return_value=_token_response()
+        )
+        limiter = make_limiter()
+        manager = HostawayTokenManager(
+            "client-id", "secret", mock_httpx_client, limiter=limiter
+        )
+        nearly_spent = RequestContext.start(
+            RequestPriority.SCHEDULED,
+            SCHEDULED_POLICY,
+            time.monotonic() - (SCHEDULED_POLICY.duration - 0.5),
+        )
+
+        with request_context(nearly_spent), pytest.raises(HostawayRateLimitShedError):
+            await manager.get_token()
+
+        assert manager._cached_token is not None
+
+        with (
+            request_context(start_interactive_context()),
+            patch("asyncio.sleep", new_callable=AsyncMock),
+        ):
+            assert await manager.get_token() == "token-value"
+
+        assert route.call_count == 1
         limiter.close()
 
     def test_the_oq_001_assumption_is_written_down(self) -> None:
@@ -954,3 +1029,31 @@ async def test_a_cancelled_caller_leaves_no_task_behind(
 
     assert limiter.snapshot().admitted_total == 1
     limiter.close()
+
+
+class TestADelayedEventLoopCannotOversleep:
+    """A deadline that is only checked up front is not enforced."""
+
+    async def test_a_sleep_that_overruns_is_cut_short(self) -> None:
+        """Resuming after the deadline is as bad as never checking it."""
+        ctx = RequestContext.start(
+            RequestPriority.SCHEDULED,
+            SCHEDULED_POLICY,
+            time.monotonic() - (SCHEDULED_POLICY.duration - 0.1),
+        )
+
+        async def oversleep(_delay: float) -> None:
+            """Sleep far longer than the caller asked for.
+
+            Args:
+                _delay: The requested delay, deliberately ignored.
+            """
+            await real_sleep(0.5)
+
+        real_sleep = asyncio.sleep
+
+        with (
+            patch("asyncio.sleep", oversleep),
+            pytest.raises(HostawayRateLimitShedError),
+        ):
+            await sleep_within_deadline(0.01, ctx)

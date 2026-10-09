@@ -70,7 +70,17 @@ async def sleep_within_deadline(delay: float, ctx: RequestContext) -> None:
             shed_on_timeout=ctx.policy.shed_on_timeout,
             waited=ctx.policy.duration - remaining,
         )
-    await asyncio.sleep(delay)
+    # The check above is not enough on its own: a busy event loop can
+    # resume the sleep well after the deadline, and returning then would
+    # break the contract just as surely as never checking.
+    try:
+        async with asyncio.timeout(remaining):
+            await asyncio.sleep(delay)
+    except TimeoutError as exc:
+        raise deadline_exception(
+            shed_on_timeout=ctx.policy.shed_on_timeout,
+            waited=ctx.policy.duration - ctx.remaining(time.monotonic()),
+        ) from exc
 
 
 @dataclass(order=True)
