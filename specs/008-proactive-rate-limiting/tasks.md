@@ -532,7 +532,7 @@ refresh.
 **Independent Test**: saturate the limiter, let a scheduled refresh come due,
 and assert the cycle is skipped, logged, data preserved, entities available.
 
-- [ ] T027 [US2] Add the shared coordinator base class carrying
+- [x] T027 [US2] Add the shared coordinator base class carrying
   `_first_refresh_complete: bool`, `_shed_count`, `_shed_since_summary`,
   `_last_shed_log`, and `_SHED_LOG_COOLDOWN_SECONDS = 300.0`. Its
   `_async_update_data` opens a scheduled (or first-refresh) context, calls the
@@ -561,7 +561,7 @@ and assert the cycle is skipped, logged, data preserved, entities available.
   label and does **not** contain `entry.data[CONF_CLIENT_ID]`.
   **Depends on T004, T010.**
 
-- [ ] T028 [US2] Adapt the listings and reservations coordinators: rename each
+- [x] T028 [US2] Adapt the listings and reservations coordinators: rename each
   existing `_async_update_data` body to `_async_fetch_data`, inherit the base,
   and use `FIRST_REFRESH_POLICY` for the first refresh so it is **never shed**
   and failure propagates `UpdateFailed` → `ConfigEntryNotReady`. Preserve the
@@ -574,7 +574,7 @@ and assert the cycle is skipped, logged, data preserved, entities available.
   rather than publishing partial data; first-refresh detection uses the
   explicit flag, **never** `self.data is None`. **Depends on T027.**
 
-- [ ] T029 [US2] Adapt `HostawayCustomFieldsCoordinator` for the FR-037
+- [x] T029 [US2] Adapt `HostawayCustomFieldsCoordinator` for the FR-037
   asymmetry: it keeps refreshing ~1 s after setup via
   `async_refresh_retaining_stale()` and must stay non-blocking; add an
   explicit **not-yet-loaded** state distinct from a successfully loaded empty
@@ -589,7 +589,7 @@ and assert the cycle is skipped, logged, data preserved, entities available.
   converges once budget frees; a test proves the bare `except Exception` no
   longer swallows a shed. **Depends on T027.**
 
-- [ ] T030 [US2] [US4] Add the shedding behaviour tests —
+- [x] T030 [US2] [US4] Add the shedding behaviour tests —
   `tests/test_coordinator.py` — **SC-005**, **SC-006**, **SC-015**,
   **SC-016** — **Verify**: SC-005 — after a shed `coordinator.data` is
   unchanged, `last_update_success is True`, no entity is unavailable, and a

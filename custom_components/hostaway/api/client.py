@@ -84,6 +84,15 @@ class HostawayApiClient:
         self._base_url = base_url.rstrip("/")
         self._limiter = limiter
 
+    @property
+    def limiter(self) -> AccountRateLimiter | None:
+        """Return the limiter pacing this client, if it has one.
+
+        Returns:
+            The limiter, or ``None`` when the client is unpaced.
+        """
+        return self._limiter
+
     async def test_connection(self) -> bool:
         """Validate credentials with a lightweight API call."""
         await self._request("GET", "/v1/listings", params={"limit": 1})
