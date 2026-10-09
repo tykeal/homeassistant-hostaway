@@ -12,9 +12,10 @@ lifecycle and token persistence across HA restarts.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HassJob, HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.httpx_client import get_async_client
@@ -122,6 +123,56 @@ def _custom_field_write_safety(
     return gates, listing_evidence, reservation_evidence, account_id
 
 
+def _start_custom_field_definitions(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    coordinator: HostawayCustomFieldsCoordinator,
+) -> tuple[Callable[[], None], Callable[[], None]]:
+    """Begin loading custom-field definitions without blocking setup.
+
+    Definitions are useful but not load bearing, so setup hands the first
+    fetch to a short timer instead of awaiting it. That keeps a slow or
+    rate-limited account from delaying every entity this entry provides.
+
+    Args:
+        hass: Home Assistant instance.
+        entry: The config entry being set up.
+        coordinator: The definitions coordinator to start.
+
+    Returns:
+        The listener unsubscribe and the timer cancel callbacks.
+    """
+
+    def _listener() -> None:
+        """Keep the definitions coordinator interval scheduled."""
+
+    update_unsub = coordinator.async_add_listener(_listener)
+
+    @callback
+    def _initial_refresh(_now: object) -> None:
+        """Start the first definitions refresh.
+
+        Args:
+            _now: The fire time, which this callback ignores.
+        """
+        entry.async_create_task(
+            hass,
+            coordinator.async_refresh_retaining_stale(),
+            "hostaway custom field definitions first refresh",
+        )
+
+    initial_refresh_unsub = async_call_later(
+        hass,
+        1,
+        HassJob(
+            _initial_refresh,
+            "hostaway custom field definitions first refresh",
+            cancel_on_shutdown=True,
+        ),
+    )
+    return update_unsub, initial_refresh_unsub
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -222,25 +273,8 @@ async def _async_setup_entry(
     await listings_coordinator.async_config_entry_first_refresh()
     await reservations_coordinator.async_config_entry_first_refresh()
 
-    def _custom_fields_listener() -> None:
-        """Keep the definitions coordinator interval scheduled."""
-
-    custom_fields_update_unsub = custom_fields_coordinator.async_add_listener(
-        _custom_fields_listener,
-    )
-
-    def _initial_custom_fields_refresh(_now: object) -> None:
-        """Start the first definitions refresh without blocking setup."""
-        hass.loop.call_soon_threadsafe(
-            lambda: hass.async_create_task(
-                custom_fields_coordinator.async_refresh_retaining_stale()
-            )
-        )
-
-    custom_fields_initial_refresh_unsub = async_call_later(
-        hass,
-        1,
-        _initial_custom_fields_refresh,
+    custom_fields_update_unsub, custom_fields_initial_refresh_unsub = (
+        _start_custom_field_definitions(hass, entry, custom_fields_coordinator)
     )
     (
         write_safety,
