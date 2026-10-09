@@ -51,10 +51,14 @@ from custom_components.hostaway.api.rate_limit import (
 from custom_components.hostaway.const import (
     CONF_CLIENT_ID,
     CONF_CLIENT_SECRET,
+    CONF_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL,
     CONF_RATE_LIMIT_BUDGET,
+    CONF_RESERVATION_SCAN_INTERVAL,
+    CONF_SCAN_INTERVAL,
     CONF_SELECTED_LISTINGS,
     DATA_RATE_LIMITERS,
     DOMAIN,
+    OPTIONS_SECTION_ADVANCED,
 )
 from custom_components.hostaway.rate_limit_registry import (
     entry_budget,
@@ -963,3 +967,41 @@ class TestConfigFlowValidationIsPaced:
         assert ("POST", "/v1/accessTokens") in paced
         assert ("GET", "/v1/listings") in paced
         limiter.close()
+
+
+class TestTheBudgetOptionReachesTheLimiter:
+    """T031/SC-017: the one operator lever has to actually move something."""
+
+    async def test_a_new_budget_takes_effect_without_a_restart(
+        self, hass: HomeAssistant
+    ) -> None:
+        """Submitting the options form re-paces the live limiter.
+
+        Args:
+            hass: Home Assistant instance.
+        """
+        entry = _make_entry(options={CONF_RATE_LIMIT_BUDGET: 120})
+        await _setup(hass, entry)
+        limiter = get_registry(hass).limiters[_ACCOUNT]
+        assert limiter.snapshot().gates["account"].effective_budget == 120
+
+        with _no_traffic():
+            result = await hass.config_entries.options.async_init(entry.entry_id)
+            result = await hass.config_entries.options.async_configure(
+                result["flow_id"],
+                user_input={
+                    CONF_SCAN_INTERVAL: 5,
+                    CONF_RESERVATION_SCAN_INTERVAL: 2,
+                    CONF_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL: 15,
+                    OPTIONS_SECTION_ADVANCED: {CONF_RATE_LIMIT_BUDGET: 60},
+                },
+            )
+            await hass.async_block_till_done()
+
+        assert result["type"] is FlowResultType.CREATE_ENTRY
+        assert entry.options[CONF_RATE_LIMIT_BUDGET] == 60
+        after = get_registry(hass).limiters[_ACCOUNT]
+        gates = after.snapshot().gates
+
+        assert gates["account"].effective_budget == 60
+        assert gates["ip"].effective_budget == 60

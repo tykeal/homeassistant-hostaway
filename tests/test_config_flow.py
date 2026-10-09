@@ -4,19 +4,29 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any, cast
 from unittest.mock import AsyncMock, patch
 
+import pytest
 import voluptuous as vol
+from homeassistant import config_entries
 from homeassistant.config_entries import SOURCE_USER
 from homeassistant.core import HomeAssistant
-from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.data_entry_flow import FlowResultType, section
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.hostaway.api.const import (
+    DEFAULT_RATE_LIMIT_BUDGET,
+    RATE_LIMIT_CEILING,
+)
+from custom_components.hostaway.config_flow import _validated_budget
 from custom_components.hostaway.const import (
     CONF_CLIENT_ID,
     CONF_CLIENT_SECRET,
     CONF_FILTER_CANCELLED,
+    CONF_RATE_LIMIT_BUDGET,
     CONF_RESERVATION_SCAN_INTERVAL,
     CONF_SCAN_INTERVAL,
     CONF_SELECTED_LISTINGS,
@@ -24,12 +34,65 @@ from custom_components.hostaway.const import (
     DEFAULT_RESERVATION_SCAN_INTERVAL,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
+    OPTIONS_SECTION_ADVANCED,
 )
+from custom_components.hostaway.rate_limit_registry import entry_budget
 
 VALID_INPUT = {
     CONF_CLIENT_ID: "test-client-id",
     CONF_CLIENT_SECRET: "test-client-secret",
 }
+
+
+def _advanced_section(schema: vol.Schema | None) -> section | None:
+    """Return the advanced section of an options schema.
+
+    Args:
+        schema: The schema the options form is showing, if any.
+
+    Returns:
+        The section, or ``None`` when the form has no advanced section.
+    """
+    if schema is None:
+        return None
+    for key, value in schema.schema.items():
+        if str(key) == OPTIONS_SECTION_ADVANCED and isinstance(value, section):
+            return value
+    return None
+
+
+def _section_default(advanced: section, key: str) -> object:
+    """Return the default a section offers for one field.
+
+    Args:
+        advanced: The section to inspect.
+        key: The field name.
+
+    Returns:
+        The default value, or ``None`` when the field has none.
+    """
+    for marker in advanced.schema.schema:
+        if str(marker) == key:
+            return marker.default()
+    return None
+
+
+def _key_paths(data: dict, prefix: str = "") -> set[str]:
+    """Return every dotted key path in a translation document.
+
+    Args:
+        data: The document to walk.
+        prefix: The path accumulated so far.
+
+    Returns:
+        Every dotted key path the document contains.
+    """
+    paths: set[str] = set()
+    for key, value in data.items():
+        paths.add(f"{prefix}{key}")
+        if isinstance(value, dict):
+            paths |= _key_paths(value, f"{prefix}{key}.")
+    return paths
 
 
 def _make_entry(**overrides: object) -> MockConfigEntry:
@@ -46,14 +109,16 @@ def _make_entry(**overrides: object) -> MockConfigEntry:
         CONF_RESERVATION_SCAN_INTERVAL: DEFAULT_RESERVATION_SCAN_INTERVAL,
     }
     options.update(cast(dict[str, Any], overrides.pop("options", {})))
+    data: dict[str, Any] = {
+        CONF_CLIENT_ID: "test-client-id",
+        CONF_CLIENT_SECRET: "test-client-secret",
+        CONF_SELECTED_LISTINGS: [12345],
+    }
+    data.update(cast(dict[str, Any], overrides.pop("data", {})))
     return MockConfigEntry(
         domain=DOMAIN,
         title="Hostaway (test-cli...)",
-        data={
-            CONF_CLIENT_ID: "test-client-id",
-            CONF_CLIENT_SECRET: "test-client-secret",
-            CONF_SELECTED_LISTINGS: [12345],
-        },
+        data=data,
         unique_id="test-client-id",
         options=options,
         **overrides,  # type: ignore[arg-type]
@@ -694,3 +759,258 @@ async def test_custom_field_write_options_rebinds_risk(
     )
 
     assert result["errors"] == {"base": "reservation_risk_not_accepted"}
+
+
+class TestRateLimitBudgetOption:
+    """Tests for the one rate-limit lever an operator gets."""
+
+    async def test_an_untouched_entry_runs_on_the_default_budget(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """SC-017: no stored budget means the default, with no migration.
+
+        Args:
+            hass: Home Assistant instance.
+        """
+        entry = _make_entry()
+        entry.add_to_hass(hass)
+        assert CONF_RATE_LIMIT_BUDGET not in entry.options
+
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        advanced = _advanced_section(result["data_schema"])
+
+        assert advanced is not None
+        assert _section_default(advanced, CONF_RATE_LIMIT_BUDGET) == (
+            DEFAULT_RATE_LIMIT_BUDGET
+        )
+        assert advanced.options["collapsed"] is True
+        assert entry_budget(entry) == DEFAULT_RATE_LIMIT_BUDGET
+
+    async def test_the_ceiling_is_accepted(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """SC-017: the budget may be raised to Hostaway's own limit.
+
+        Args:
+            hass: Home Assistant instance.
+        """
+        entry = _make_entry()
+        entry.add_to_hass(hass)
+
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_SCAN_INTERVAL: 5,
+                CONF_RESERVATION_SCAN_INTERVAL: 2,
+                OPTIONS_SECTION_ADVANCED: {
+                    CONF_RATE_LIMIT_BUDGET: RATE_LIMIT_CEILING,
+                },
+            },
+        )
+
+        assert result["type"] is FlowResultType.CREATE_ENTRY
+        assert result["data"][CONF_RATE_LIMIT_BUDGET] == RATE_LIMIT_CEILING
+
+    @pytest.mark.parametrize(
+        "budget",
+        [RATE_LIMIT_CEILING + 1, 500, 0, -5, 1.5, 200.9],
+    )
+    async def test_an_out_of_range_budget_is_refused_not_clamped(
+        self,
+        hass: HomeAssistant,
+        budget: object,
+    ) -> None:
+        """SC-017: anything but a whole 1-200 stores nothing at all.
+
+        Args:
+            hass: Home Assistant instance.
+            budget: The rejected value.
+        """
+        entry = _make_entry()
+        entry.add_to_hass(hass)
+
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_SCAN_INTERVAL: 5,
+                CONF_RESERVATION_SCAN_INTERVAL: 2,
+                OPTIONS_SECTION_ADVANCED: {CONF_RATE_LIMIT_BUDGET: budget},
+            },
+        )
+
+        assert result["type"] is FlowResultType.FORM
+        assert result["errors"] == {"base": "invalid_rate_limit_budget"}
+        assert CONF_RATE_LIMIT_BUDGET not in entry.options
+
+    async def test_a_whole_number_typed_as_a_decimal_is_accepted(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """A number box hands back floats; 150.0 is still 150.
+
+        Args:
+            hass: Home Assistant instance.
+        """
+        entry = _make_entry()
+        entry.add_to_hass(hass)
+
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_SCAN_INTERVAL: 5,
+                CONF_RESERVATION_SCAN_INTERVAL: 2,
+                OPTIONS_SECTION_ADVANCED: {CONF_RATE_LIMIT_BUDGET: 150.0},
+            },
+        )
+
+        assert result["type"] is FlowResultType.CREATE_ENTRY
+        assert result["data"][CONF_RATE_LIMIT_BUDGET] == 150
+        assert isinstance(result["data"][CONF_RATE_LIMIT_BUDGET], int)
+
+    async def test_a_collapsed_section_keeps_the_stored_budget(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """SC-017: never opening the section must not reset the budget.
+
+        Args:
+            hass: Home Assistant instance.
+        """
+        entry = _make_entry(options={CONF_RATE_LIMIT_BUDGET: 90})
+        entry.add_to_hass(hass)
+
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_SCAN_INTERVAL: 5,
+                CONF_RESERVATION_SCAN_INTERVAL: 2,
+            },
+        )
+
+        assert result["type"] is FlowResultType.CREATE_ENTRY
+        assert result["data"][CONF_RATE_LIMIT_BUDGET] == 90
+
+    async def test_a_data_backed_budget_survives_the_form(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """SC-017: a budget stored in entry data is not quietly reset.
+
+        An entry may carry the budget in ``data`` rather than ``options``.
+        The form must offer that figure as the default and keep it when
+        the section is left collapsed, rather than falling back to 180
+        and raising the operator's allowance behind their back.
+
+        Args:
+            hass: Home Assistant instance.
+        """
+        entry = _make_entry(data={CONF_RATE_LIMIT_BUDGET: 120})
+        entry.add_to_hass(hass)
+
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+
+        advanced = _advanced_section(result["data_schema"])
+
+        assert advanced is not None
+        assert _section_default(advanced, CONF_RATE_LIMIT_BUDGET) == 120
+
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_SCAN_INTERVAL: 5,
+                CONF_RESERVATION_SCAN_INTERVAL: 2,
+            },
+        )
+
+        assert result["type"] is FlowResultType.CREATE_ENTRY
+        assert result["data"][CONF_RATE_LIMIT_BUDGET] == 120
+        assert entry_budget(entry) == 120
+
+    async def test_the_setup_flow_never_asks_about_the_budget(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """FR-031: the budget is an options lever, not a setup question.
+
+        Args:
+            hass: Home Assistant instance.
+        """
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_USER},
+        )
+
+        assert result["type"] is FlowResultType.FORM
+        schema = result["data_schema"]
+        assert schema is not None
+        keys = {str(key) for key in schema.schema}
+        assert CONF_RATE_LIMIT_BUDGET not in keys
+        assert OPTIONS_SECTION_ADVANCED not in keys
+
+    async def test_the_window_length_is_not_an_option(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """FR-034: the ten-second window is Hostaway's, not an operator's.
+
+        Args:
+            hass: Home Assistant instance.
+        """
+        entry = _make_entry()
+        entry.add_to_hass(hass)
+
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        advanced = _advanced_section(result["data_schema"])
+
+        assert advanced is not None
+        keys = {str(key) for key in advanced.schema.schema}
+        assert keys == {CONF_RATE_LIMIT_BUDGET}
+
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            (180, 180),
+            (1, 1),
+            (RATE_LIMIT_CEILING, RATE_LIMIT_CEILING),
+            (150.0, 150),
+            (True, None),
+            (False, None),
+            (1.5, None),
+            (0, None),
+            (-1, None),
+            (RATE_LIMIT_CEILING + 1, None),
+            ("180", None),
+            (None, None),
+        ],
+    )
+    def test_the_budget_validator_takes_whole_numbers_only(
+        self,
+        value: object,
+        expected: int | None,
+    ) -> None:
+        """A booking count is a whole number, and a bool is not one.
+
+        Args:
+            value: The value to validate.
+            expected: The validated budget, or ``None``.
+        """
+        assert _validated_budget(value) == expected
+
+    def test_both_translation_files_describe_the_same_form(self) -> None:
+        """Constitution VII: strings and translations may not drift."""
+        root = Path("custom_components/hostaway")
+        strings = json.loads((root / "strings.json").read_text())
+        english = json.loads((root / "translations" / "en.json").read_text())
+
+        assert _key_paths(strings) == _key_paths(english)
+        advanced = strings["options"]["step"]["init"]["sections"]["advanced"]
+        assert CONF_RATE_LIMIT_BUDGET in advanced["data"]
+        description = advanced["data_description"][CONF_RATE_LIMIT_BUDGET]
+        assert "not a Hostaway value" in description
+        assert "invalid_rate_limit_budget" in strings["options"]["error"]

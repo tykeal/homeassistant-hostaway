@@ -66,13 +66,25 @@
                     "listing_custom_field_writes_enabled": "Allow partial listing PUT requests that send the complete merged customFieldValues array for this verified account.",
                     "reservation_custom_field_writes_enabled": "Allow reservation custom-field PUT requests for this verified account. Every write is followed by mandatory read-back verification.",
                     "reservation_custom_field_residual_risk_accepted": "Required for reservation writes. Hostaway has a known bug where reservation custom-field updates can report success without persisting; read-back detects this, but reservation write semantics remain unconfirmed."
+                },
+                "sections": {
+                    "advanced": {
+                        "name": "Advanced",
+                        "data": {
+                            "rate_limit_budget": "Rate limit budget (requests per 10 seconds)"
+                        },
+                        "data_description": {
+                            "rate_limit_budget": "How many requests per 10 seconds this integration allows itself. The default of 180 is a deliberate safety margin chosen by this integration, not a Hostaway value: Hostaway refuses requests above 200 per 10 seconds, and the margin leaves room for other clients sharing the account or IP address. Accepts 1 to 200."
+                        }
+                    }
                 }
             }
         },
         "error": {
             "invalid_scan_interval": "Scan intervals must be at least 1 minute each.",
             "missing_write_account_id": "Enter the Hostaway account ID before enabling custom-field writes.",
-            "reservation_risk_not_accepted": "Reservation custom-field writes require accepting the documented residual risk."
+            "reservation_risk_not_accepted": "Reservation custom-field writes require accepting the documented residual risk.",
+            "invalid_rate_limit_budget": "Rate limit budget must be a whole number between 1 and 200"
         }
     },
     "entity": {
