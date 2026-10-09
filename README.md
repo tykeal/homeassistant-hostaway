@@ -129,8 +129,10 @@ The remedy is to ask for less, not to file a bug:
 
 There is one case you cannot tune away. When Hostaway refuses a request
 it may send an `X-RateLimit-Retry-After` telling us to stop for a
-while. The integration honours it exactly. If that suppression runs
-longer than an interactive call's own 30-second deadline, the call fails
+while. The integration honours that instant when it is a usable one,
+falling back to ten seconds when the header is missing or unreadable
+and refusing to be held off for longer than an hour. If a suppression
+runs longer than an interactive call's own 30-second deadline, the call fails
 with a wait timeout even though nothing is wrong with it and even though
 you have asked for very little — the integration is not permitted to
 send during the suppression, and the deadline expires inside it. Retry
@@ -141,7 +143,7 @@ after the suppression ends.
 Download diagnostics from the integration's entry menu to see which
 counter is actually holding things up: each counter is reported
 separately, along with how many refresh cycles each coordinator dropped
-and which counter Hostaway named when it last refused a request. The
+and how many refusals Hostaway attributed to each of its counters. The
 payload contains no credentials and nothing identifying the account.
 
 ## Entities

@@ -128,7 +128,7 @@ pre-commit run --all-files
 | Expiry trigger  | HTTP 401                  | HTTP 403                   |
 | Post-token wait | None                      | 1 second mandatory         |
 | Pagination      | offset-based              | cursor-based (`afterId`)   |
-| Rate limits     | Not documented            | 15/10s (IP), 20/10s (acct) |
+| Rate limits     | Not documented            | 200/10s IP, 200/10s acct   |
 | Scope           | `open-api`                | `general`                  |
 | Boolean format  | Standard JSON             | Integer (0/1)              |
 | Listing ID type | string                    | integer                    |
