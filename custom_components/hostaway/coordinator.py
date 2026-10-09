@@ -199,6 +199,7 @@ class HostawayCustomFieldsCoordinator(
         self._definitions_loaded = False
         self._definition_retries = 0
         self._definition_retry_unsub: Callable[[], None] | None = None
+        self._definitions_shutdown = False
         interval_minutes = entry.options.get(
             CONF_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL,
             DEFAULT_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL,
@@ -265,11 +266,14 @@ class HostawayCustomFieldsCoordinator(
         return self._definitions_loaded
 
     async def async_refresh_retaining_stale(self) -> None:
-        """Refresh definitions without clearing stale cached data on failure."""
-        stale = self.data
+        """Refresh definitions without clearing stale cached data on failure.
+
+        ``DataUpdateCoordinator`` already leaves ``data`` alone when a
+        refresh raises, so there is nothing to put back; snapshotting it
+        here would instead let a slow failing refresh roll back a faster
+        successful one.
+        """
         await self.async_refresh()
-        if not self.last_refresh_succeeded and stale is not None:
-            self.data = stale
         if not self._definitions_loaded:
             self._schedule_definition_retry()
 
@@ -287,7 +291,7 @@ class HostawayCustomFieldsCoordinator(
         The retries are bounded: a persistent failure is an operator
         problem, not something to keep hammering.
         """
-        if self._definition_retry_unsub is not None:
+        if self._definitions_shutdown or self._definition_retry_unsub is not None:
             return
         if self._definition_retries >= len(_DEFINITION_RETRY_DELAYS):
             return
@@ -309,7 +313,14 @@ class HostawayCustomFieldsCoordinator(
                 _now: The fire time, which this callback ignores.
             """
             self._definition_retry_unsub = None
-            self.hass.async_create_task(self.async_refresh_retaining_stale())
+            # A retry may wait out a whole first-refresh deadline, so it
+            # belongs to the entry: unloading has to be able to cancel it
+            # rather than wait for it.
+            self.config_entry.async_create_background_task(
+                self.hass,
+                self.async_refresh_retaining_stale(),
+                "hostaway custom field definitions retry",
+            )
 
         self._definition_retry_unsub = async_call_later(
             self.hass,
@@ -329,6 +340,7 @@ class HostawayCustomFieldsCoordinator(
 
     async def async_shutdown(self) -> None:
         """Cancel pending retries and shut the coordinator down."""
+        self._definitions_shutdown = True
         self._cancel_definition_retry()
         await super().async_shutdown()
 

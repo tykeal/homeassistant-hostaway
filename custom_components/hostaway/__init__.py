@@ -155,7 +155,9 @@ def _start_custom_field_definitions(
         Args:
             _now: The fire time, which this callback ignores.
         """
-        entry.async_create_task(
+        # The fetch may wait out a full first-refresh deadline, so it has
+        # to be cancellable on unload rather than merely awaited.
+        entry.async_create_background_task(
             hass,
             coordinator.async_refresh_retaining_stale(),
             "hostaway custom field definitions first refresh",

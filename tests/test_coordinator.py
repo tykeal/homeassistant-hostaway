@@ -1114,3 +1114,80 @@ class TestCoordinatorShedding:
         assert definitions.definitions_loaded is True
         assert len(definitions.data) == 1
         limiter.close()
+
+    async def test_a_failed_refresh_cannot_roll_back_newer_data(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """A slow failure must not undo a refresh that already succeeded.
+
+        Args:
+            hass: Home Assistant instance.
+        """
+        entry = _make_entry()
+        entry.add_to_hass(hass)
+        api_client = AsyncMock()
+        api_client.limiter = Mock()
+        release = asyncio.Event()
+        calls: list[int] = []
+
+        async def _request(*_args: object, **_kwargs: object) -> httpx.Response:
+            """Succeed once, slowly, then fail.
+
+            Args:
+                *_args: Ignored request arguments.
+                **_kwargs: Ignored request keywords.
+
+            Returns:
+                A definitions response on the first call.
+
+            Raises:
+                HostawayApiError: On every later call.
+            """
+            calls.append(1)
+            if len(calls) == 1:
+                await release.wait()
+                return _definitions_response([_definition_payload()])
+            raise HostawayApiError("down")
+
+        api_client._request = _request
+        coordinator = HostawayCustomFieldsCoordinator(hass, entry, api_client)
+
+        slow = asyncio.create_task(coordinator.async_refresh_retaining_stale())
+        await asyncio.sleep(0)
+        # The second caller reads the empty cache while the first still holds
+        # the coordinator's lock.
+        queued = asyncio.create_task(coordinator.async_refresh_retaining_stale())
+        await asyncio.sleep(0)
+        release.set()
+        await slow
+        await queued
+
+        assert len(coordinator.data) == 1
+        coordinator._cancel_definition_retry()
+
+    async def test_a_shut_down_coordinator_stops_retrying(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Unloading an entry ends the definitions retry campaign.
+
+        Args:
+            hass: Home Assistant instance.
+        """
+        entry = _make_entry()
+        entry.add_to_hass(hass)
+        api_client = AsyncMock()
+        api_client.limiter = Mock()
+        api_client._request = AsyncMock(side_effect=_shed())
+        coordinator = HostawayCustomFieldsCoordinator(hass, entry, api_client)
+        coordinator._first_refresh_complete = True
+
+        await coordinator.async_refresh_retaining_stale()
+        assert coordinator._definition_retry_unsub is not None
+
+        await coordinator.async_shutdown()
+
+        assert coordinator._definition_retry_unsub is None
+        coordinator._schedule_definition_retry()
+        assert coordinator._definition_retry_unsub is None
