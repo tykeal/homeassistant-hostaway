@@ -20,8 +20,8 @@ jobs:
   update_release_draft:
     name: 'Update Release Draft'
     permissions:
-      contents: write
-      pull-requests: read
+      contents: write  # Create and update the draft release
+      pull-requests: read  # Compose notes from merged PRs
     runs-on: 'ubuntu-latest'
     timeout-minutes: 3
     steps:

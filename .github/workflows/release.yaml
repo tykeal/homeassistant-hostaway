@@ -21,8 +21,8 @@ jobs:
     name: "Repository Metadata"
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      pull-requests: read
+      contents: read  # Check out the sources being described
+      pull-requests: read  # Report the pull request details
     timeout-minutes: 5
     steps:
       # yamllint disable-line rule:line-length
@@ -34,6 +34,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: "Gather repository metadata"
         id: repo-metadata
@@ -50,7 +51,7 @@ jobs:
     name: 'Validate Tag Push'
     runs-on: 'ubuntu-latest'
     permissions:
-      contents: write
+      contents: write  # Create the draft release for the tag
     timeout-minutes: 5
     outputs:
       tag: "${{ steps.tag-validate.outputs.tag_name }}"
@@ -66,6 +67,7 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
+          persist-credentials: false
 
       - name: 'Verify pushed tag'
         id: 'tag-validate'
@@ -84,9 +86,9 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          TAG: "${{ steps.tag-validate.outputs.tag_name }}"
         run: |
           # Ensure draft release exists
-          TAG="${{ steps.tag-validate.outputs.tag_name }}"
           # Check if release exists and get its draft status
           if RELEASE_INFO=$(gh release view "$TAG" \
             --json isDraft 2>/dev/null); then
@@ -113,9 +115,9 @@ jobs:
       artefact_name: "${{ steps.python-build.outputs.artefact_name }}"
       artefact_path: "${{ steps.python-build.outputs.artefact_path }}"
     permissions:
-      contents: read
-      id-token: write
-      attestations: write
+      contents: read  # Check out the sources that get built
+      id-token: write  # Mint the OIDC token Sigstore signs with
+      attestations: write  # Record build provenance attestations
     timeout-minutes: 12
     env:
       GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
@@ -130,6 +132,7 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
+          persist-credentials: false
 
       - name: 'Build Python project'
         id: 'python-build'
@@ -158,6 +161,8 @@ jobs:
 
       # yamllint disable-line rule:line-length
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: 'Test Python project [PYTEST]'
         # yamllint disable-line rule:line-length
@@ -189,6 +194,8 @@ jobs:
 
       # yamllint disable-line rule:line-length
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: 'Audit Python project'
         # yamllint disable-line rule:line-length
@@ -216,6 +223,8 @@ jobs:
 
       # yamllint disable-line rule:line-length
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: "Generate SBOM"
         id: sbom
@@ -236,12 +245,15 @@ jobs:
           retention-days: 45
 
       - name: "SBOM summary"
+        env:
+          SBOM_COMPONENT_COUNT: "${{ steps.sbom.outputs.component_count }}"
+          SBOM_DEPENDENCY_MANAGER: "${{ steps.sbom.outputs.dependency_manager }}"
         run: |
             # SBOM summary
             {
               echo "## SBOM Summary"
-              echo "SBOM count: ${{ steps.sbom.outputs.component_count }}"
-              echo "Tool used: ${{ steps.sbom.outputs.dependency_manager }}"
+              echo "SBOM count: ${SBOM_COMPONENT_COUNT}"
+              echo "Tool used: ${SBOM_DEPENDENCY_MANAGER}"
             } >> "$GITHUB_STEP_SUMMARY"
 
   grype:
@@ -260,6 +272,8 @@ jobs:
 
       # yamllint disable-line rule:line-length
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: "Download SBOM artefact"
         # yamllint disable-line rule:line-length
@@ -415,16 +429,19 @@ jobs:
 
       # yamllint disable-line rule:line-length
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: 'Update manifest version'
         shell: bash
+        env:
+          TAG: "${{ needs.tag-validate.outputs.tag }}"
         run: |
           # Update manifest.json version from tag
-          TAG="${{ needs.tag-validate.outputs.tag }}"
           # Strip leading 'v' if present
           VERSION="${TAG#v}"
           echo "Setting version to: $VERSION"
-          cd "${{ github.workspace }}/custom_components/hostaway"
+          cd "${GITHUB_WORKSPACE}/custom_components/hostaway"
           jq --arg v "$VERSION" '.version = $v' manifest.json \
             > manifest.tmp && mv manifest.tmp manifest.json
           echo "Updated manifest.json:"
@@ -432,23 +449,24 @@ jobs:
 
       - name: 'Update const.py version'
         shell: bash
+        env:
+          TAG: "${{ needs.tag-validate.outputs.tag }}"
         run: |
           # Update VERSION in const.py from tag
-          TAG="${{ needs.tag-validate.outputs.tag }}"
           # Strip leading 'v' if present
           VERSION="${TAG#v}"
           echo "Setting const.py VERSION to: $VERSION"
           # yamllint disable-line rule:line-length
           sed -i -E "s/^VERSION: str = .*/VERSION: str = \"${VERSION}\"/" \
-            "${{ github.workspace }}/custom_components/hostaway/const.py"
+            "${GITHUB_WORKSPACE}/custom_components/hostaway/const.py"
 
       - name: 'Create integration ZIP'
         shell: bash
         run: |
           # Create ZIP of the integration directory
-          cd "${{ github.workspace }}/custom_components/hostaway"
+          cd "${GITHUB_WORKSPACE}/custom_components/hostaway"
           zip -r \
-            "${{ github.workspace }}/hostaway.zip" \
+            "${GITHUB_WORKSPACE}/hostaway.zip" \
             ./ \
             -x '*__pycache__/*' '*.pyc'
 
@@ -477,7 +495,7 @@ jobs:
         && needs.grype.result == 'success'
       }}
     permissions:
-      contents: write
+      contents: write  # Upload the artefacts as release assets
     timeout-minutes: 5
     env:
       GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
@@ -489,6 +507,8 @@ jobs:
 
       # yamllint disable-line rule:line-length
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: '⬇ Download build artefacts'
         # yamllint disable-line rule:line-length
@@ -525,7 +545,7 @@ jobs:
       }}
     runs-on: 'ubuntu-latest'
     permissions:
-      contents: write
+      contents: write  # Publish the draft release
     timeout-minutes: 2
     outputs:
       # yamllint disable-line rule:line-length
@@ -538,14 +558,17 @@ jobs:
 
       # yamllint disable-line rule:line-length
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: 'Check if release is already promoted'
         id: 'check-promoted'
         shell: bash
         env:
           GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          TAG: "${{ needs.tag-validate.outputs.tag }}"
         run: |
-          TAG="${{ needs.tag-validate.outputs.tag }}"
+          # Check whether the draft release was already promoted
           if gh release view "$TAG" --json isDraft --jq '.isDraft' \
               2>/dev/null | grep -q "false"; then
             echo "Release $TAG is already promoted"
@@ -571,8 +594,9 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          TAG: "${{ needs.tag-validate.outputs.tag }}"
         run: |
-          TAG="${{ needs.tag-validate.outputs.tag }}"
+          # Resolve the URL of the already-promoted release
           RELEASE_URL=$(gh release view "$TAG" \
             --json url --jq '.url')
           echo "release_url=$RELEASE_URL" >> "$GITHUB_OUTPUT"
