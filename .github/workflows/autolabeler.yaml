@@ -11,6 +11,13 @@ on:
       - opened
       - synchronize
       - reopened
+  # pull_request_target runs with a write token in the base repo's
+  # context, which is what lets fork pull requests get labelled at
+  # all. It is only safe because the autolabel job never checks out
+  # or executes anything from the pull request head: its only steps
+  # are harden-runner and the autolabeler action, which reads the
+  # pull request title and body through the GitHub API.
+  # zizmor: ignore[dangerous-triggers] no PR content is executed
   pull_request_target:
     types:
       - opened
@@ -34,9 +41,9 @@ jobs:
       (github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.fork) ||
       (github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork)
     # yamllint enable rule:line-length
-    # SECURITY: pull_request_target with write permissions is safe
-    # here because the autolabeler action does NOT checkout any code
-    # from the PR — it only reads the PR title/body via GitHub API.
+    # SECURITY: see the pull_request_target note on the trigger — the
+    # write grant below is safe because this job never checks out or
+    # runs any code from the pull request head.
     permissions:
       contents: read  # Read the autolabel rules from the repo
       pull-requests: write  # Apply the computed labels to the PR
