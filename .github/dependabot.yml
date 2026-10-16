@@ -14,7 +14,27 @@ updates:
     schedule:
       interval: "weekly"
     commit-message:
-      prefix: "Chore"
+      # Action bumps only ever touch workflow files, so CI is the accurate
+      # Conventional Commit type here. Keep the scope short: Dependabot
+      # builds the PR title from this prefix and gitlint caps subjects.
+      prefix: "CI(actions)"
+    # Hold off on a release for a week so we don't churn on a tag that gets
+    # retracted, re-pointed, or superseded shortly after it ships.
+    # github-actions supports default-days only; the semver-*-days keys are
+    # not honoured for this ecosystem.
+    cooldown:
+      default-days: 7
+    groups:
+      # Every action is SHA pinned and these bumps are routine, so collapse a
+      # week's worth of them into one PR. Majors are deliberately left out so
+      # a potentially breaking action release still arrives on its own.
+      actions:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
     open-pull-requests-limit: 15
   - package-ecosystem: "uv"
     directory: "/"
@@ -22,4 +42,22 @@ updates:
       interval: "weekly"
     commit-message:
       prefix: "Chore"
+    cooldown:
+      default-days: 7
+      # Majors are the ones most likely to be pulled or hotfixed, and they
+      # are the ones we review by hand, so let them settle longer.
+      semver-major-days: 14
+    groups:
+      # pyproject.toml declares no runtime dependencies at all - Home
+      # Assistant supplies everything the integration imports - so the whole
+      # uv surface is dev and test tooling. Splitting by dependency-type
+      # would therefore buy nothing, and groups.dependency-type is not
+      # documented as supported for uv anyway. Group on patterns instead.
+      python-dev:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
     open-pull-requests-limit: 15
