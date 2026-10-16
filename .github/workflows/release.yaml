@@ -86,9 +86,9 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          TAG: "${{ steps.tag-validate.outputs.tag_name }}"
         run: |
           # Ensure draft release exists
-          TAG="${{ steps.tag-validate.outputs.tag_name }}"
           # Check if release exists and get its draft status
           if RELEASE_INFO=$(gh release view "$TAG" \
             --json isDraft 2>/dev/null); then
@@ -245,12 +245,15 @@ jobs:
           retention-days: 45
 
       - name: "SBOM summary"
+        env:
+          SBOM_COMPONENT_COUNT: "${{ steps.sbom.outputs.component_count }}"
+          SBOM_DEPENDENCY_MANAGER: "${{ steps.sbom.outputs.dependency_manager }}"
         run: |
             # SBOM summary
             {
               echo "## SBOM Summary"
-              echo "SBOM count: ${{ steps.sbom.outputs.component_count }}"
-              echo "Tool used: ${{ steps.sbom.outputs.dependency_manager }}"
+              echo "SBOM count: ${SBOM_COMPONENT_COUNT}"
+              echo "Tool used: ${SBOM_DEPENDENCY_MANAGER}"
             } >> "$GITHUB_STEP_SUMMARY"
 
   grype:
@@ -431,13 +434,14 @@ jobs:
 
       - name: 'Update manifest version'
         shell: bash
+        env:
+          TAG: "${{ needs.tag-validate.outputs.tag }}"
         run: |
           # Update manifest.json version from tag
-          TAG="${{ needs.tag-validate.outputs.tag }}"
           # Strip leading 'v' if present
           VERSION="${TAG#v}"
           echo "Setting version to: $VERSION"
-          cd "${{ github.workspace }}/custom_components/hostaway"
+          cd "${GITHUB_WORKSPACE}/custom_components/hostaway"
           jq --arg v "$VERSION" '.version = $v' manifest.json \
             > manifest.tmp && mv manifest.tmp manifest.json
           echo "Updated manifest.json:"
@@ -445,23 +449,24 @@ jobs:
 
       - name: 'Update const.py version'
         shell: bash
+        env:
+          TAG: "${{ needs.tag-validate.outputs.tag }}"
         run: |
           # Update VERSION in const.py from tag
-          TAG="${{ needs.tag-validate.outputs.tag }}"
           # Strip leading 'v' if present
           VERSION="${TAG#v}"
           echo "Setting const.py VERSION to: $VERSION"
           # yamllint disable-line rule:line-length
           sed -i -E "s/^VERSION: str = .*/VERSION: str = \"${VERSION}\"/" \
-            "${{ github.workspace }}/custom_components/hostaway/const.py"
+            "${GITHUB_WORKSPACE}/custom_components/hostaway/const.py"
 
       - name: 'Create integration ZIP'
         shell: bash
         run: |
           # Create ZIP of the integration directory
-          cd "${{ github.workspace }}/custom_components/hostaway"
+          cd "${GITHUB_WORKSPACE}/custom_components/hostaway"
           zip -r \
-            "${{ github.workspace }}/hostaway.zip" \
+            "${GITHUB_WORKSPACE}/hostaway.zip" \
             ./ \
             -x '*__pycache__/*' '*.pyc'
 
@@ -561,8 +566,9 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          TAG: "${{ needs.tag-validate.outputs.tag }}"
         run: |
-          TAG="${{ needs.tag-validate.outputs.tag }}"
+          # Check whether the draft release was already promoted
           if gh release view "$TAG" --json isDraft --jq '.isDraft' \
               2>/dev/null | grep -q "false"; then
             echo "Release $TAG is already promoted"
@@ -588,8 +594,9 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          TAG: "${{ needs.tag-validate.outputs.tag }}"
         run: |
-          TAG="${{ needs.tag-validate.outputs.tag }}"
+          # Resolve the URL of the already-promoted release
           RELEASE_URL=$(gh release view "$TAG" \
             --json url --jq '.url')
           echo "release_url=$RELEASE_URL" >> "$GITHUB_OUTPUT"
