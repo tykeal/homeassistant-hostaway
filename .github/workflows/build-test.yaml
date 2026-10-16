@@ -30,8 +30,8 @@ jobs:
     name: "Repository Metadata"
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      pull-requests: read
+      contents: read  # Check out the sources being described
+      pull-requests: read  # Report the pull request details
     timeout-minutes: 5
     steps:
       # yamllint disable-line rule:line-length
@@ -64,8 +64,8 @@ jobs:
       artefact_name: "${{ steps.python-build.outputs.artefact_name }}"
       artefact_path: "${{ steps.python-build.outputs.artefact_path }}"
     permissions:
-      contents: read
-      actions: write
+      contents: read  # Check out the sources that get built
+      actions: write  # Delete dependency caches on clear_cache
     timeout-minutes: 12
     env:
       GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"

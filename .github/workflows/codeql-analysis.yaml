@@ -26,9 +26,9 @@ jobs:
     name: Analyze
     runs-on: ubuntu-latest
     permissions:
-      actions: read
-      contents: read
-      security-events: write
+      actions: read  # Attribute results to the workflow run
+      contents: read  # Check out the sources CodeQL extracts
+      security-events: write  # Upload SARIF to code scanning
     timeout-minutes: 10
 
     strategy:

@@ -21,8 +21,8 @@ jobs:
     name: "Repository Metadata"
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      pull-requests: read
+      contents: read  # Check out the sources being described
+      pull-requests: read  # Report the pull request details
     timeout-minutes: 5
     steps:
       # yamllint disable-line rule:line-length
@@ -51,7 +51,7 @@ jobs:
     name: 'Validate Tag Push'
     runs-on: 'ubuntu-latest'
     permissions:
-      contents: write
+      contents: write  # Create the draft release for the tag
     timeout-minutes: 5
     outputs:
       tag: "${{ steps.tag-validate.outputs.tag_name }}"
@@ -115,9 +115,9 @@ jobs:
       artefact_name: "${{ steps.python-build.outputs.artefact_name }}"
       artefact_path: "${{ steps.python-build.outputs.artefact_path }}"
     permissions:
-      contents: read
-      id-token: write
-      attestations: write
+      contents: read  # Check out the sources that get built
+      id-token: write  # Mint the OIDC token Sigstore signs with
+      attestations: write  # Record build provenance attestations
     timeout-minutes: 12
     env:
       GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
@@ -495,7 +495,7 @@ jobs:
         && needs.grype.result == 'success'
       }}
     permissions:
-      contents: write
+      contents: write  # Upload the artefacts as release assets
     timeout-minutes: 5
     env:
       GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
@@ -545,7 +545,7 @@ jobs:
       }}
     runs-on: 'ubuntu-latest'
     permissions:
-      contents: write
+      contents: write  # Publish the draft release
     timeout-minutes: 2
     outputs:
       # yamllint disable-line rule:line-length

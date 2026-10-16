@@ -38,8 +38,8 @@ jobs:
     # here because the autolabeler action does NOT checkout any code
     # from the PR — it only reads the PR title/body via GitHub API.
     permissions:
-      contents: read
-      pull-requests: write
+      contents: read  # Read the autolabel rules from the repo
+      pull-requests: write  # Apply the computed labels to the PR
     runs-on: 'ubuntu-latest'
     timeout-minutes: 3
     steps:
