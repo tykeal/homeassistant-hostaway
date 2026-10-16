@@ -104,6 +104,20 @@ repos:
     hooks:
       - id: actionlint
 
+  - repo: https://github.com/zizmorcore/zizmor-pre-commit
+    rev: c92afdf2c6ca336aaa8f39e2bd8d48f62dbd8e1f  # frozen: v1.31.1
+    hooks:
+      - id: zizmor
+        args:
+          # pre-commit.ci runs hooks without network access, so keep
+          # zizmor from attempting any GitHub API lookups.
+          - "--offline"
+          - "--no-progress"
+          # Match the strictness the LF dot-github defaults audit at;
+          # the tree is clean at this level.
+          - "--persona=auditor"
+          - "--min-severity=informational"
+
   - repo: https://github.com/adrienverge/yamllint.git
     rev: cba56bcde1fdd01c1deb3f945e69764c291a6530  # frozen: v1.38.0
     hooks:
