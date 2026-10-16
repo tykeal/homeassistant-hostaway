@@ -2,17 +2,7 @@
 # SPDX-FileCopyrightText: 2026 Andrew Grimberg <tykeal@bardicgrove.org>
 # SPDX-License-Identifier: Apache-2.0
 
-# For most projects, this workflow file will not need changing; you simply need
-# to commit it to your repository.
-#
-# You may wish to alter this file to override the set of languages analyzed,
-# or to provide custom queries or build logic.
-#
-# ******** NOTE ********
-# We have attempted to detect the languages in your repository. Please check
-# the `language` matrix defined below to confirm you have the correct set of
-# supported CodeQL languages.
-#
+# Runs CodeQL static analysis over the Python sources
 name: "CodeQL"
 
 # yamllint disable-line rule:truthy
@@ -25,6 +15,12 @@ on:
   schedule:
     - cron: "26 16 * * 2"
 
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
+permissions: {}
+
 jobs:
   analyze:
     name: Analyze
@@ -33,6 +29,7 @@ jobs:
       actions: read
       contents: read
       security-events: write
+    timeout-minutes: 10
 
     strategy:
       fail-fast: false
@@ -40,38 +37,24 @@ jobs:
         language: ["python"]
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # yamllint disable-line rule:line-length
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
+        with:
+          egress-policy: 'audit'
 
-      # Initializes the CodeQL tools for scanning.
+      - name: Checkout repository
+        # yamllint disable-line rule:line-length
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Initializes the CodeQL tools for scanning. Python needs no build
+      # step; CodeQL extracts the sources directly.
       - name: Initialize CodeQL
         # yamllint disable-line rule:line-length
         uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         with:
           languages: ${{ matrix.language }}
-          # If you wish to specify custom queries, you can do so here or in a
-          # config file.  By default, queries listed here will override any
-          # specified in a config file.  Prefix the list here with "+" to use
-          # these queries and those in the config file.
-          # queries: ./path/to/local/query, your-org/your-repo/queries@main
-
-      # Autobuild attempts to build any compiled languages  (C/C++, C#, or
-      # Java).  If this step fails, then you should remove it and run the build
-      # manually (see below)
-      - name: Autobuild
-        # yamllint disable-line rule:line-length
-        uses: github/codeql-action/autobuild@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
-
-      # Command-line programs to run using the OS shell.
-      # https://git.io/JvXDl
-
-      # If the Autobuild fails above, remove it and uncomment the following
-      # three lines and modify them (or add more) to build your code if your
-      # project uses a compiled language
-
-      # - run: |
-      #    make bootstrap
-      #    make release
 
       - name: Perform CodeQL Analysis
         # yamllint disable-line rule:line-length
