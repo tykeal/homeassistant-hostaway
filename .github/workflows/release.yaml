@@ -26,7 +26,7 @@ jobs:
     timeout-minutes: 5
     steps:
       # yamllint disable-line rule:line-length
-      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2  # v2.22.2
         with:
           egress-policy: 'audit'
 
@@ -39,7 +39,7 @@ jobs:
       - name: "Gather repository metadata"
         id: repo-metadata
         # yamllint disable-line rule:line-length
-        uses: lfreleng-actions/repository-metadata-action@b2078d32ca207a0e110b2157a95271a35688c8e7  # v0.3.2
+        uses: lfreleng-actions/repository-metadata-action@2206d754f65f1a90f57b49be546712c5f594def2  # v0.3.3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           github_summary: 'true'
@@ -57,7 +57,7 @@ jobs:
       tag: "${{ steps.tag-validate.outputs.tag_name }}"
     steps:
       # yamllint disable-line rule:line-length
-      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2  # v2.22.2
         with:
           egress-policy: 'audit'
 
@@ -123,7 +123,7 @@ jobs:
       GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
     steps:
       # yamllint disable-line rule:line-length
-      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2  # v2.22.2
         with:
           egress-policy: 'audit'
 
@@ -155,7 +155,7 @@ jobs:
     timeout-minutes: 12
     steps:
       # yamllint disable-line rule:line-length
-      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2  # v2.22.2
         with:
           egress-policy: 'audit'
 
@@ -188,7 +188,7 @@ jobs:
     timeout-minutes: 10
     steps:
       # yamllint disable-line rule:line-length
-      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2  # v2.22.2
         with:
           egress-policy: 'audit'
 
@@ -199,7 +199,7 @@ jobs:
 
       - name: 'Audit Python project'
         # yamllint disable-line rule:line-length
-        uses: lfreleng-actions/python-audit-action@3cd736d87b0bd0f4649f0f9ba6a84de8f7953a12  # v0.6.0
+        uses: lfreleng-actions/python-audit-action@47af793a2a28882b10ceb9109646cbbcecc2e7b0  # v0.6.1
         with:
           python_version: "${{ matrix.python-version }}"
           permit_fail: "${{ vars.NO_BLOCK_AUDIT_FAIL == 'true' }}"
@@ -217,7 +217,7 @@ jobs:
       contents: read
     steps:
       # yamllint disable-line rule:line-length
-      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2  # v2.22.2
         with:
           egress-policy: 'audit'
 
@@ -229,7 +229,7 @@ jobs:
       - name: "Generate SBOM"
         id: sbom
         # yamllint disable-line rule:line-length
-        uses: lfreleng-actions/python-sbom-action@a849d7190403165d437f2b8d29bc17a4894728f7  # v0.1.3
+        uses: lfreleng-actions/python-sbom-action@639001a0def8109e045818dfb3ee82cf602657af  # v0.1.4
         with:
           include_dev: "false"
           sbom_format: "both"
@@ -266,7 +266,7 @@ jobs:
       contents: read
     steps:
       # yamllint disable-line rule:line-length
-      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2  # v2.22.2
         with:
           egress-policy: 'audit'
 
@@ -423,7 +423,7 @@ jobs:
     timeout-minutes: 5
     steps:
       # yamllint disable-line rule:line-length
-      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2  # v2.22.2
         with:
           egress-policy: 'audit'
 
@@ -501,7 +501,7 @@ jobs:
       GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
     steps:
       # yamllint disable-line rule:line-length
-      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2  # v2.22.2
         with:
           egress-policy: 'audit'
 
@@ -526,7 +526,7 @@ jobs:
 
       - name: 'Attach artefacts to release'
         # yamllint disable-line rule:line-length
-        uses: lfreleng-actions/release-assets-action@51e2955cf9aeab3731efd7cc4605aa2847e7d8e2  # v0.1.3
+        uses: lfreleng-actions/release-assets-action@d7b650fbf8fbca7a436f75ddada3d4cdbd36a802  # v0.1.4
         with:
           # yamllint disable-line rule:line-length
           asset_paths: '["${{ needs.python-build.outputs.artefact_path }}/**", "release-assets/**"]'
@@ -552,7 +552,7 @@ jobs:
       release_url: "${{ steps.promote-release.outputs.release_url || steps.set-promoted-url.outputs.release_url }}"
     steps:
       # yamllint disable-line rule:line-length
-      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2  # v2.22.2
         with:
           egress-policy: 'audit'
 
@@ -582,7 +582,7 @@ jobs:
         id: 'promote-release'
         if: steps.check-promoted.outputs.already_promoted == 'false'
         # yamllint disable-line rule:line-length
-        uses: lfreleng-actions/draft-release-promote-action@e420b392557c9b1eea642f0d54dec4ff39086d5f  # v0.1.5
+        uses: lfreleng-actions/draft-release-promote-action@358264a2efca5ac359a90718373cbce18016bd27  # v0.1.7
         with:
           token: "${{ secrets.GITHUB_TOKEN }}"
           tag: "${{ needs.tag-validate.outputs.tag }}"
