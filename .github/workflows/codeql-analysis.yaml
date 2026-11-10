@@ -38,7 +38,7 @@ jobs:
 
     steps:
       # yamllint disable-line rule:line-length
-      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
         with:
           egress-policy: 'audit'
 
@@ -52,10 +52,10 @@ jobs:
       # step; CodeQL extracts the sources directly.
       - name: Initialize CodeQL
         # yamllint disable-line rule:line-length
-        uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        uses: github/codeql-action/init@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
         with:
           languages: ${{ matrix.language }}
 
       - name: Perform CodeQL Analysis
         # yamllint disable-line rule:line-length
-        uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        uses: github/codeql-action/analyze@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
