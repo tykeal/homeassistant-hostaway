@@ -7,14 +7,20 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock
+from zoneinfo import ZoneInfo
 
 import pytest
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 
-from custom_components.hostaway.api.custom_fields import HostawayCustomFieldDefinition
+from custom_components.hostaway.api.custom_fields import (
+    HostawayCustomFieldDefinition,
+)
+from custom_components.hostaway.api.models import HostawayReservation
 from custom_components.hostaway.const import CONF_FILTER_CANCELLED, DOMAIN
 from custom_components.hostaway.coordinator import (
     HostawayListingsCoordinator,
@@ -49,6 +55,243 @@ def _custom_definition(custom_field_id: int) -> HostawayCustomFieldDefinition:
     )
     assert parsed is not None
     return parsed
+
+
+async def _make_reservation_sensor(
+    hass: HomeAssistant,
+    reservations: list[HostawayReservation],
+    *,
+    filter_cancelled: bool,
+) -> HostawayReservationStatusSensor:
+    """Create a reservation sensor with prepared coordinator data.
+
+    Args:
+        hass: Home Assistant instance for the test.
+        reservations: Reservation records to provide to the coordinator.
+        filter_cancelled: Whether the sensor should hide cancelled records.
+
+    Returns:
+        A reservation sensor with refreshed coordinators.
+    """
+    entry = _make_entry(selected=[100])
+    entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        entry,
+        options={CONF_FILTER_CANCELLED: filter_cancelled},
+    )
+
+    api_client = AsyncMock()
+    api_client.get_all_reservations = AsyncMock(return_value=reservations)
+    listings_api = AsyncMock()
+    listings_api.get_all_listings = AsyncMock(return_value=[_make_listing(100)])
+
+    listings_coordinator = HostawayListingsCoordinator(hass, entry, listings_api)
+    await listings_coordinator.async_refresh()
+    reservations_coordinator = HostawayReservationsCoordinator(
+        hass,
+        entry,
+        api_client,
+    )
+    await reservations_coordinator.async_refresh()
+
+    return HostawayReservationStatusSensor(
+        reservations_coordinator,
+        listings_coordinator,
+        100,
+        entry,
+    )
+
+
+class TestUpcomingReservationFiltering:
+    """Tests for the upcoming reservation date cutoff."""
+
+    async def test_filters_only_strictly_past_reservations(
+        self,
+        hass: HomeAssistant,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Retain today and future stays in order, while preserving shape."""
+        now = datetime(2025, 8, 5, 12, tzinfo=UTC)
+        monkeypatch.setattr(dt_util, "now", lambda: now)
+        reservations = [
+            _make_reservation(
+                1,
+                check_in="2025-08-01",
+                check_out="2025-08-04",
+                status="checked_out",
+            ),
+            _make_reservation(
+                2,
+                check_in="2025-08-01",
+                check_out="2025-08-05",
+                status="checked_in",
+            ),
+            _make_reservation(
+                3,
+                check_in="2025-08-05",
+                check_out="2025-08-05",
+                status="confirmed",
+            ),
+            _make_reservation(
+                4,
+                check_in="2025-08-10",
+                check_out="2025-08-12",
+                status="confirmed",
+            ),
+            _make_reservation(
+                5,
+                check_in="2025-08-20",
+                check_out="2025-08-22",
+                status="cancelled",
+            ),
+        ]
+        sensor = await _make_reservation_sensor(
+            hass,
+            reservations,
+            filter_cancelled=True,
+        )
+
+        upcoming = sensor.extra_state_attributes["upcoming_reservations"]
+
+        assert [item["id"] for item in upcoming] == [2, 3, 4]
+        assert upcoming[0] == {
+            "id": 2,
+            "guest_name": "John Doe",
+            "check_in": "2025-08-01",
+            "check_out": "2025-08-05",
+            "status": "checked_in",
+        }
+
+    async def test_retains_unparsable_check_out_once_without_sensitive_logs(
+        self,
+        hass: HomeAssistant,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Retain invalid date strings and emit one generic warning."""
+        now = datetime(2025, 8, 5, 12, tzinfo=UTC)
+        monkeypatch.setattr(dt_util, "now", lambda: now)
+        monkeypatch.setattr(
+            "custom_components.hostaway.sensor.helpers._warned_invalid_check_out_date",
+            False,
+            raising=False,
+        )
+        reservation = _make_reservation(
+            1,
+            guest_name="Sensitive Guest Name",
+            check_out="not-a-date",
+        )
+        sensor = await _make_reservation_sensor(
+            hass,
+            [reservation],
+            filter_cancelled=False,
+        )
+
+        with caplog.at_level(logging.WARNING):
+            first = sensor.extra_state_attributes["upcoming_reservations"]
+            second = sensor.extra_state_attributes["upcoming_reservations"]
+
+        assert [item["id"] for item in first] == [1]
+        assert [item["id"] for item in second] == [1]
+        warnings = [
+            record
+            for record in caplog.records
+            if "invalid check-out date" in record.message
+        ]
+        assert len(warnings) == 1
+        assert "Sensitive Guest Name" not in caplog.text
+        assert "not-a-date" not in caplog.text
+        assert "reservation 1" not in caplog.text
+
+    @pytest.mark.parametrize(
+        ("now", "check_out_dates", "expected_ids"),
+        [
+            (
+                datetime(
+                    2025,
+                    1,
+                    1,
+                    0,
+                    30,
+                    tzinfo=ZoneInfo("Pacific/Kiritimati"),
+                ),
+                ["2024-12-31", "2025-01-01"],
+                [2],
+            ),
+            (
+                datetime(
+                    2025,
+                    3,
+                    9,
+                    3,
+                    30,
+                    tzinfo=ZoneInfo("America/Los_Angeles"),
+                ),
+                ["2025-03-08", "2025-03-09"],
+                [2],
+            ),
+        ],
+    )
+    async def test_uses_home_assistant_local_date(
+        self,
+        hass: HomeAssistant,
+        monkeypatch: pytest.MonkeyPatch,
+        now: datetime,
+        check_out_dates: list[str],
+        expected_ids: list[int],
+    ) -> None:
+        """Use the local calendar date across UTC and DST boundaries."""
+        monkeypatch.setattr(dt_util, "now", lambda: now)
+        reservations = [
+            _make_reservation(
+                index,
+                check_in=check_out,
+                check_out=check_out,
+            )
+            for index, check_out in enumerate(check_out_dates, start=1)
+        ]
+        sensor = await _make_reservation_sensor(
+            hass,
+            reservations,
+            filter_cancelled=False,
+        )
+
+        upcoming = sensor.extra_state_attributes["upcoming_reservations"]
+
+        assert [item["id"] for item in upcoming] == expected_ids
+
+    async def test_past_reservation_still_drives_selected_state(
+        self,
+        hass: HomeAssistant,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Filter only the list, not state selection or selected attributes."""
+        now = datetime(2025, 8, 5, 12, tzinfo=UTC)
+        monkeypatch.setattr(dt_util, "now", lambda: now)
+        past = _make_reservation(
+            1,
+            check_in="2025-08-01",
+            check_out="2025-08-04",
+            status="checked_in",
+        )
+        future = _make_reservation(
+            2,
+            check_in="2025-08-10",
+            check_out="2025-08-12",
+            status="confirmed",
+        )
+        sensor = await _make_reservation_sensor(
+            hass,
+            [past, future],
+            filter_cancelled=False,
+        )
+
+        attrs = sensor.extra_state_attributes
+
+        assert sensor.native_value == "checked_in"
+        assert attrs["reservation_id"] == 1
+        assert attrs["check_out"] == "2025-08-04"
+        assert [item["id"] for item in attrs["upcoming_reservations"]] == [2]
 
 
 class TestSelectReservation:
