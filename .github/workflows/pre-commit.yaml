@@ -1,0 +1,104 @@
+---
+# SPDX-FileCopyrightText: 2026 Andrew Grimberg <tykeal@bardicgrove.org>
+# SPDX-License-Identifier: Apache-2.0
+
+name: Pre-commit
+
+# yamllint disable-line rule:truthy
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, edited]
+
+permissions: {}
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  pre-commit:
+    name: Pre-commit (all hooks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      PREK_VERSION: '0.4.14'
+      SKIP: ''
+      PREK_SKIP: ''
+      PRE_COMMIT_FROM_REF: ${{ github.event.pull_request.base.sha }}
+      PRE_COMMIT_TO_REF: ${{ github.event.pull_request.head.sha }}
+    steps:
+      # yamllint disable-line rule:line-length
+      - uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c  # v2.23.0
+        with:
+          egress-policy: audit
+
+      # yamllint disable-line rule:line-length
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify the PR snapshot and count its commits
+        id: range
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Don't mix an updated merge ref with an older event's commit range.
+          test "$(git show -s --format=%P HEAD)" = "$PRE_COMMIT_FROM_REF $PRE_COMMIT_TO_REF"
+          commits=$(git rev-list --count "$PRE_COMMIT_FROM_REF..$PRE_COMMIT_TO_REF")
+          test "$commits" -gt 0
+          echo "commits=$commits" >> "$GITHUB_OUTPUT"
+
+      - name: Run the full configuration at the file stage
+        id: files
+        # Use the executor directly: the reusable workflow only exports its plan.
+        # yamllint disable-line rule:line-length
+        uses: lfreleng-actions/standalone-linting-action@0a60cf5241a83be396fdd56bb63e9be11dd90b06  # v0.10.2
+        with:
+          no_checkout: 'true'
+          cache_hooks: 'false'
+          config_path: .pre-commit-config.yaml
+          run_all_hooks: 'true'
+          branch_name: ci-pre-commit
+          prek_version: ${{ env.PREK_VERSION }}
+
+      - name: Check every PR commit message with gitlint
+        id: messages
+        # File hooks with implicit stages must not lint the temporary message path.
+        # yamllint disable-line rule:line-length
+        uses: lfreleng-actions/standalone-linting-action@0a60cf5241a83be396fdd56bb63e9be11dd90b06  # v0.10.2
+        with:
+          no_checkout: 'true'
+          cache_hooks: 'false'
+          config_path: .pre-commit-config.yaml
+          hooks: gitlint
+          prek_version: ${{ env.PREK_VERSION }}
+          # yamllint disable-line rule:line-length
+          commit_range: "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
+
+      - name: Require coverage of both stages
+        shell: bash
+        env:
+          FILE_RUNS: ${{ steps.files.outputs.prek_runs }}
+          FILE_HOOKS: ${{ steps.files.outputs.hooks_run }}
+          MESSAGE_RUNS: ${{ steps.messages.outputs.prek_runs }}
+          MESSAGE_HOOKS: ${{ steps.messages.outputs.hooks_run }}
+          EXPECTED_MESSAGES: ${{ steps.range.outputs.commits }}
+        run: |
+          set -euo pipefail
+          if [[ "$FILE_HOOKS" != all || "$FILE_RUNS" != 1 ||
+                "$MESSAGE_HOOKS" != gitlint || "$MESSAGE_RUNS" != "$EXPECTED_MESSAGES" ]]; then
+            echo "::error::Expected one full file run and one run per PR commit."
+            exit 1
+          fi
+          uvx --no-config "prek@$PREK_VERSION" list \
+            --config .pre-commit-config.yaml --output-format json |
+            jq -e '
+              any(.[]; .id == "gitlint" and (.stages | index("commit-msg"))) and
+              all(.[]; .id == "gitlint" or (.stages | index("pre-commit")))
+            ' || {
+              echo "::error::Missing gitlint or a configured hook has no covered stage."
+              exit 1
+            }

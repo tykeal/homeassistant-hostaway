@@ -11,14 +11,12 @@
 # precedence over this
 # verbosity = 2
 
-# By default gitlint will ignore merge commits. Set to 'false' to disable.
-# ignore-merge-commits=true
-
-# By default gitlint will ignore fixup commits. Set to 'false' to disable.
-# ignore-fixup-commits=true
-
-# By default gitlint will ignore squash commits. Set to 'false' to disable.
-# ignore-squash-commits=true
+# Check each PR message, including subjects gitlint normally ignores.
+ignore-merge-commits=false
+ignore-fixup-commits=false
+ignore-fixup-amend-commits=false
+ignore-squash-commits=false
+ignore-revert-commits=false
 
 # Enable debug mode (prints more output). Disabled by default.
 # debug=true
