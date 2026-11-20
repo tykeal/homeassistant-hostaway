@@ -204,6 +204,8 @@ repos:
     rev: a6268877efd41a21197445cc04cbf28f9c6facba  # frozen: 1.7.0
     hooks:
       - id: interrogate
+        # Its upstream manifest specifies python3, overriding the default.
+        language_version: python3.14
         args: [-vv, --fail-under=100]
         additional_dependencies:
           - setuptools
