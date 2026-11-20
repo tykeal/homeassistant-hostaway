@@ -65,6 +65,7 @@ packages = ["custom_components"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 addopts = "-p tests.pytest_bootstrap"
+pythonpath = ["."]
 testpaths = ["tests"]
 
 [tool.mypy]
