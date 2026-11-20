@@ -2,6 +2,6 @@
   "name": "Hostaway",
   "zip_release": true,
   "filename": "hostaway.zip",
-  "homeassistant": "2026.4.0",
+  "homeassistant": "2026.11.0",
   "render_readme": true
 }

@@ -8,7 +8,8 @@ import asyncio
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
-import httpx
+import httpx as respx_httpx
+import httpx2 as httpx
 import pytest
 import respx
 
@@ -39,7 +40,7 @@ class TestTokenAcquisition:
     ) -> None:
         """Test successful token acquisition via POST."""
         respx.post(FAKE_TOKEN_URL).mock(
-            return_value=httpx.Response(200, json=make_token_response())
+            return_value=respx_httpx.Response(200, json=make_token_response())
         )
 
         manager = HostawayTokenManager(
@@ -57,7 +58,7 @@ class TestTokenAcquisition:
     ) -> None:
         """Test 1-second post-generation delay is enforced."""
         respx.post(FAKE_TOKEN_URL).mock(
-            return_value=httpx.Response(200, json=make_token_response())
+            return_value=respx_httpx.Response(200, json=make_token_response())
         )
 
         manager = HostawayTokenManager(
@@ -76,7 +77,7 @@ class TestTokenAcquisition:
     ) -> None:
         """Test second get_token() uses cache, no second HTTP request."""
         route = respx.post(FAKE_TOKEN_URL).mock(
-            return_value=httpx.Response(200, json=make_token_response())
+            return_value=respx_httpx.Response(200, json=make_token_response())
         )
 
         manager = HostawayTokenManager(
@@ -95,7 +96,7 @@ class TestTokenAcquisition:
     ) -> None:
         """Test HostawayAuthError on 401 invalid credentials."""
         respx.post(FAKE_TOKEN_URL).mock(
-            return_value=httpx.Response(401, json={"error": "unauthorized"})
+            return_value=respx_httpx.Response(401, json={"error": "unauthorized"})
         )
 
         manager = HostawayTokenManager(
@@ -136,7 +137,7 @@ class TestTokenAcquisition:
     ) -> None:
         """Test HostawayResponseError on missing access_token field."""
         respx.post(FAKE_TOKEN_URL).mock(
-            return_value=httpx.Response(
+            return_value=respx_httpx.Response(
                 200,
                 json={
                     "status": "success",
@@ -167,7 +168,7 @@ class TestTokenRefreshAndPersistence:
     ) -> None:
         """Test proactive refresh when token nears expiry."""
         route = respx.post(FAKE_TOKEN_URL).mock(
-            return_value=httpx.Response(200, json=make_token_response())
+            return_value=respx_httpx.Response(200, json=make_token_response())
         )
 
         manager = HostawayTokenManager(
@@ -195,7 +196,7 @@ class TestTokenRefreshAndPersistence:
     ) -> None:
         """Test invalidate() clears cached token."""
         route = respx.post(FAKE_TOKEN_URL).mock(
-            return_value=httpx.Response(200, json=make_token_response())
+            return_value=respx_httpx.Response(200, json=make_token_response())
         )
 
         manager = HostawayTokenManager(
@@ -217,7 +218,7 @@ class TestTokenRefreshAndPersistence:
     ) -> None:
         """Test concurrent get_token() calls share single HTTP request."""
         route = respx.post(FAKE_TOKEN_URL).mock(
-            return_value=httpx.Response(200, json=make_token_response())
+            return_value=respx_httpx.Response(200, json=make_token_response())
         )
 
         manager = HostawayTokenManager(
@@ -239,7 +240,7 @@ class TestTokenRefreshAndPersistence:
     ) -> None:
         """Test seed_token() loads token without HTTP call."""
         route = respx.post(FAKE_TOKEN_URL).mock(
-            return_value=httpx.Response(200, json=make_token_response())
+            return_value=respx_httpx.Response(200, json=make_token_response())
         )
 
         manager = HostawayTokenManager(

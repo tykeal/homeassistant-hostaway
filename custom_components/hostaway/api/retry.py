@@ -11,7 +11,7 @@ import random
 import time
 from dataclasses import dataclass
 
-import httpx
+import httpx2 as httpx
 
 from custom_components.hostaway.api.const import MAX_BACKOFF
 

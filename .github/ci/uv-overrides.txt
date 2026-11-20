@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Andrew Grimberg <tykeal@bardicgrove.org>
+# SPDX-License-Identifier: Apache-2.0
+#
+# The newest pytest-homeassistant-custom-component release pins HA 2026.10.4.
+# CI uses uv pip with --no-config, so provide the same test-only override via
+# UV_OVERRIDE while keeping the integration's actual floor at 2026.11.0.
+homeassistant>=2026.11.0

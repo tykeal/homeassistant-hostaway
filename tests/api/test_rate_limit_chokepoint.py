@@ -15,10 +15,11 @@ import asyncio
 import logging
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from unittest.mock import AsyncMock, Mock, patch
 
-import httpx
+import httpx as respx_httpx
+import httpx2 as httpx
 import pytest
 import respx
 
@@ -121,7 +122,7 @@ def _token_manager() -> Mock:
     return manager
 
 
-def _refused(**extra: str) -> httpx.Response:
+def _refused(**extra: str) -> respx_httpx.Response:
     """Build a 429 carrying a Hostaway retry timestamp.
 
     The timestamp is absolute, so it has to be stamped when the response is
@@ -138,7 +139,7 @@ def _refused(**extra: str) -> httpx.Response:
         _retry.RETRY_AFTER_HEADER: str(time.time() + _BRIEF_SUPPRESSION),
         **extra,
     }
-    return httpx.Response(429, headers=headers)
+    return respx_httpx.Response(429, headers=headers)
 
 
 def _refuse_then_succeed(refusals: int, **extra: str) -> Any:
@@ -153,7 +154,7 @@ def _refuse_then_succeed(refusals: int, **extra: str) -> Any:
     """
     served = 0
 
-    def respond(_request: httpx.Request) -> httpx.Response:
+    def respond(_request: respx_httpx.Request) -> respx_httpx.Response:
         """Serve the next scripted response.
 
         Args:
@@ -169,13 +170,13 @@ def _refuse_then_succeed(refusals: int, **extra: str) -> Any:
     return respond
 
 
-def _token_response() -> httpx.Response:
+def _token_response() -> respx_httpx.Response:
     """Build a successful token response.
 
     Returns:
         A 200 carrying a usable token.
     """
-    return httpx.Response(
+    return respx_httpx.Response(
         200,
         json={
             "status": "success",
@@ -188,13 +189,13 @@ def _token_response() -> httpx.Response:
     )
 
 
-def _ok() -> httpx.Response:
+def _ok() -> respx_httpx.Response:
     """Build an empty successful list response.
 
     Returns:
         A 200 response.
     """
-    return httpx.Response(200, json={"status": "success", "result": []})
+    return respx_httpx.Response(200, json={"status": "success", "result": []})
 
 
 class TestEveryAttemptIsPaced:
@@ -253,7 +254,7 @@ class TestEveryAttemptIsPaced:
         """
         served = 0
 
-        def respond(request: httpx.Request) -> httpx.Response:
+        def respond(request: respx_httpx.Request) -> respx_httpx.Response:
             """Fail the connection once, then succeed.
 
             Args:
@@ -268,7 +269,7 @@ class TestEveryAttemptIsPaced:
             nonlocal served
             served += 1
             if served == 1:
-                raise httpx.ConnectError("boom", request=request)
+                raise httpx.ConnectError("boom", request=cast(httpx.Request, request))
             return _ok()
 
         respx.get(f"{FAKE_BASE_URL}/v1/listings").mock(side_effect=respond)
@@ -293,7 +294,7 @@ class TestEveryAttemptIsPaced:
             mock_httpx_client: The transport fixture.
         """
         respx.get(f"{FAKE_BASE_URL}/v1/listings").mock(
-            side_effect=[httpx.Response(503), _ok()]
+            side_effect=[respx_httpx.Response(503), _ok()]
         )
         limiter = make_limiter()
         client = limited_client(mock_httpx_client, limiter)
@@ -316,7 +317,7 @@ class TestEveryAttemptIsPaced:
             mock_httpx_client: The transport fixture.
         """
         respx.get(f"{FAKE_BASE_URL}/v1/listings").mock(
-            side_effect=[httpx.Response(403), _ok()]
+            side_effect=[respx_httpx.Response(403), _ok()]
         )
         limiter = make_limiter()
         client = limited_client(mock_httpx_client, limiter)
@@ -447,7 +448,7 @@ class TestRetrySleepsRespectTheDeadline:
     ) -> None:
         """A caller that never opted into pacing cannot start shedding."""
         route = respx.get(f"{FAKE_BASE_URL}/v1/listings")
-        route.side_effect = [httpx.Response(429), _ok()]
+        route.side_effect = [respx_httpx.Response(429), _ok()]
         client = unlimited_client(mock_httpx_client)
 
         with patch("asyncio.sleep", new_callable=AsyncMock) as slept:
@@ -628,7 +629,7 @@ class TestTokenEndpointIsPaced:
     ) -> None:
         """OQ-001: assumed to be charged, because guessing low is cheaper."""
         respx.post("https://api.hostaway.com/v1/accessTokens").mock(
-            return_value=httpx.Response(
+            return_value=respx_httpx.Response(
                 200,
                 json={
                     "status": "success",
@@ -680,7 +681,7 @@ class TestTokenEndpointIsPaced:
         sequential rather than nested; nesting is covered separately.
         """
         respx.post("https://api.hostaway.com/v1/accessTokens").mock(
-            return_value=httpx.Response(
+            return_value=respx_httpx.Response(
                 200,
                 json={
                     "status": "success",

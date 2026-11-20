@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import voluptuous as vol
+import probatio
 from homeassistant.config_entries import (
     ConfigEntry,
     ConfigFlow,
@@ -75,10 +75,16 @@ from custom_components.hostaway.rate_limit_registry import (
 
 _LOGGER = logging.getLogger(__name__)
 
-STEP_USER_SCHEMA = vol.Schema(
+STEP_USER_SCHEMA = probatio.Schema(
     {
-        vol.Required(CONF_CLIENT_ID): str,
-        vol.Required(CONF_CLIENT_SECRET): str,
+        probatio.Required(CONF_CLIENT_ID): str,
+        probatio.Required(CONF_CLIENT_SECRET): str,
+    }
+)
+
+STEP_REAUTH_CONFIRM_SCHEMA = probatio.Schema(
+    {
+        probatio.Required(CONF_CLIENT_SECRET): str,
     }
 )
 
@@ -238,15 +244,9 @@ class HostawayConfigFlow(ConfigFlow, domain=DOMAIN):
                     )
                 return self.async_abort(reason="reauth_successful")
 
-        schema = vol.Schema(
-            {
-                vol.Required(CONF_CLIENT_SECRET): str,
-            }
-        )
-
         return self.async_show_form(
             step_id="reauth_confirm",
-            data_schema=schema,
+            data_schema=STEP_REAUTH_CONFIRM_SCHEMA,
             errors=errors,
         )
 
@@ -383,9 +383,9 @@ class HostawayConfigFlow(ConfigFlow, domain=DOMAIN):
                 SelectOptionDict(value=str(listing.id), label=label),
             )
 
-        schema = vol.Schema(
+        schema = probatio.Schema(
             {
-                vol.Required(CONF_SELECTED_LISTINGS): SelectSelector(
+                probatio.Required(CONF_SELECTED_LISTINGS): SelectSelector(
                     SelectSelectorConfig(
                         options=options,
                         multiple=True,
@@ -591,44 +591,50 @@ class HostawayOptionsFlow(OptionsFlow):
             and current_accepted_account_id == current_write_account_id
         )
 
-        schema = vol.Schema(
+        schema = probatio.Schema(
             {
-                vol.Required(
+                probatio.Required(
                     CONF_SCAN_INTERVAL,
                     default=current_scan,
-                ): vol.Coerce(int),
-                vol.Required(
+                ): probatio.Coerce(int),
+                probatio.Required(
                     CONF_RESERVATION_SCAN_INTERVAL,
                     default=current_res_scan,
-                ): vol.Coerce(int),
-                vol.Required(
+                ): probatio.Coerce(int),
+                probatio.Required(
                     CONF_CUSTOM_FIELD_DEFINITIONS_SCAN_INTERVAL,
                     default=current_custom_field_scan,
-                ): vol.Coerce(int),
-                vol.Optional(
+                ): probatio.Coerce(int),
+                probatio.Optional(
                     CONF_FILTER_CANCELLED,
                     default=current_filter,
                 ): bool,
-                vol.Optional(
+                probatio.Optional(
                     CONF_CUSTOM_FIELD_WRITE_ACCOUNT_ID,
                     default=current_write_account_id,
-                ): vol.Any(None, vol.All(vol.Coerce(int), vol.Range(min=1))),
-                vol.Optional(
+                ): probatio.Any(
+                    None,
+                    probatio.All(
+                        probatio.Coerce(int),
+                        probatio.Range(min=1),
+                    ),
+                ),
+                probatio.Optional(
                     CONF_LISTING_CUSTOM_FIELD_WRITES_ENABLED,
                     default=current_listing_writes_enabled,
                 ): bool,
-                vol.Optional(
+                probatio.Optional(
                     CONF_RESERVATION_CUSTOM_FIELD_WRITES_ENABLED,
                     default=current_reservation_writes_enabled,
                 ): bool,
-                vol.Optional(
+                probatio.Optional(
                     CONF_RESERVATION_CUSTOM_FIELD_RESIDUAL_RISK_ACCEPTED,
                     default=current_reservation_risk_accepted,
                 ): bool,
-                vol.Optional(OPTIONS_SECTION_ADVANCED): section(
-                    vol.Schema(
+                probatio.Optional(OPTIONS_SECTION_ADVANCED): section(
+                    probatio.Schema(
                         {
-                            vol.Optional(
+                            probatio.Optional(
                                 CONF_RATE_LIMIT_BUDGET,
                                 default=stored_budget,
                             ): NumberSelector(

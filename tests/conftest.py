@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Iterator
 
-import httpx
+import httpx2 as httpx
 import pytest
 import respx
 

@@ -64,7 +64,7 @@ repos:
         args: ["--fix=lf"]
       - id: name-tests-test
         args: ["--pytest-test-first"]
-        exclude: "^tests/(conftest|helpers)\\.py$"
+        exclude: "^tests/(conftest|helpers|pytest_bootstrap)\\.py$"
       # Disabled; TOX lint will otherwise fail
       - id: no-commit-to-branch
         args:
@@ -216,20 +216,17 @@ repos:
       - id: mypy
         verbose: true
         language_version: python3.14
-        args: ["--show-error-codes", "--install-types", "--non-interactive"]
+        args: ["--show-error-codes"]
         additional_dependencies:
-          # Pin to the same versions uv.lock resolves. These were previously
-          # floating, so rebuilding the hook env resolved
-          # pytest-homeassistant-custom-component to 0.13.368, which hard-pins
-          # homeassistant==2026.10.0b0. That beta replaces voluptuous schemas
-          # with probatio, so mypy reported four phantom data_schema errors in
-          # config_flow.py that do not exist against the stable release.
-          # Keep these in step with uv.lock when Home Assistant is upgraded.
-          - "homeassistant==2026.9.4"
+          # Keep mypy aligned with uv.lock so standalone and hook checks use
+          # the same Home Assistant public APIs. The hook deliberately omits
+          # pytest-homeassistant-custom-component, whose latest release pins
+          # Home Assistant 2026.10.4 and is not needed to type-check source.
+          - "homeassistant==2026.11.2"
           - "pytest"
-          - "pytest-homeassistant-custom-component==0.13.367"
           - "httpx"
           - "respx"
+          - "types-PyYAML"
 
   # - repo: local
   #   hooks:

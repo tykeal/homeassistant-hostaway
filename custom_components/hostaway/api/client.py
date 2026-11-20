@@ -12,7 +12,7 @@ import logging
 import time
 from typing import Any
 
-import httpx
+import httpx2 as httpx
 
 from custom_components.hostaway.api import redaction as _redaction
 from custom_components.hostaway.api import responses as _responses

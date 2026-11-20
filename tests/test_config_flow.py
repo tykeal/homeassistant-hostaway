@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import Any, cast
 from unittest.mock import AsyncMock, patch
 
+import probatio
 import pytest
-import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.config_entries import SOURCE_USER
 from homeassistant.core import HomeAssistant
@@ -21,7 +21,11 @@ from custom_components.hostaway.api.const import (
     DEFAULT_RATE_LIMIT_BUDGET,
     RATE_LIMIT_CEILING,
 )
-from custom_components.hostaway.config_flow import _validated_budget
+from custom_components.hostaway.config_flow import (
+    STEP_REAUTH_CONFIRM_SCHEMA,
+    STEP_USER_SCHEMA,
+    _validated_budget,
+)
 from custom_components.hostaway.const import (
     CONF_CLIENT_ID,
     CONF_CLIENT_SECRET,
@@ -44,7 +48,7 @@ VALID_INPUT = {
 }
 
 
-def _advanced_section(schema: vol.Schema | None) -> section | None:
+def _advanced_section(schema: probatio.Schema | None) -> section | None:
     """Return the advanced section of an options schema.
 
     Args:
@@ -71,10 +75,7 @@ def _section_default(advanced: section, key: str) -> object:
     Returns:
         The default value, or ``None`` when the field has none.
     """
-    for marker in advanced.schema.schema:
-        if str(marker) == key:
-            return marker.default()
-    return None
+    return advanced.schema({}).get(key)
 
 
 def _key_paths(data: dict, prefix: str = "") -> set[str]:
@@ -141,6 +142,23 @@ class TestStepUser:
         assert result["type"] is FlowResultType.FORM
         assert result["step_id"] == "user"
         assert result["errors"] == {}
+        assert isinstance(result["data_schema"], probatio.Schema)
+
+    def test_credential_schemas_require_strings(self) -> None:
+        """Setup and reauth forms reject non-string credentials."""
+        for schema, valid_input in (
+            (STEP_USER_SCHEMA, VALID_INPUT),
+            (
+                STEP_REAUTH_CONFIRM_SCHEMA,
+                {CONF_CLIENT_SECRET: "test-client-secret"},
+            ),
+        ):
+            assert isinstance(schema, probatio.Schema)
+            assert schema(valid_input) == valid_input
+            for field in valid_input:
+                for invalid_value in (None, 123, True):
+                    with pytest.raises(probatio.Invalid):
+                        schema({**valid_input, field: invalid_value})
 
     @patch(
         "custom_components.hostaway.config_flow._fetch_listings",
@@ -363,7 +381,7 @@ class TestStepListings:
 
         assert result["data_schema"] is not None
         schema = result["data_schema"].schema
-        selector = schema[vol.Required(CONF_SELECTED_LISTINGS)]
+        selector = schema[CONF_SELECTED_LISTINGS]
         options = selector.config["options"]
         assert options[0]["label"] == "beach-1 (ID: 101)"
 
@@ -404,7 +422,7 @@ class TestStepListings:
 
         assert result["data_schema"] is not None
         schema = result["data_schema"].schema
-        selector = schema[vol.Required(CONF_SELECTED_LISTINGS)]
+        selector = schema[CONF_SELECTED_LISTINGS]
         options = selector.config["options"]
         assert options[0]["label"] == "Mountain Cabin (ID: 201)"
 
