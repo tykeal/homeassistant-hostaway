@@ -17,6 +17,10 @@ ci:
     Changes in this pull request are as follows:
   skip: [mypy, aislop]
 
+# AST-based hooks must understand the project's Python syntax.
+default_language_version:
+  python: python3.14
+
 exclude: |
   (?x)(
       ^docs\/conf.py|
