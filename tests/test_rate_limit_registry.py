@@ -18,7 +18,7 @@ from datetime import timedelta
 from typing import Any, cast
 from unittest.mock import AsyncMock, Mock, patch
 
-import httpx
+import httpx as respx_httpx
 import pytest
 import respx
 from homeassistant.config_entries import SOURCE_USER, ConfigEntryState
@@ -955,10 +955,10 @@ class TestConfigFlowValidationIsPaced:
             patch("asyncio.sleep", new_callable=AsyncMock),
         ):
             respx.post(FAKE_TOKEN_URL).mock(
-                return_value=httpx.Response(200, json=make_token_response())
+                return_value=respx_httpx.Response(200, json=make_token_response())
             )
             respx.get(f"{FAKE_BASE_URL}/v1/listings").mock(
-                return_value=httpx.Response(
+                return_value=respx_httpx.Response(
                     200, json={"status": "success", "result": []}
                 )
             )

@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import AsyncMock
 
-import httpx
+import httpx2 as httpx
 import pytest
 
 from custom_components.hostaway.api.custom_fields import (

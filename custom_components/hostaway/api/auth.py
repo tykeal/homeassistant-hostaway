@@ -20,7 +20,7 @@ import logging
 import time
 from datetime import UTC, datetime
 
-import httpx
+import httpx2 as httpx
 
 from custom_components.hostaway.api import retry as _retry
 from custom_components.hostaway.api.const import (

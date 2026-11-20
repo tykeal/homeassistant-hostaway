@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import Any, cast
 from unittest.mock import AsyncMock, patch
 
+import probatio
 import pytest
-import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.config_entries import SOURCE_USER
 from homeassistant.core import HomeAssistant
@@ -44,7 +44,7 @@ VALID_INPUT = {
 }
 
 
-def _advanced_section(schema: vol.Schema | None) -> section | None:
+def _advanced_section(schema: probatio.Schema | None) -> section | None:
     """Return the advanced section of an options schema.
 
     Args:
@@ -71,10 +71,7 @@ def _section_default(advanced: section, key: str) -> object:
     Returns:
         The default value, or ``None`` when the field has none.
     """
-    for marker in advanced.schema.schema:
-        if str(marker) == key:
-            return marker.default()
-    return None
+    return advanced.schema({}).get(key)
 
 
 def _key_paths(data: dict, prefix: str = "") -> set[str]:
@@ -141,6 +138,19 @@ class TestStepUser:
         assert result["type"] is FlowResultType.FORM
         assert result["step_id"] == "user"
         assert result["errors"] == {}
+        assert isinstance(result["data_schema"], probatio.Schema)
+
+    def test_user_schema_uses_probatio_and_keeps_string_coercion(self) -> None:
+        """User form keeps its required fields and legacy string coercion."""
+        from custom_components.hostaway.config_flow import STEP_USER_SCHEMA
+
+        assert isinstance(STEP_USER_SCHEMA, probatio.Schema)
+        assert STEP_USER_SCHEMA({CONF_CLIENT_ID: 123, CONF_CLIENT_SECRET: 456}) == {
+            CONF_CLIENT_ID: "123",
+            CONF_CLIENT_SECRET: "456",
+        }
+        with pytest.raises(probatio.Invalid):
+            STEP_USER_SCHEMA({CONF_CLIENT_ID: "client"})
 
     @patch(
         "custom_components.hostaway.config_flow._fetch_listings",
@@ -363,7 +373,7 @@ class TestStepListings:
 
         assert result["data_schema"] is not None
         schema = result["data_schema"].schema
-        selector = schema[vol.Required(CONF_SELECTED_LISTINGS)]
+        selector = schema[CONF_SELECTED_LISTINGS]
         options = selector.config["options"]
         assert options[0]["label"] == "beach-1 (ID: 101)"
 
@@ -404,7 +414,7 @@ class TestStepListings:
 
         assert result["data_schema"] is not None
         schema = result["data_schema"].schema
-        selector = schema[vol.Required(CONF_SELECTED_LISTINGS)]
+        selector = schema[CONF_SELECTED_LISTINGS]
         options = selector.config["options"]
         assert options[0]["label"] == "Mountain Cabin (ID: 201)"
 

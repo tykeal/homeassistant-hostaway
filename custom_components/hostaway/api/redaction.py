@@ -10,7 +10,7 @@ import json
 import re
 from typing import Any
 
-import httpx
+import httpx2 as httpx
 
 _MAX_RESPONSE_BODY_LOG = 500
 _REDACTED = "<redacted>"

@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections.abc import Callable, Coroutine
 from typing import Any, NamedTuple
 
-import voluptuous as vol
+import probatio
 from homeassistant.core import (
     EntityServiceResponse,
     HomeAssistant,
@@ -68,7 +68,7 @@ class ServiceDefinition(NamedTuple):
 
     name: str
     handler: ServiceHandler
-    schema: vol.Schema
+    schema: probatio.Schema
     supports_response: SupportsResponse | None
 
 

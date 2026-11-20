@@ -7,7 +7,8 @@ from __future__ import annotations
 import json
 from unittest.mock import AsyncMock, Mock, PropertyMock, patch
 
-import httpx
+import httpx as respx_httpx
+import httpx2 as httpx
 import pytest
 import respx
 
@@ -50,7 +51,9 @@ class TestHttpClientCore:
     ) -> None:
         """Test successful GET request with Bearer auth header."""
         route = respx.get(f"{FAKE_BASE_URL}/v1/listings").mock(
-            return_value=httpx.Response(200, json={"status": "success", "result": []})
+            return_value=respx_httpx.Response(
+                200, json={"status": "success", "result": []}
+            )
         )
 
         tm = _make_mock_token_manager()
@@ -69,7 +72,7 @@ class TestHttpClientCore:
     ) -> None:
         """Test successful PUT request with Bearer auth and JSON body."""
         route = respx.put(f"{FAKE_BASE_URL}/v1/reservations/123").mock(
-            return_value=httpx.Response(
+            return_value=respx_httpx.Response(
                 200,
                 json={"status": "success", "result": {"id": 123}},
             )
@@ -94,8 +97,8 @@ class TestHttpClientCore:
         """Test 429 response triggers exponential backoff retry."""
         route = respx.get(f"{FAKE_BASE_URL}/v1/listings")
         route.side_effect = [
-            httpx.Response(429, headers={"Retry-After": "1"}),
-            httpx.Response(200, json={"status": "success", "result": []}),
+            respx_httpx.Response(429, headers={"Retry-After": "1"}),
+            respx_httpx.Response(200, json={"status": "success", "result": []}),
         ]
 
         tm = _make_mock_token_manager()
@@ -112,7 +115,7 @@ class TestHttpClientCore:
     ) -> None:
         """Test after max 3 retries on 429, raises HostawayRateLimitError."""
         respx.get(f"{FAKE_BASE_URL}/v1/listings").mock(
-            return_value=httpx.Response(429, headers={"Retry-After": "1"})
+            return_value=respx_httpx.Response(429, headers={"Retry-After": "1"})
         )
 
         tm = _make_mock_token_manager()
@@ -130,8 +133,8 @@ class TestHttpClientCore:
         """Test 403 triggers token invalidation + refresh + single retry."""
         route = respx.get(f"{FAKE_BASE_URL}/v1/listings")
         route.side_effect = [
-            httpx.Response(403),
-            httpx.Response(200, json={"status": "success", "result": []}),
+            respx_httpx.Response(403),
+            respx_httpx.Response(200, json={"status": "success", "result": []}),
         ]
 
         tm = _make_mock_token_manager()
@@ -148,7 +151,7 @@ class TestHttpClientCore:
         """Test persistent 403 raises HostawayAuthError with diagnostic context."""
         body = '{"status":"fail","result":"invalid_token: token has expired"}'
         respx.put(f"{FAKE_BASE_URL}/v1/reservations/12345").mock(
-            return_value=httpx.Response(403, text=body)
+            return_value=respx_httpx.Response(403, text=body)
         )
 
         tm = _make_mock_token_manager()
@@ -175,7 +178,7 @@ class TestHttpClientCore:
         # padding then verifies truncation in the resulting message.
         long_body = "invalid_token " + ("X" * 2000)
         respx.get(f"{FAKE_BASE_URL}/v1/listings").mock(
-            return_value=httpx.Response(403, text=long_body)
+            return_value=respx_httpx.Response(403, text=long_body)
         )
 
         tm = _make_mock_token_manager()
@@ -200,8 +203,8 @@ class TestHttpClientCore:
         body = '{"status":"fail","result":"token expired"}'
         route = respx.put(f"{FAKE_BASE_URL}/v1/reservations/77")
         route.side_effect = [
-            httpx.Response(403, text=body),
-            httpx.Response(200, json={"status": "success", "result": {"id": 77}}),
+            respx_httpx.Response(403, text=body),
+            respx_httpx.Response(200, json={"status": "success", "result": {"id": 77}}),
         ]
 
         tm = _make_mock_token_manager()
@@ -228,7 +231,9 @@ class TestHttpClientCore:
         self, mock_httpx_client: httpx.AsyncClient
     ) -> None:
         """Test 403 with unreadable body still raises HostawayAuthError cleanly."""
-        respx.get(f"{FAKE_BASE_URL}/v1/listings").mock(return_value=httpx.Response(403))
+        respx.get(f"{FAKE_BASE_URL}/v1/listings").mock(
+            return_value=respx_httpx.Response(403)
+        )
 
         tm = _make_mock_token_manager()
         client = HostawayApiClient(tm, mock_httpx_client, base_url=FAKE_BASE_URL)
@@ -253,7 +258,7 @@ class TestHttpClientCore:
         """First 403 with locked-style body raises immediately, no retry."""
         body = '{"status":"fail","result":"Cannot modify reservation"}'
         route = respx.put(f"{FAKE_BASE_URL}/v1/reservations/59426054").mock(
-            return_value=httpx.Response(403, text=body)
+            return_value=respx_httpx.Response(403, text=body)
         )
 
         tm = _make_mock_token_manager()
@@ -273,7 +278,7 @@ class TestHttpClientCore:
         """Listing 403 responses are not reported as reservation locks."""
         body = '{"status":"fail","result":"Listing update forbidden"}'
         route = respx.put(f"{FAKE_BASE_URL}/v1/listings/123").mock(
-            return_value=httpx.Response(403, text=body)
+            return_value=respx_httpx.Response(403, text=body)
         )
 
         tm = _make_mock_token_manager()
@@ -295,8 +300,8 @@ class TestHttpClientCore:
         body = '{"status":"fail","result":"invalid_token: please reauthenticate"}'
         route = respx.put(f"{FAKE_BASE_URL}/v1/reservations/77")
         route.side_effect = [
-            httpx.Response(403, text=body),
-            httpx.Response(200, json={"status": "success", "result": {"id": 77}}),
+            respx_httpx.Response(403, text=body),
+            respx_httpx.Response(200, json={"status": "success", "result": {"id": 77}}),
         ]
 
         tm = _make_mock_token_manager()
@@ -316,8 +321,8 @@ class TestHttpClientCore:
         """403 with unreadable body falls back to auth path (back-compat)."""
         route = respx.get(f"{FAKE_BASE_URL}/v1/listings")
         route.side_effect = [
-            httpx.Response(403),
-            httpx.Response(200, json={"status": "success", "result": []}),
+            respx_httpx.Response(403),
+            respx_httpx.Response(200, json={"status": "success", "result": []}),
         ]
 
         tm = _make_mock_token_manager()
@@ -338,7 +343,7 @@ class TestHttpClientCore:
         """Raised locked error contains method, path, status, body snippet."""
         body = '{"status":"fail","result":"Reservation is channel-managed"}'
         respx.put(f"{FAKE_BASE_URL}/v1/reservations/42").mock(
-            return_value=httpx.Response(403, text=body)
+            return_value=respx_httpx.Response(403, text=body)
         )
 
         tm = _make_mock_token_manager()
@@ -358,7 +363,7 @@ class TestHttpClientCore:
 
     def test_safe_response_body_returns_unavailable_on_read_error(self) -> None:
         """Test _safe_response_body returns "<unavailable>" if reading body raises."""
-        response = Mock(spec=httpx.Response)
+        response = Mock(spec=respx_httpx.Response)
         # Accessing .text raises, simulating a decode/IO failure.
         type(response).text = PropertyMock(side_effect=RuntimeError("decode boom"))
 
@@ -366,7 +371,7 @@ class TestHttpClientCore:
 
     def test_safe_response_body_truncates_long_text(self) -> None:
         """Test _safe_response_body truncates with "..." suffix beyond max_len."""
-        response = Mock(spec=httpx.Response)
+        response = Mock(spec=respx_httpx.Response)
         type(response).text = PropertyMock(return_value="A" * 1000)
 
         result = _safe_response_body(response, max_len=100)
@@ -520,7 +525,7 @@ class TestHttpClientCore:
     ) -> None:
         """Test 404 raises HostawayResponseError."""
         respx.get(f"{FAKE_BASE_URL}/v1/listings").mock(
-            return_value=httpx.Response(404, json={"error": "not found"})
+            return_value=respx_httpx.Response(404, json={"error": "not found"})
         )
 
         tm = _make_mock_token_manager()
@@ -535,8 +540,8 @@ class TestHttpClientCore:
         """Test 5xx triggers retry with backoff."""
         route = respx.get(f"{FAKE_BASE_URL}/v1/listings")
         route.side_effect = [
-            httpx.Response(502),
-            httpx.Response(200, json={"status": "success", "result": []}),
+            respx_httpx.Response(502),
+            respx_httpx.Response(200, json={"status": "success", "result": []}),
         ]
 
         tm = _make_mock_token_manager()
@@ -553,7 +558,7 @@ class TestHttpClientCore:
     ) -> None:
         """Custom-field PUTs leave ambiguous 5xx recovery to the service."""
         route = respx.put(f"{FAKE_BASE_URL}/v1/listings/123").mock(
-            return_value=httpx.Response(502)
+            return_value=respx_httpx.Response(502)
         )
 
         tm = _make_mock_token_manager()
@@ -572,7 +577,7 @@ class TestHttpClientCore:
     ) -> None:
         """Custom-field PUTs do not retry the same array after 429."""
         route = respx.put(f"{FAKE_BASE_URL}/v1/reservations/456").mock(
-            return_value=httpx.Response(429, headers={"Retry-After": "1"})
+            return_value=respx_httpx.Response(429, headers={"Retry-After": "1"})
         )
 
         tm = _make_mock_token_manager()
@@ -591,7 +596,7 @@ class TestHttpClientCore:
     ) -> None:
         """Custom-field PUTs do not auth-refresh retry the same array."""
         route = respx.put(f"{FAKE_BASE_URL}/v1/listings/123").mock(
-            return_value=httpx.Response(403, text="invalid_token")
+            return_value=respx_httpx.Response(403, text="invalid_token")
         )
 
         tm = _make_mock_token_manager()
@@ -611,7 +616,7 @@ class TestHttpClientCore:
     ) -> None:
         """Custom-field PUTs classify malformed 2xx responses as ambiguous."""
         route = respx.put(f"{FAKE_BASE_URL}/v1/listings/123").mock(
-            return_value=httpx.Response(200, text="not-json")
+            return_value=respx_httpx.Response(200, text="not-json")
         )
 
         tm = _make_mock_token_manager()
@@ -630,7 +635,7 @@ class TestHttpClientCore:
     ) -> None:
         """Explicit Hostaway failure statuses are not malformed successes."""
         route = respx.put(f"{FAKE_BASE_URL}/v1/listings/123").mock(
-            return_value=httpx.Response(
+            return_value=respx_httpx.Response(
                 200,
                 json={"status": "fail", "result": "rejected"},
             )
@@ -676,7 +681,7 @@ class TestPagination:
     ) -> None:
         """Test listing page reads include custom-field resources."""
         route = respx.get(f"{FAKE_BASE_URL}/v1/listings").mock(
-            return_value=httpx.Response(
+            return_value=respx_httpx.Response(
                 200,
                 json={"status": "success", "result": [make_listing_response()]},
             )
@@ -710,8 +715,8 @@ class TestPagination:
 
         route = respx.get(f"{FAKE_BASE_URL}/v1/listings")
         route.side_effect = [
-            httpx.Response(200, json={"status": "success", "result": page1}),
-            httpx.Response(200, json={"status": "success", "result": page2}),
+            respx_httpx.Response(200, json={"status": "success", "result": page1}),
+            respx_httpx.Response(200, json={"status": "success", "result": page2}),
         ]
 
         tm = _make_mock_token_manager()
@@ -741,8 +746,8 @@ class TestPagination:
 
         route = respx.get(f"{FAKE_BASE_URL}/v1/reservations")
         route.side_effect = [
-            httpx.Response(200, json={"status": "success", "result": page1}),
-            httpx.Response(200, json={"status": "success", "result": page2}),
+            respx_httpx.Response(200, json={"status": "success", "result": page1}),
+            respx_httpx.Response(200, json={"status": "success", "result": page2}),
         ]
 
         tm = _make_mock_token_manager()
@@ -782,8 +787,8 @@ class TestPagination:
 
         route = respx.get(f"{FAKE_BASE_URL}/v1/reservations")
         route.side_effect = [
-            httpx.Response(200, json={"status": "success", "result": page1}),
-            httpx.Response(200, json={"status": "success", "result": page2}),
+            respx_httpx.Response(200, json={"status": "success", "result": page1}),
+            respx_httpx.Response(200, json={"status": "success", "result": page2}),
         ]
 
         tm = _make_mock_token_manager()
@@ -831,8 +836,8 @@ class TestPagination:
 
         route = respx.get(f"{FAKE_BASE_URL}/v1/reservations")
         route.side_effect = [
-            httpx.Response(200, json={"status": "success", "result": page}),
-            httpx.Response(200, json={"status": "success", "result": page2}),
+            respx_httpx.Response(200, json={"status": "success", "result": page}),
+            respx_httpx.Response(200, json={"status": "success", "result": page2}),
         ]
 
         tm = _make_mock_token_manager()
@@ -862,8 +867,8 @@ class TestPagination:
 
         route = respx.get(f"{FAKE_BASE_URL}/v1/reservations")
         route.side_effect = [
-            httpx.Response(200, json={"status": "success", "result": page}),
-            httpx.Response(200, json={"status": "success", "result": page}),
+            respx_httpx.Response(200, json={"status": "success", "result": page}),
+            respx_httpx.Response(200, json={"status": "success", "result": page}),
         ]
 
         tm = _make_mock_token_manager()
@@ -896,8 +901,8 @@ class TestPagination:
 
         route = respx.get(f"{FAKE_BASE_URL}/v1/reservations")
         route.side_effect = [
-            httpx.Response(200, json={"status": "success", "result": page1}),
-            httpx.Response(200, json={"status": "success", "result": page2}),
+            respx_httpx.Response(200, json={"status": "success", "result": page1}),
+            respx_httpx.Response(200, json={"status": "success", "result": page2}),
         ]
 
         tm = _make_mock_token_manager()
@@ -914,7 +919,9 @@ class TestPagination:
     ) -> None:
         """Test handles empty result set (returns empty list)."""
         respx.get(f"{FAKE_BASE_URL}/v1/listings").mock(
-            return_value=httpx.Response(200, json={"status": "success", "result": []})
+            return_value=respx_httpx.Response(
+                200, json={"status": "success", "result": []}
+            )
         )
 
         tm = _make_mock_token_manager()
@@ -931,7 +938,9 @@ class TestPagination:
         page = [make_listing_response(id=i, name=f"Listing {i}") for i in range(1, 11)]
 
         route = respx.get(f"{FAKE_BASE_URL}/v1/listings").mock(
-            return_value=httpx.Response(200, json={"status": "success", "result": page})
+            return_value=respx_httpx.Response(
+                200, json={"status": "success", "result": page}
+            )
         )
 
         tm = _make_mock_token_manager()
@@ -954,7 +963,9 @@ class TestConnection:
     ) -> None:
         """Test successful connection validates credentials."""
         respx.get(f"{FAKE_BASE_URL}/v1/listings").mock(
-            return_value=httpx.Response(200, json={"status": "success", "result": []})
+            return_value=respx_httpx.Response(
+                200, json={"status": "success", "result": []}
+            )
         )
 
         tm = _make_mock_token_manager()
@@ -1000,7 +1011,7 @@ class TestCreateTask:
     ) -> None:
         """Test successful task creation returns result dict."""
         respx.post(f"{FAKE_BASE_URL}/v1/tasks").mock(
-            return_value=httpx.Response(
+            return_value=respx_httpx.Response(
                 200,
                 json={
                     "status": "success",
@@ -1021,7 +1032,7 @@ class TestCreateTask:
     ) -> None:
         """Test that the JSON payload is sent correctly."""
         route = respx.post(f"{FAKE_BASE_URL}/v1/tasks").mock(
-            return_value=httpx.Response(
+            return_value=respx_httpx.Response(
                 200,
                 json={
                     "status": "success",
@@ -1045,7 +1056,7 @@ class TestCreateTask:
     ) -> None:
         """Test non-success status raises HostawayResponseError."""
         respx.post(f"{FAKE_BASE_URL}/v1/tasks").mock(
-            return_value=httpx.Response(
+            return_value=respx_httpx.Response(
                 200,
                 json={
                     "status": "fail",
@@ -1065,7 +1076,7 @@ class TestCreateTask:
     ) -> None:
         """Test missing result object raises HostawayResponseError."""
         respx.post(f"{FAKE_BASE_URL}/v1/tasks").mock(
-            return_value=httpx.Response(
+            return_value=respx_httpx.Response(
                 200,
                 json={"status": "success", "result": []},
             )
@@ -1080,7 +1091,7 @@ class TestCreateTask:
     async def test_create_task_404(self, mock_httpx_client: httpx.AsyncClient) -> None:
         """Test 404 response raises HostawayResponseError."""
         respx.post(f"{FAKE_BASE_URL}/v1/tasks").mock(
-            return_value=httpx.Response(404, text="Not Found")
+            return_value=respx_httpx.Response(404, text="Not Found")
         )
 
         tm = _make_mock_token_manager()
@@ -1098,7 +1109,7 @@ class TestUpdateTask:
     ) -> None:
         """Test successful task update returns result dict."""
         respx.put(f"{FAKE_BASE_URL}/v1/tasks/42").mock(
-            return_value=httpx.Response(
+            return_value=respx_httpx.Response(
                 200,
                 json={
                     "status": "success",
@@ -1124,7 +1135,7 @@ class TestUpdateTask:
     ) -> None:
         """Test that task_id is in URL and payload is sent."""
         route = respx.put(f"{FAKE_BASE_URL}/v1/tasks/99").mock(
-            return_value=httpx.Response(
+            return_value=respx_httpx.Response(
                 200,
                 json={
                     "status": "success",
@@ -1148,7 +1159,7 @@ class TestUpdateTask:
     ) -> None:
         """Test non-success status raises HostawayResponseError."""
         respx.put(f"{FAKE_BASE_URL}/v1/tasks/42").mock(
-            return_value=httpx.Response(
+            return_value=respx_httpx.Response(
                 200,
                 json={"status": "fail", "result": "not found"},
             )
@@ -1165,7 +1176,7 @@ class TestUpdateTask:
     ) -> None:
         """Test missing result raises HostawayResponseError."""
         respx.put(f"{FAKE_BASE_URL}/v1/tasks/42").mock(
-            return_value=httpx.Response(
+            return_value=respx_httpx.Response(
                 200,
                 json={"status": "success", "result": "string"},
             )
@@ -1180,7 +1191,7 @@ class TestUpdateTask:
     async def test_update_task_404(self, mock_httpx_client: httpx.AsyncClient) -> None:
         """Test 404 raises HostawayResponseError."""
         respx.put(f"{FAKE_BASE_URL}/v1/tasks/999").mock(
-            return_value=httpx.Response(404, text="Not Found")
+            return_value=respx_httpx.Response(404, text="Not Found")
         )
 
         tm = _make_mock_token_manager()
@@ -1198,7 +1209,7 @@ class TestUpdateListing:
     ) -> None:
         """Successful listing updates return result objects."""
         respx.put(f"{FAKE_BASE_URL}/v1/listings/42").mock(
-            return_value=httpx.Response(
+            return_value=respx_httpx.Response(
                 200,
                 json={"status": "success", "result": {"id": 42}},
             )
@@ -1216,7 +1227,7 @@ class TestUpdateListing:
     ) -> None:
         """Listing updates use PUT /v1/listings/{id} and forward JSON."""
         route = respx.put(f"{FAKE_BASE_URL}/v1/listings/99").mock(
-            return_value=httpx.Response(
+            return_value=respx_httpx.Response(
                 200,
                 json={"status": "success", "result": {"id": 99}},
             )
@@ -1241,7 +1252,7 @@ class TestUpdateListing:
     ) -> None:
         """Listing update API failures surface as response errors."""
         respx.put(f"{FAKE_BASE_URL}/v1/listings/42").mock(
-            return_value=httpx.Response(
+            return_value=respx_httpx.Response(
                 200,
                 json={"status": "fail", "result": "not found"},
             )
@@ -1258,7 +1269,7 @@ class TestUpdateListing:
     ) -> None:
         """Listing updates require an object result."""
         respx.put(f"{FAKE_BASE_URL}/v1/listings/42").mock(
-            return_value=httpx.Response(
+            return_value=respx_httpx.Response(
                 200,
                 json={"status": "success", "result": "ok"},
             )
@@ -1279,7 +1290,7 @@ class TestDeleteTask:
     ) -> None:
         """Test successful task deletion returns None."""
         respx.delete(f"{FAKE_BASE_URL}/v1/tasks/42").mock(
-            return_value=httpx.Response(
+            return_value=respx_httpx.Response(
                 200,
                 json={"status": "success", "result": []},
             )
@@ -1295,7 +1306,7 @@ class TestDeleteTask:
     ) -> None:
         """Test DELETE is sent to correct URL."""
         route = respx.delete(f"{FAKE_BASE_URL}/v1/tasks/77").mock(
-            return_value=httpx.Response(
+            return_value=respx_httpx.Response(
                 200,
                 json={"status": "success", "result": []},
             )
@@ -1315,7 +1326,7 @@ class TestDeleteTask:
     ) -> None:
         """Test non-success status raises HostawayResponseError."""
         respx.delete(f"{FAKE_BASE_URL}/v1/tasks/42").mock(
-            return_value=httpx.Response(
+            return_value=respx_httpx.Response(
                 200,
                 json={"status": "fail", "result": "not found"},
             )
@@ -1330,7 +1341,7 @@ class TestDeleteTask:
     async def test_delete_task_404(self, mock_httpx_client: httpx.AsyncClient) -> None:
         """Test 404 raises HostawayResponseError."""
         respx.delete(f"{FAKE_BASE_URL}/v1/tasks/999").mock(
-            return_value=httpx.Response(404, text="Not Found")
+            return_value=respx_httpx.Response(404, text="Not Found")
         )
 
         tm = _make_mock_token_manager()
@@ -1348,7 +1359,7 @@ class TestGetTasks:
     ) -> None:
         """Test successful get tasks returns list."""
         respx.get(f"{FAKE_BASE_URL}/v1/tasks").mock(
-            return_value=httpx.Response(
+            return_value=respx_httpx.Response(
                 200,
                 json={
                     "status": "success",
@@ -1380,8 +1391,8 @@ class TestGetTasks:
 
         route = respx.get(f"{FAKE_BASE_URL}/v1/tasks")
         route.side_effect = [
-            httpx.Response(200, json={"status": "success", "result": page1}),
-            httpx.Response(200, json={"status": "success", "result": page2}),
+            respx_httpx.Response(200, json={"status": "success", "result": page1}),
+            respx_httpx.Response(200, json={"status": "success", "result": page2}),
         ]
 
         tm = _make_mock_token_manager()
@@ -1404,7 +1415,7 @@ class TestGetTasks:
     ) -> None:
         """Test empty result returns empty list."""
         respx.get(f"{FAKE_BASE_URL}/v1/tasks").mock(
-            return_value=httpx.Response(
+            return_value=respx_httpx.Response(
                 200,
                 json={"status": "success", "result": []},
             )
@@ -1422,7 +1433,7 @@ class TestGetTasks:
     ) -> None:
         """Test non-success status raises HostawayResponseError."""
         respx.get(f"{FAKE_BASE_URL}/v1/tasks").mock(
-            return_value=httpx.Response(
+            return_value=respx_httpx.Response(
                 200,
                 json={"status": "fail", "result": "error"},
             )
@@ -1439,7 +1450,7 @@ class TestGetTasks:
     ) -> None:
         """Test missing result list raises HostawayResponseError."""
         respx.get(f"{FAKE_BASE_URL}/v1/tasks").mock(
-            return_value=httpx.Response(
+            return_value=respx_httpx.Response(
                 200,
                 json={"status": "success", "result": {"bad": "data"}},
             )
@@ -1456,7 +1467,7 @@ class TestGetTasks:
     ) -> None:
         """Test malformed task items raise HostawayResponseError."""
         respx.get(f"{FAKE_BASE_URL}/v1/tasks").mock(
-            return_value=httpx.Response(
+            return_value=respx_httpx.Response(
                 200,
                 json={"status": "success", "result": [{"id": 1}, "bad-item"]},
             )
@@ -1477,7 +1488,7 @@ class TestGetUsers:
     ) -> None:
         """Test get_users() calls GET /v1/users and returns the result list."""
         route = respx.get(f"{FAKE_BASE_URL}/v1/users").mock(
-            return_value=httpx.Response(
+            return_value=respx_httpx.Response(
                 200,
                 json={
                     "status": "success",
@@ -1502,7 +1513,7 @@ class TestGetUsers:
     ) -> None:
         """Test non-success status raises HostawayResponseError."""
         respx.get(f"{FAKE_BASE_URL}/v1/users").mock(
-            return_value=httpx.Response(
+            return_value=respx_httpx.Response(
                 200,
                 json={"status": "fail", "result": "error"},
             )
@@ -1519,7 +1530,7 @@ class TestGetUsers:
     ) -> None:
         """Test missing result list raises HostawayResponseError."""
         respx.get(f"{FAKE_BASE_URL}/v1/users").mock(
-            return_value=httpx.Response(
+            return_value=respx_httpx.Response(
                 200,
                 json={"status": "success", "result": {"bad": "data"}},
             )
@@ -1536,7 +1547,7 @@ class TestGetUsers:
     ) -> None:
         """Test malformed user items raise HostawayResponseError."""
         respx.get(f"{FAKE_BASE_URL}/v1/users").mock(
-            return_value=httpx.Response(
+            return_value=respx_httpx.Response(
                 200,
                 json={"status": "success", "result": [{"id": 1}, "bad-item"]},
             )
@@ -1557,7 +1568,7 @@ class TestGetGroups:
     ) -> None:
         """Test get_groups() calls GET /v1/userGroups and returns the result list."""
         route = respx.get(f"{FAKE_BASE_URL}/v1/userGroups").mock(
-            return_value=httpx.Response(
+            return_value=respx_httpx.Response(
                 200,
                 json={
                     "status": "success",
@@ -1582,7 +1593,7 @@ class TestGetGroups:
     ) -> None:
         """Test non-success status raises HostawayResponseError."""
         respx.get(f"{FAKE_BASE_URL}/v1/userGroups").mock(
-            return_value=httpx.Response(
+            return_value=respx_httpx.Response(
                 200,
                 json={"status": "fail", "result": "error"},
             )
@@ -1599,7 +1610,7 @@ class TestGetGroups:
     ) -> None:
         """Test missing result list raises HostawayResponseError."""
         respx.get(f"{FAKE_BASE_URL}/v1/userGroups").mock(
-            return_value=httpx.Response(
+            return_value=respx_httpx.Response(
                 200,
                 json={"status": "success", "result": {"bad": "data"}},
             )
@@ -1616,7 +1627,7 @@ class TestGetGroups:
     ) -> None:
         """Test malformed group items raise HostawayResponseError."""
         respx.get(f"{FAKE_BASE_URL}/v1/userGroups").mock(
-            return_value=httpx.Response(
+            return_value=respx_httpx.Response(
                 200,
                 json={"status": "success", "result": [{"id": 10}, "bad-item"]},
             )
@@ -1633,7 +1644,7 @@ class TestGetGroups:
     ) -> None:
         """Test get_groups() returns an empty list when the API does."""
         respx.get(f"{FAKE_BASE_URL}/v1/userGroups").mock(
-            return_value=httpx.Response(
+            return_value=respx_httpx.Response(
                 200,
                 json={"status": "success", "result": []},
             )

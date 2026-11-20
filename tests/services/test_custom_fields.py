@@ -11,8 +11,8 @@ from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock, patch
 
+import probatio
 import pytest
-import voluptuous as vol
 import yaml
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.exceptions import ServiceValidationError
@@ -292,11 +292,11 @@ async def test_set_custom_field_resolves_entry_before_target_id(
     ],
 )
 def test_custom_field_schemas_use_strict_integer_ids(
-    schema: vol.Schema,
+    schema: probatio.Schema,
     data: dict[str, object],
 ) -> None:
     """Custom-field schemas reject coerced identifier values."""
-    with pytest.raises(vol.Invalid):
+    with pytest.raises(probatio.Invalid):
         schema(data)
 
 
@@ -318,11 +318,11 @@ async def test_bool_target_id_rejected_before_resolution(
 def test_custom_field_read_service_schemas() -> None:
     """Read service schemas reject bool ids and invalid target types."""
     assert SERVICE_GET_CUSTOM_FIELDS_SCHEMA({}) == {}
-    with pytest.raises(vol.Invalid):
+    with pytest.raises(probatio.Invalid):
         SERVICE_GET_CUSTOM_FIELD_VALUES_SCHEMA(
             {"target_type": "listing", "target_id": True}
         )
-    with pytest.raises(vol.Invalid):
+    with pytest.raises(probatio.Invalid):
         SERVICE_GET_CUSTOM_FIELD_VALUES_SCHEMA({"target_type": "task", "target_id": 1})
 
 

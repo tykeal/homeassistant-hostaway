@@ -918,7 +918,7 @@ def request_results_adapter(
             msg = "adapter only supports GET list requests"
             raise HostawayResponseError(msg)
         items = await request_results(path, params=params)
-        import httpx
+        import httpx2 as httpx
 
         return httpx.Response(200, json={"status": "success", "result": items})
 

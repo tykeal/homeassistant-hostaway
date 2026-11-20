@@ -8,8 +8,8 @@ from collections.abc import Iterator, Mapping
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
+import probatio
 import pytest
-import voluptuous as vol
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -269,7 +269,7 @@ class TestSetDoorCode:
         entry = _make_entry()
         await _setup_entry(hass, entry)
 
-        with pytest.raises(vol.MultipleInvalid, match="positive"):
+        with pytest.raises(probatio.MultipleInvalid, match="positive"):
             await hass.services.async_call(
                 DOMAIN,
                 "set_door_code",
@@ -277,7 +277,7 @@ class TestSetDoorCode:
                 blocking=True,
             )
 
-        with pytest.raises(vol.MultipleInvalid, match="positive"):
+        with pytest.raises(probatio.MultipleInvalid, match="positive"):
             await hass.services.async_call(
                 DOMAIN,
                 "set_door_code",
@@ -293,7 +293,7 @@ class TestSetDoorCode:
         entry = _make_entry()
         await _setup_entry(hass, entry)
 
-        with pytest.raises(vol.MultipleInvalid):
+        with pytest.raises(probatio.MultipleInvalid):
             await hass.services.async_call(
                 DOMAIN,
                 "set_door_code",
@@ -309,7 +309,7 @@ class TestSetDoorCode:
         entry = _make_entry()
         await _setup_entry(hass, entry)
 
-        with pytest.raises(vol.MultipleInvalid, match="non-empty"):
+        with pytest.raises(probatio.MultipleInvalid, match="non-empty"):
             await hass.services.async_call(
                 DOMAIN,
                 "set_door_code",
@@ -758,7 +758,7 @@ class TestGetReservations:
         entry = _make_entry()
         await _setup_entry(hass, entry)
 
-        with pytest.raises(vol.MultipleInvalid, match="positive"):
+        with pytest.raises(probatio.MultipleInvalid, match="positive"):
             await hass.services.async_call(
                 DOMAIN,
                 "get_reservations",
@@ -1545,7 +1545,7 @@ class TestCreateTask:
         entry = _make_entry()
         await _setup_entry(hass, entry)
 
-        with pytest.raises(vol.MultipleInvalid, match="expected a list"):
+        with pytest.raises(probatio.MultipleInvalid, match="expected a list"):
             await hass.services.async_call(
                 DOMAIN,
                 "create_task",
@@ -1801,7 +1801,7 @@ class TestUpdateTask:
         entry = _make_entry()
         await _setup_entry(hass, entry)
 
-        with pytest.raises(vol.MultipleInvalid, match="expected a list"):
+        with pytest.raises(probatio.MultipleInvalid, match="expected a list"):
             await hass.services.async_call(
                 DOMAIN,
                 "update_task",

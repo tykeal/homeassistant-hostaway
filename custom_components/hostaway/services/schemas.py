@@ -9,7 +9,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
-import voluptuous as vol
+import probatio
 
 from custom_components.hostaway.api.exceptions import HostawayResponseError
 
@@ -35,23 +35,23 @@ def _positive_int(value: Any) -> int:
         The validated positive integer.
 
     Raises:
-        vol.Invalid: If the value is not a valid positive integer.
+        probatio.Invalid: If the value is not a valid positive integer.
     """
     if isinstance(value, bool):
-        raise vol.Invalid("boolean is not a valid integer")
+        raise probatio.Invalid("boolean is not a valid integer")
     if isinstance(value, float):
         if not math.isfinite(value):
-            raise vol.Invalid("expected a finite number")
+            raise probatio.Invalid("expected a finite number")
         if value != int(value):
-            raise vol.Invalid("float with fractional part is not valid")
+            raise probatio.Invalid("float with fractional part is not valid")
         value = int(value)
     if not isinstance(value, int):
         try:
             value = int(value)
         except (ValueError, TypeError) as exc:
-            raise vol.Invalid("expected an integer") from exc
+            raise probatio.Invalid("expected an integer") from exc
     if value <= 0:
-        raise vol.Invalid("must be a positive integer")
+        raise probatio.Invalid("must be a positive integer")
     result: int = value
     return result
 
@@ -59,7 +59,7 @@ def _positive_int(value: Any) -> int:
 def _strict_positive_int(value: Any) -> int:
     """Validate a positive integer without coercion."""
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
-        raise vol.Invalid("must be a positive integer")
+        raise probatio.Invalid("must be a positive integer")
     return value
 
 
@@ -73,13 +73,13 @@ def _non_empty_string(value: Any) -> str:
         The stripped string.
 
     Raises:
-        vol.Invalid: If the value is not a non-empty string.
+        probatio.Invalid: If the value is not a non-empty string.
     """
     if not isinstance(value, str):
-        raise vol.Invalid("expected a string")
+        raise probatio.Invalid("expected a string")
     stripped = value.strip()
     if not stripped:
-        raise vol.Invalid("must be a non-empty string")
+        raise probatio.Invalid("must be a non-empty string")
     return stripped
 
 
@@ -93,10 +93,10 @@ def _strict_string(value: Any) -> str:
         The original string value.
 
     Raises:
-        vol.Invalid: If the value is not a string.
+        probatio.Invalid: If the value is not a string.
     """
     if not isinstance(value, str):
-        raise vol.Invalid("expected a string")
+        raise probatio.Invalid("expected a string")
     return value
 
 
@@ -110,10 +110,10 @@ def _positive_int_list(value: Any) -> list[int]:
         The validated list of positive integers.
 
     Raises:
-        vol.Invalid: If the value is not a list of positive integers.
+        probatio.Invalid: If the value is not a list of positive integers.
     """
     if not isinstance(value, list):
-        raise vol.Invalid("expected a list")
+        raise probatio.Invalid("expected a list")
     return [_positive_int(item) for item in value]
 
 
@@ -142,129 +142,129 @@ def _is_user_correctable_task_error(exc: HostawayResponseError) -> bool:
     )
 
 
-SERVICE_SET_DOOR_CODE_SCHEMA = vol.Schema(
+SERVICE_SET_DOOR_CODE_SCHEMA = probatio.Schema(
     {
-        vol.Required("reservation_id"): _positive_int,
-        vol.Required("door_code"): _non_empty_string,
-        vol.Optional("door_code_vendor"): vol.Maybe(_strict_string),
-        vol.Optional("door_code_instruction"): vol.Maybe(
+        probatio.Required("reservation_id"): _positive_int,
+        probatio.Required("door_code"): _non_empty_string,
+        probatio.Optional("door_code_vendor"): probatio.Maybe(_strict_string),
+        probatio.Optional("door_code_instruction"): probatio.Maybe(
             _strict_string,
         ),
-        vol.Optional("config_entry_id"): _strict_string,
+        probatio.Optional("config_entry_id"): _strict_string,
     }
 )
 
-SERVICE_GET_RESERVATIONS_SCHEMA = vol.Schema(
+SERVICE_GET_RESERVATIONS_SCHEMA = probatio.Schema(
     {
-        vol.Required("listing_id"): _positive_int,
-        vol.Optional("force_refresh"): vol.Boolean(),
-        vol.Optional("config_entry_id"): _strict_string,
+        probatio.Required("listing_id"): _positive_int,
+        probatio.Optional("force_refresh"): probatio.Boolean(),
+        probatio.Optional("config_entry_id"): _strict_string,
     }
 )
 
-SERVICE_FIND_RESERVATION_SCHEMA = vol.Schema(
+SERVICE_FIND_RESERVATION_SCHEMA = probatio.Schema(
     {
-        vol.Required("guest_name"): _non_empty_string,
-        vol.Required("check_in"): _non_empty_string,
-        vol.Required("check_out"): _non_empty_string,
-        vol.Optional("listing_id"): _positive_int,
-        vol.Optional("config_entry_id"): _strict_string,
+        probatio.Required("guest_name"): _non_empty_string,
+        probatio.Required("check_in"): _non_empty_string,
+        probatio.Required("check_out"): _non_empty_string,
+        probatio.Optional("listing_id"): _positive_int,
+        probatio.Optional("config_entry_id"): _strict_string,
     }
 )
 
-SERVICE_CREATE_TASK_SCHEMA = vol.Schema(
+SERVICE_CREATE_TASK_SCHEMA = probatio.Schema(
     {
-        vol.Required("title"): _non_empty_string,
-        vol.Optional("description"): _strict_string,
-        vol.Optional("listing_id"): _positive_int,
-        vol.Optional("listing_name"): _non_empty_string,
-        vol.Optional("reservation_id"): _positive_int,
-        vol.Optional("status"): vol.In(_TASK_STATUS_VALUES),
-        vol.Optional("priority"): _positive_int,
-        vol.Optional("assignee_user_id"): _positive_int,
-        vol.Optional("can_be_picked_by_group_id"): _positive_int,
-        vol.Optional("supervisor_user_id"): _positive_int,
-        vol.Optional("categories_map"): _positive_int_list,
-        vol.Optional("can_start_from"): _non_empty_string,
-        vol.Optional("should_end_by"): _non_empty_string,
-        vol.Optional("config_entry_id"): _strict_string,
+        probatio.Required("title"): _non_empty_string,
+        probatio.Optional("description"): _strict_string,
+        probatio.Optional("listing_id"): _positive_int,
+        probatio.Optional("listing_name"): _non_empty_string,
+        probatio.Optional("reservation_id"): _positive_int,
+        probatio.Optional("status"): probatio.In(_TASK_STATUS_VALUES),
+        probatio.Optional("priority"): _positive_int,
+        probatio.Optional("assignee_user_id"): _positive_int,
+        probatio.Optional("can_be_picked_by_group_id"): _positive_int,
+        probatio.Optional("supervisor_user_id"): _positive_int,
+        probatio.Optional("categories_map"): _positive_int_list,
+        probatio.Optional("can_start_from"): _non_empty_string,
+        probatio.Optional("should_end_by"): _non_empty_string,
+        probatio.Optional("config_entry_id"): _strict_string,
     }
 )
 
-SERVICE_UPDATE_TASK_SCHEMA = vol.Schema(
+SERVICE_UPDATE_TASK_SCHEMA = probatio.Schema(
     {
-        vol.Required("task_id"): _positive_int,
-        vol.Optional("title"): _non_empty_string,
-        vol.Optional("description"): _strict_string,
-        vol.Optional("listing_id"): _positive_int,
-        vol.Optional("listing_name"): _non_empty_string,
-        vol.Optional("reservation_id"): _positive_int,
-        vol.Optional("status"): vol.In(_TASK_STATUS_VALUES),
-        vol.Optional("priority"): _positive_int,
-        vol.Optional("assignee_user_id"): _positive_int,
-        vol.Optional("can_be_picked_by_group_id"): _positive_int,
-        vol.Optional("supervisor_user_id"): _positive_int,
-        vol.Optional("categories_map"): _positive_int_list,
-        vol.Optional("can_start_from"): _non_empty_string,
-        vol.Optional("should_end_by"): _non_empty_string,
-        vol.Optional("resolution_note"): _strict_string,
-        vol.Optional("config_entry_id"): _strict_string,
+        probatio.Required("task_id"): _positive_int,
+        probatio.Optional("title"): _non_empty_string,
+        probatio.Optional("description"): _strict_string,
+        probatio.Optional("listing_id"): _positive_int,
+        probatio.Optional("listing_name"): _non_empty_string,
+        probatio.Optional("reservation_id"): _positive_int,
+        probatio.Optional("status"): probatio.In(_TASK_STATUS_VALUES),
+        probatio.Optional("priority"): _positive_int,
+        probatio.Optional("assignee_user_id"): _positive_int,
+        probatio.Optional("can_be_picked_by_group_id"): _positive_int,
+        probatio.Optional("supervisor_user_id"): _positive_int,
+        probatio.Optional("categories_map"): _positive_int_list,
+        probatio.Optional("can_start_from"): _non_empty_string,
+        probatio.Optional("should_end_by"): _non_empty_string,
+        probatio.Optional("resolution_note"): _strict_string,
+        probatio.Optional("config_entry_id"): _strict_string,
     }
 )
 
-SERVICE_DELETE_TASK_SCHEMA = vol.Schema(
+SERVICE_DELETE_TASK_SCHEMA = probatio.Schema(
     {
-        vol.Required("task_id"): _positive_int,
-        vol.Optional("config_entry_id"): _strict_string,
+        probatio.Required("task_id"): _positive_int,
+        probatio.Optional("config_entry_id"): _strict_string,
     }
 )
 
-SERVICE_GET_TASKS_SCHEMA = vol.Schema(
+SERVICE_GET_TASKS_SCHEMA = probatio.Schema(
     {
-        vol.Optional("listing_id"): _positive_int,
-        vol.Optional("listing_name"): _non_empty_string,
-        vol.Optional("reservation_id"): _positive_int,
-        vol.Optional("status"): vol.In(_TASK_STATUS_VALUES),
-        vol.Optional("can_start_from_start"): _non_empty_string,
-        vol.Optional("can_start_from_end"): _non_empty_string,
-        vol.Optional("config_entry_id"): _strict_string,
+        probatio.Optional("listing_id"): _positive_int,
+        probatio.Optional("listing_name"): _non_empty_string,
+        probatio.Optional("reservation_id"): _positive_int,
+        probatio.Optional("status"): probatio.In(_TASK_STATUS_VALUES),
+        probatio.Optional("can_start_from_start"): _non_empty_string,
+        probatio.Optional("can_start_from_end"): _non_empty_string,
+        probatio.Optional("config_entry_id"): _strict_string,
     }
 )
 
-SERVICE_GET_USERS_SCHEMA = vol.Schema(
+SERVICE_GET_USERS_SCHEMA = probatio.Schema(
     {
-        vol.Optional("config_entry_id"): _strict_string,
+        probatio.Optional("config_entry_id"): _strict_string,
     }
 )
 
-SERVICE_GET_GROUPS_SCHEMA = vol.Schema(
+SERVICE_GET_GROUPS_SCHEMA = probatio.Schema(
     {
-        vol.Optional("config_entry_id"): _strict_string,
+        probatio.Optional("config_entry_id"): _strict_string,
     }
 )
 
 
-SERVICE_GET_CUSTOM_FIELDS_SCHEMA = vol.Schema(
+SERVICE_GET_CUSTOM_FIELDS_SCHEMA = probatio.Schema(
     {
-        vol.Optional("config_entry_id"): _strict_string,
+        probatio.Optional("config_entry_id"): _strict_string,
     }
 )
 
-SERVICE_GET_CUSTOM_FIELD_VALUES_SCHEMA = vol.Schema(
+SERVICE_GET_CUSTOM_FIELD_VALUES_SCHEMA = probatio.Schema(
     {
-        vol.Required("target_type"): vol.In(("listing", "reservation")),
-        vol.Required("target_id"): _strict_positive_int,
-        vol.Optional("config_entry_id"): _strict_string,
+        probatio.Required("target_type"): probatio.In(("listing", "reservation")),
+        probatio.Required("target_id"): _strict_positive_int,
+        probatio.Optional("config_entry_id"): _strict_string,
     }
 )
 
-SERVICE_SET_CUSTOM_FIELD_SCHEMA = vol.Schema(
+SERVICE_SET_CUSTOM_FIELD_SCHEMA = probatio.Schema(
     {
-        vol.Required("target_type"): vol.In(("listing", "reservation")),
-        vol.Required("target_id"): _strict_positive_int,
-        vol.Optional("customFieldId"): _strict_positive_int,
-        vol.Optional("varName"): _non_empty_string,
-        vol.Required("value"): object,
-        vol.Optional("config_entry_id"): _strict_string,
+        probatio.Required("target_type"): probatio.In(("listing", "reservation")),
+        probatio.Required("target_id"): _strict_positive_int,
+        probatio.Optional("customFieldId"): _strict_positive_int,
+        probatio.Optional("varName"): _non_empty_string,
+        probatio.Required("value"): object,
+        probatio.Optional("config_entry_id"): _strict_string,
     }
 )

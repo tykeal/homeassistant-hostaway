@@ -25,9 +25,16 @@ license = { text = "Apache-2.0" }
 # out of that manifest too.
 dependencies = []
 
+# pytest-homeassistant-custom-component's latest release pins Home Assistant
+# 2026.10.4. Override that development-only pin so its fixtures exercise the
+# minimum-supported release until upstream publishes a matching plugin release.
+# CI also sets UV_OVERRIDE because its test action runs uv pip --no-config.
+[tool.uv]
+override-dependencies = ["homeassistant>=2026.11.0"]
+
 [project.optional-dependencies]
 test = [
-    "homeassistant>=2026.7.2",
+    "homeassistant>=2026.11.0",
     "pytest>=8.0",
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=6.0",
@@ -37,7 +44,7 @@ test = [
 
 [dependency-groups]
 dev = [
-    "homeassistant>=2026.7.2",
+    "homeassistant>=2026.11.0",
     "interrogate>=1.7",
     "mypy>=2.3.0",
     "pytest>=8.0",
@@ -57,6 +64,7 @@ packages = ["custom_components"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+addopts = "-p tests.pytest_bootstrap"
 testpaths = ["tests"]
 
 [tool.mypy]
@@ -69,15 +77,11 @@ explicit_package_bases = true
 mypy_path = "."
 
 [[tool.mypy.overrides]]
-module = "pytest_homeassistant_custom_component.*"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
 module = "homeassistant.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = "voluptuous.*"
+module = "pytest_homeassistant_custom_component.*"
 ignore_missing_imports = true
 
 [tool.ruff]

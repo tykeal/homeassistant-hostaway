@@ -45,6 +45,27 @@ and retrieving reservation data.
    `config/custom_components/` directory
 2. Restart Home Assistant
 
+## Home Assistant compatibility
+
+Hostaway requires Home Assistant 2026.11.0 or later. Home Assistant 2026.11
+uses [Probatio](https://probatio.frenck.dev/llms.txt) schemas at its config-flow
+and service-registration boundaries, and supplies both `probatio` and
+`httpx2` as core dependencies. The integration uses those Home Assistant APIs
+directly. Its manifest intentionally keeps `requirements` empty: hassfest
+rejects requirements already provided by Home Assistant, so the declared
+minimum version is the supported mechanism that guarantees these modules are
+present. No production API boundary in the supported version requires
+Voluptuous schemas.
+
+The test dependency `pytest-homeassistant-custom-component` currently pins
+Home Assistant 2026.10.4. The `uv` development lock overrides that stale
+constraint to test its fixtures against the supported 2026.11 release. The
+test CI job passes the same override in
+`.github/ci/uv-overrides.txt`, because its installer deliberately ignores
+project uv configuration. The test bootstrap loads Home Assistant's httpx
+compatibility alias before that plugin and adapts its import of a logger
+helper moved in 2026.11.
+
 ## Configuration
 
 ### Prerequisites
