@@ -73,10 +73,12 @@ unchanged while the past reservation is omitted from the list.
   not UTC or the Hostaway listing's timezone. Daylight-saving transitions do
   not alter date-only comparisons.
 - The expected check-out representation is the API's ISO calendar date
-  (`YYYY-MM-DD`). A missing or malformed value cannot safely be classified as
-  past; retain that entry and emit a bounded warning without guest, reservation,
-  or raw date data. Do not make the sensor unavailable because one value is
-  malformed.
+  (`YYYY-MM-DD`). A nonempty string that cannot be parsed as that date cannot
+  safely be classified as past; retain the reservation object and emit a
+  bounded warning without guest, reservation, or raw date data. Do not make the
+  sensor unavailable because one value is malformed. The existing model/parser
+  rejects and skips API records with a missing, empty, or non-string
+  `departureDate`; this feature does not change that upstream behavior.
 - The attribute is recalculated through existing sensor/coordinator updates;
   this change adds no midnight timer, API request, or coordinator data filter.
 
@@ -95,10 +97,13 @@ unchanged while the past reservation is omitted from the list.
   selected-reservation attributes.
 - **FR-004**: The sensor MUST preserve the existing list entry fields and
   ordering for retained reservations.
-- **FR-005**: A missing, malformed, or unsupported check-out date MUST be
-  retained rather than treated as past, and MUST produce a bounded warning
-  that does not disclose guest or reservation data. Such input MUST NOT make
-  the entity unavailable or fail attribute construction.
+- **FR-005**: A reservation object supplied to attribute construction with
+  a check-out value that is missing, malformed, or unsupported MUST be retained
+  rather than treated as past, and MUST produce a one-time warning that does
+  not disclose guest or reservation data. Such input MUST NOT make the entity
+  unavailable or fail attribute construction. Existing upstream validation
+  that rejects and skips API records with missing, empty, or non-string
+  `departureDate` values MUST remain unchanged.
 - **FR-006**: Empty and unavailable coordinator data MUST retain existing
   behavior; no new API calls, persisted state, or date-boundary scheduling may
   be introduced.
@@ -111,8 +116,9 @@ unchanged while the past reservation is omitted from the list.
 ## Assumptions
 
 - Hostaway reservation check-in and check-out values are expected to be ISO
-  calendar-date strings; the current model stores these as strings without
-  format validation.
+  calendar-date strings. The current model requires a nonempty string but does
+  not validate its date format; the parser skips records rejected by the
+  existing model validations.
 - Existing coordinator order is authoritative and is preserved after filtering.
 - Existing `filter_cancelled` behavior continues to run before attributes are
   assembled.
@@ -130,8 +136,9 @@ unchanged while the past reservation is omitted from the list.
 - **SC-002**: Every reservation with a valid check-out date equal to or later
   than the current local date remains in the list, in its existing relative
   order and with its existing fields.
-- **SC-003**: Missing or malformed check-out dates remain visible and do not
-  make the sensor unavailable.
+- **SC-003**: An unparsable check-out date on a reservation object supplied
+  to attribute construction remains visible and does not make the sensor
+  unavailable; existing parser behavior for invalid API records is unchanged.
 - **SC-004**: Existing state selection, selected-reservation attributes,
   cancellation behavior, and unrelated sensor behavior continue to pass their
   regression tests.
