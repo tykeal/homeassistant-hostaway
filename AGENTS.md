@@ -158,6 +158,19 @@ This repository uses pre-commit hooks that run automatically on `git commit`.
 
 Check `.pre-commit-config.yaml` for the complete list.
 
+### Pull Request CI
+
+The **Pre-commit (all hooks)** check runs the file hooks against all
+tracked files in the PR merge snapshot. The hook filters still apply:
+`(no files to check)Skipped` means there were no matching files. The check
+also runs gitlint on each commit in the PR, not just the tip or PR title.
+
+To reproduce the two checks locally, run `uv run pre-commit run --all-files`
+on your feature branch. After `git fetch origin main`, check the PR commit
+range with `uvx --from gitlint-core==0.19.1 gitlint --commits origin/main..HEAD`.
+The separate pre-commit.ci check remains active; its `ci.skip` list does not
+apply to the GitHub Actions check.
+
 ### If Pre-Commit Fails
 
 **CRITICAL**: Do NOT use `git reset` or `git commit --amend` after a
