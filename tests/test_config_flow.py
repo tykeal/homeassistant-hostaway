@@ -21,7 +21,11 @@ from custom_components.hostaway.api.const import (
     DEFAULT_RATE_LIMIT_BUDGET,
     RATE_LIMIT_CEILING,
 )
-from custom_components.hostaway.config_flow import _validated_budget
+from custom_components.hostaway.config_flow import (
+    STEP_REAUTH_CONFIRM_SCHEMA,
+    STEP_USER_SCHEMA,
+    _validated_budget,
+)
 from custom_components.hostaway.const import (
     CONF_CLIENT_ID,
     CONF_CLIENT_SECRET,
@@ -140,17 +144,21 @@ class TestStepUser:
         assert result["errors"] == {}
         assert isinstance(result["data_schema"], probatio.Schema)
 
-    def test_user_schema_uses_probatio_and_keeps_string_coercion(self) -> None:
-        """User form keeps its required fields and legacy string coercion."""
-        from custom_components.hostaway.config_flow import STEP_USER_SCHEMA
-
-        assert isinstance(STEP_USER_SCHEMA, probatio.Schema)
-        assert STEP_USER_SCHEMA({CONF_CLIENT_ID: 123, CONF_CLIENT_SECRET: 456}) == {
-            CONF_CLIENT_ID: "123",
-            CONF_CLIENT_SECRET: "456",
-        }
-        with pytest.raises(probatio.Invalid):
-            STEP_USER_SCHEMA({CONF_CLIENT_ID: "client"})
+    def test_credential_schemas_require_strings(self) -> None:
+        """Setup and reauth forms reject non-string credentials."""
+        for schema, valid_input in (
+            (STEP_USER_SCHEMA, VALID_INPUT),
+            (
+                STEP_REAUTH_CONFIRM_SCHEMA,
+                {CONF_CLIENT_SECRET: "test-client-secret"},
+            ),
+        ):
+            assert isinstance(schema, probatio.Schema)
+            assert schema(valid_input) == valid_input
+            for field in valid_input:
+                for invalid_value in (None, 123, True):
+                    with pytest.raises(probatio.Invalid):
+                        schema({**valid_input, field: invalid_value})
 
     @patch(
         "custom_components.hostaway.config_flow._fetch_listings",

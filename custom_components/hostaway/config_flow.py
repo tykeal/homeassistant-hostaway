@@ -77,8 +77,14 @@ _LOGGER = logging.getLogger(__name__)
 
 STEP_USER_SCHEMA = probatio.Schema(
     {
-        probatio.Required(CONF_CLIENT_ID): probatio.Coerce(str),
-        probatio.Required(CONF_CLIENT_SECRET): probatio.Coerce(str),
+        probatio.Required(CONF_CLIENT_ID): str,
+        probatio.Required(CONF_CLIENT_SECRET): str,
+    }
+)
+
+STEP_REAUTH_CONFIRM_SCHEMA = probatio.Schema(
+    {
+        probatio.Required(CONF_CLIENT_SECRET): str,
     }
 )
 
@@ -238,15 +244,9 @@ class HostawayConfigFlow(ConfigFlow, domain=DOMAIN):
                     )
                 return self.async_abort(reason="reauth_successful")
 
-        schema = probatio.Schema(
-            {
-                probatio.Required(CONF_CLIENT_SECRET): probatio.Coerce(str),
-            }
-        )
-
         return self.async_show_form(
             step_id="reauth_confirm",
-            data_schema=schema,
+            data_schema=STEP_REAUTH_CONFIRM_SCHEMA,
             errors=errors,
         )
 
