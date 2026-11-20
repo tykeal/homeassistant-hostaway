@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 
 **Feature Branch**: `009-reservation-upcoming-filter`
 **Created**: 2026-11-20
-**Status**: Draft
+**Status**: Implemented
 **Input**: User request to omit completely past stays from the reservation
 status sensor list.
 

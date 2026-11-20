@@ -20,7 +20,7 @@ entry shape using a deterministic local clock.
 
 ### Tests First (Red)
 
-- [ ] T001 [US1,US2] Add failing tests in
+- [x] T001 [US1,US2] Add failing tests in
   `tests/sensor/test_reservation.py` for past-date exclusion; checkout-today,
   zero-night, and future retention; malformed-date retention and one-time
   privacy-safe warning; stable order and attributes; local timezone and DST
@@ -28,16 +28,16 @@ entry shape using a deterministic local clock.
 
 ### Implementation
 
-- [ ] T002 [US1] Add a typed, documented date-filter helper in
+- [x] T002 [US1] Add a typed, documented date-filter helper in
   `custom_components/hostaway/sensor/helpers.py` that accepts a reservation
   list and local `date`, removes only valid dates strictly before today,
   retains invalid values in order, and emits one generic warning per process.
-- [ ] T003 [US1,US2] In
+- [x] T003 [US1,US2] In
   `custom_components/hostaway/sensor/reservation.py`, obtain today's date from
   Home Assistant's local time utility and pass only the filtered list to
   attribute construction; keep `_reservations`, coordinator data, and selected
   reservation/state behavior unchanged.
-- [ ] T004 [US1,US2] Make existing sensor-list regression tests in
+- [x] T004 [US1,US2] Make existing sensor-list regression tests in
   `tests/sensor/test_reservation.py` deterministic and update only those whose
   fixtures are now past relative to the test clock.
 
@@ -48,12 +48,16 @@ boundary and unchanged state-selection behavior.
 
 **Purpose**: Verify the full regression surface and record completion.
 
-- [ ] T005 Run `uv run pytest tests/ -x -q`,
+- [x] T005 Run `uv run pytest tests/ -x -q`,
   `uv run ruff check custom_components/ tests/`,
   `uv run mypy custom_components/`,
   `uv run interrogate custom_components/`, and
   `uv run pre-commit run --all-files`; resolve any regressions.
-- [ ] T006 Mark completed items in this `tasks.md` in a separate documentation
+  - Direct `uv run mypy custom_components/` reported five unrelated
+    `config_flow.py` typing errors with the worktree's Home Assistant 2026.10.4
+    dependency. The repository-pinned pre-commit mypy environment passed all
+    70 files.
+- [x] T006 Mark completed items in this `tasks.md` in a separate documentation
   commit from implementation and test code.
 
 ## Dependencies and Execution Order
