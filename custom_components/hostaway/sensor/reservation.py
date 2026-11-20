@@ -12,6 +12,7 @@ from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.typing import StateType
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 
 from custom_components.hostaway.api.models import HostawayReservation
 from custom_components.hostaway.const import (
@@ -24,6 +25,7 @@ from .helpers import (
     _CANCELLED_STATUSES,
     _build_reservation_attributes,
     _derive_state,
+    _filter_upcoming_reservations,
     _select_reservation,
 )
 
@@ -173,6 +175,10 @@ class HostawayReservationStatusSensor(
         """
         reservations = self._reservations
         selected = _select_reservation(reservations)
+        upcoming_reservations = _filter_upcoming_reservations(
+            reservations,
+            dt_util.now().date(),
+        )
         definitions = (
             self._custom_fields_coordinator.data
             if self._custom_fields_coordinator is not None
@@ -180,7 +186,7 @@ class HostawayReservationStatusSensor(
         )
         return _build_reservation_attributes(
             selected,
-            reservations,
+            upcoming_reservations,
             self._listing_id,
             definitions,
         )

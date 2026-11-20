@@ -181,9 +181,14 @@ class TestUpcomingReservationFiltering:
             guest_name="Sensitive Guest Name",
             check_out="not-a-date",
         )
+        missing_date = _make_reservation(
+            2,
+            guest_name="Another Sensitive Guest",
+            check_out=cast(str, None),
+        )
         sensor = await _make_reservation_sensor(
             hass,
-            [reservation],
+            [reservation, missing_date],
             filter_cancelled=False,
         )
 
@@ -191,8 +196,8 @@ class TestUpcomingReservationFiltering:
             first = sensor.extra_state_attributes["upcoming_reservations"]
             second = sensor.extra_state_attributes["upcoming_reservations"]
 
-        assert [item["id"] for item in first] == [1]
-        assert [item["id"] for item in second] == [1]
+        assert [item["id"] for item in first] == [1, 2]
+        assert [item["id"] for item in second] == [1, 2]
         warnings = [
             record
             for record in caplog.records
@@ -200,6 +205,7 @@ class TestUpcomingReservationFiltering:
         ]
         assert len(warnings) == 1
         assert "Sensitive Guest Name" not in caplog.text
+        assert "Another Sensitive Guest" not in caplog.text
         assert "not-a-date" not in caplog.text
         assert "reservation 1" not in caplog.text
 
@@ -804,6 +810,7 @@ class TestReservationStatusSensor:
     async def test_extra_state_attributes(
         self,
         hass: HomeAssistant,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Attributes include guest_name, door_code, upcoming."""
         entry = _make_entry(selected=[100])
@@ -833,6 +840,11 @@ class TestReservationStatusSensor:
         await res_coord.async_refresh()
 
         sensor = HostawayReservationStatusSensor(res_coord, listings_coord, 100, entry)
+        monkeypatch.setattr(
+            dt_util,
+            "now",
+            lambda: datetime(2025, 1, 1, tzinfo=UTC),
+        )
         attrs = sensor.extra_state_attributes
         assert attrs["guest_name"] == "Jane Smith"
         assert attrs["door_code"] == "5678"
@@ -846,6 +858,7 @@ class TestReservationStatusSensor:
     async def test_upcoming_reservations_sorted(
         self,
         hass: HomeAssistant,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """upcoming_reservations sorted by check_in."""
         entry = _make_entry(selected=[100])
@@ -864,6 +877,11 @@ class TestReservationStatusSensor:
         await res_coord.async_refresh()
 
         sensor = HostawayReservationStatusSensor(res_coord, listings_coord, 100, entry)
+        monkeypatch.setattr(
+            dt_util,
+            "now",
+            lambda: datetime(2025, 1, 1, tzinfo=UTC),
+        )
         upcoming = sensor.extra_state_attributes["upcoming_reservations"]
         assert upcoming[0]["check_in"] == "2025-08-01"
         assert upcoming[1]["check_in"] == "2025-09-01"
@@ -1039,6 +1057,7 @@ class TestReservationStatusSensor:
     async def test_filter_cancelled_excludes_cancelled(
         self,
         hass: HomeAssistant,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Cancelled reservations excluded when filter enabled."""
         entry = _make_entry(selected=[100])
@@ -1078,6 +1097,11 @@ class TestReservationStatusSensor:
             100,
             entry,
         )
+        monkeypatch.setattr(
+            dt_util,
+            "now",
+            lambda: datetime(2025, 1, 1, tzinfo=UTC),
+        )
         assert sensor.native_value == "awaiting_checkin"
         upcoming = sensor.extra_state_attributes["upcoming_reservations"]
         assert len(upcoming) == 1
@@ -1086,6 +1110,7 @@ class TestReservationStatusSensor:
     async def test_filter_cancelled_disabled_shows_all(
         self,
         hass: HomeAssistant,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """All reservations shown when filter disabled."""
         entry = _make_entry(selected=[100])
@@ -1122,6 +1147,11 @@ class TestReservationStatusSensor:
             listings_coord,
             100,
             entry,
+        )
+        monkeypatch.setattr(
+            dt_util,
+            "now",
+            lambda: datetime(2025, 1, 1, tzinfo=UTC),
         )
         upcoming = sensor.extra_state_attributes["upcoming_reservations"]
         assert len(upcoming) == 2

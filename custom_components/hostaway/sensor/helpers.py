@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import date
 from typing import Any
 
 from custom_components.hostaway.api.custom_fields import (
@@ -73,6 +74,8 @@ _CANCELLED_STATUSES: frozenset[str] = frozenset(
     {"cancelled", "declined", "expired"},
 )
 
+_warned_invalid_check_out_date = False
+
 
 def _select_reservation(
     reservations: list[HostawayReservation],
@@ -130,9 +133,68 @@ def _derive_state(
     return "unknown"
 
 
+def _parse_check_out_date(value: object) -> date | None:
+    """Parse a canonical Hostaway check-out date.
+
+    Args:
+        value: Candidate date value from a reservation.
+
+    Returns:
+        Parsed date, or None if the value is not a canonical ISO date.
+    """
+    if not isinstance(value, str):
+        return None
+    try:
+        check_out = date.fromisoformat(value)
+    except ValueError:
+        return None
+    if check_out.isoformat() != value:
+        return None
+    return check_out
+
+
+def _filter_upcoming_reservations(
+    reservations: list[HostawayReservation],
+    today: date,
+) -> list[HostawayReservation]:
+    """Keep reservations that are not known to be completely in the past.
+
+    Only canonical ``YYYY-MM-DD`` check-out dates are used for comparison.
+    Entries with an invalid date are retained because their past status cannot
+    be established from the available data.
+
+    Args:
+        reservations: Reservations in their existing sorted order.
+        today: Current Home Assistant local calendar date.
+
+    Returns:
+        Reservations checking out today or later, plus entries whose check-out
+        date cannot be parsed.
+    """
+    global _warned_invalid_check_out_date
+
+    upcoming: list[HostawayReservation] = []
+    for reservation in reservations:
+        check_out = _parse_check_out_date(reservation.check_out)
+        if check_out is None:
+            if not _warned_invalid_check_out_date:
+                _LOGGER.warning(
+                    "Hostaway reservation with an invalid check-out date is "
+                    "retained in upcoming_reservations",
+                )
+                _warned_invalid_check_out_date = True
+            upcoming.append(reservation)
+            continue
+
+        if check_out >= today:
+            upcoming.append(reservation)
+
+    return upcoming
+
+
 def _build_reservation_attributes(
     reservation: HostawayReservation | None,
-    all_reservations: list[HostawayReservation],
+    upcoming_reservations: list[HostawayReservation],
     listing_id: int,
     definitions: list[HostawayCustomFieldDefinition] | None = None,
 ) -> dict[str, Any]:
@@ -144,8 +206,8 @@ def _build_reservation_attributes(
 
     Args:
         reservation: The selected reservation, or None.
-        all_reservations: All reservations for the listing
-            (pre-sorted by check_in from coordinator).
+        upcoming_reservations: Reservations to include in the upcoming list,
+            pre-sorted by check_in from coordinator.
         listing_id: The listing ID.
 
     Returns:
@@ -159,7 +221,7 @@ def _build_reservation_attributes(
             "check_out": current.check_out,
             "status": current.status,
         }
-        for current in all_reservations
+        for current in upcoming_reservations
     ]
 
     if reservation is None:
