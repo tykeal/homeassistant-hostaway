@@ -25,20 +25,13 @@ license = { text = "Apache-2.0" }
 # out of that manifest too.
 dependencies = []
 
-# pytest-homeassistant-custom-component's latest release pins Home Assistant
-# 2026.10.4. Override that development-only pin so its fixtures exercise the
-# minimum-supported release until upstream publishes a matching plugin release.
-# CI also sets UV_OVERRIDE because its test action runs uv pip --no-config.
-[tool.uv]
-override-dependencies = ["homeassistant>=2026.11.0"]
-
 [project.optional-dependencies]
 test = [
     "homeassistant>=2026.11.0",
     "pytest>=8.0",
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=6.0",
-    "pytest-homeassistant-custom-component>=0.13.340",
+    "pytest-homeassistant>=2026.11.0",
     "respx>=0.22",
 ]
 
@@ -50,7 +43,7 @@ dev = [
     "pytest>=8.0",
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=6.0",
-    "pytest-homeassistant-custom-component>=0.13.340",
+    "pytest-homeassistant>=2026.11.0",
     "respx>=0.22",
     "ruff>=0.15.21",
 ]
@@ -64,7 +57,9 @@ packages = ["custom_components"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-addopts = "-p tests.pytest_bootstrap"
+asyncio_default_fixture_loop_scope = "function"
+# Let Home Assistant install its httpx alias before respx is imported.
+addopts = "-p no:respx"
 pythonpath = ["."]
 testpaths = ["tests"]
 
@@ -82,7 +77,7 @@ module = "homeassistant.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = "pytest_homeassistant_custom_component.*"
+module = "pytest_homeassistant.*"
 ignore_missing_imports = true
 
 [tool.ruff]
