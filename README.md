@@ -57,14 +57,9 @@ minimum version is the supported mechanism that guarantees these modules are
 present. No production API boundary in the supported version requires
 Voluptuous schemas.
 
-The test dependency `pytest-homeassistant-custom-component` currently pins
-Home Assistant 2026.10.4. The `uv` development lock overrides that stale
-constraint to test its fixtures against the supported 2026.11 release. The
-test CI job passes the same override in
-`.github/ci/uv-overrides.txt`, because its installer deliberately ignores
-project uv configuration. The test bootstrap loads Home Assistant's httpx
-compatibility alias before that plugin and adapts its import of a logger
-helper moved in 2026.11.
+The test suite uses Home Assistant's official
+[`pytest-homeassistant`](https://github.com/home-assistant/core/tree/dev/packages/pytest-homeassistant)
+plugin, whose releases track Home Assistant versions.
 
 ## Configuration
 

@@ -3,7 +3,7 @@
 ---
 ignore:
   # urllib3 is a transitive dependency pulled in via homeassistant and
-  # test deps (pytest-homeassistant-custom-component, etc.). This
+  # test deps (pytest-homeassistant, etc.). This
   # integration's runtime code depends directly on httpx, not urllib3,
   # so we cannot bump the urllib3 pin from this project. The advisory
   # is fixed in urllib3 >= 2.7.0; remove this entry once the upstream

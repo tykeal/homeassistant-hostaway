@@ -64,7 +64,7 @@ repos:
         args: ["--fix=lf"]
       - id: name-tests-test
         args: ["--pytest-test-first"]
-        exclude: "^tests/(conftest|helpers|pytest_bootstrap)\\.py$"
+        exclude: "^tests/(conftest|helpers)\\.py$"
       # Disabled; TOX lint will otherwise fail
       - id: no-commit-to-branch
         args:
@@ -220,8 +220,8 @@ repos:
         additional_dependencies:
           # Keep mypy aligned with uv.lock so standalone and hook checks use
           # the same Home Assistant public APIs. The hook deliberately omits
-          # pytest-homeassistant-custom-component, whose latest release pins
-          # Home Assistant 2026.10.4 and is not needed to type-check source.
+          # pytest-homeassistant: it ships no type information, so mypy
+          # treats it as missing via an override in pyproject.toml anyway.
           - "homeassistant==2026.11.2"
           - "pytest"
           - "httpx"
