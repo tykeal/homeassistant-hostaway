@@ -120,7 +120,8 @@ content, and the custom-field service error; verify sensor selection and
   page containing one invalid-date record returns the remaining valid
   records, and that the skip warning contains the reservation and listing
   IDs but not the raw date value or guest name; a non-integer reservation ID
-  is omitted from the log.
+  is omitted from the log; and a full page whose last record has a
+  non-integer ID (via `fetch_all_reservations`) logs no raw ID value.
 - [ ] T011 [US3] In the custom-field service tests, add a failing test that
   reading or writing a reservation whose payload has invalid dates raises
   `ServiceValidationError` naming the reservation and sends no write.
@@ -140,11 +141,11 @@ content, and the custom-field service error; verify sensor selection and
 - [ ] T013 [US3] Add `custom_components/hostaway/api/dates.py` with the
   canonical `parse_calendar_date` moved from the sensor helpers; validate
   reservation dates in `HostawayReservation.__post_init__` in
-  `api/models.py` with generic
-  messages; log the reservation ID in `_log_skipped_reservation` only when it
-  is a positive integer; translate `ValueError` in the custom-field services'
-  `_read_target_collection` and `_read_target_model`
-  (`_read_target_snapshot` already does).
+  `api/models.py` with generic messages; log the reservation ID in
+  `_log_skipped_reservation` only when it is a positive integer, and drop
+  the raw last ID from the `reservation_page_cursor` warning; translate
+  `ValueError` in the custom-field services' `_read_target_collection` and
+  `_read_target_model` (`_read_target_snapshot` already does).
 - [ ] T014 [US1,US2,US3] In `custom_components/hostaway/sensor/helpers.py`,
   remove the undated group and rank, 009's invalid check-out retention, both
   warning flags, and the local date parser; parse dates with
