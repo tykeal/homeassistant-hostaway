@@ -95,6 +95,72 @@ tie-break, past-only, cancellation, and calendar-advance scenario, with
 - [x] T008 Mark completed items in this `tasks.md` in a separate documentation
   commit from implementation, test code, and the specification status.
 
+## Phase 3: Amendment - Drop Invalid-Date Reservations at Ingest (Issue #300)
+
+**Goal**: Reject reservations with invalid dates (a missing or non-canonical
+check-in or check-out, or check-out before check-in) when they are parsed,
+drop them from reservation lists with an IDs-only log, and remove the
+sensor's now-dead invalid-date handling, per spec FR-002, FR-012, FR-015 to
+FR-017, and SC-006.
+
+**Independent Test**: Parse reservation payloads and pages containing
+invalid dates; verify rejection, that valid records survive, the log
+content, and the custom-field service error; verify sensor selection and
+`upcoming_reservations` for valid data are unchanged.
+
+### Amendment Tests First (Red)
+
+- [ ] T009 [US3] In the API model tests, add failing tests that
+  `HostawayReservation.from_api_response` and direct construction raise
+  `ValueError` for unparsable, non-canonical (for example `2025-8-1` and a
+  timestamp), and empty values of `arrivalDate` and `departureDate`, and for
+  a departure before arrival, with messages that omit the raw value; equal
+  dates are accepted.
+- [ ] T010 [US3] In the reservation parsing tests, add failing tests that a
+  page containing one invalid-date record returns the remaining valid
+  records, and that the skip warning contains the reservation and listing
+  IDs but not the raw date value or guest name; a non-integer reservation ID
+  is omitted from the log.
+- [ ] T011 [US3] In the custom-field service tests, add a failing test that
+  reading or writing a reservation whose payload has invalid dates raises
+  `ServiceValidationError` naming the reservation and sends no write.
+- [ ] T012 [US3] In `tests/sensor/test_reservation.py`, remove the 009 test
+  asserting invalid check-out retention and the 010 undated selection and
+  warning tests (`test_undated_ranks_after_dated`,
+  `test_undated_only_uses_status_then_input_order`, the inverted and
+  malformed-date cases, and both warning tests), since such reservations can
+  no longer be constructed. Give existing fixtures that build inverted ranges
+  (a later check-in over the default `2025-08-05` check-out, in
+  `tests/test_coordinator.py` and `tests/sensor/test_reservation.py`) a
+  check-out on or after check-in, keeping their assertions. Keep valid-data
+  selection and list tests otherwise unchanged.
+
+### Amendment Implementation
+
+- [ ] T013 [US3] Add `custom_components/hostaway/api/dates.py` with the
+  canonical `parse_calendar_date` moved from the sensor helpers; validate
+  reservation dates in `HostawayReservation.__post_init__` in
+  `api/models.py` with generic
+  messages; log the reservation ID in `_log_skipped_reservation` only when it
+  is a positive integer; translate `ValueError` in the custom-field services'
+  `_read_target_collection` and `_read_target_model`
+  (`_read_target_snapshot` already does).
+- [ ] T014 [US1,US2,US3] In `custom_components/hostaway/sensor/helpers.py`,
+  remove the undated group and rank, 009's invalid check-out retention, both
+  warning flags, and the local date parser; parse dates with
+  `date.fromisoformat`; update docstrings. Past, current, and upcoming rules,
+  tie-breaks, and list order are unchanged.
+- [ ] T015 Run `uv run pytest tests/ -q`,
+  `uv run ruff check custom_components/ tests/`,
+  `uv run mypy custom_components/`, `uv run interrogate custom_components/`,
+  and `uv run pre-commit run --all-files`; resolve any regressions.
+- [ ] T016 Mark T009-T016 complete in this `tasks.md` in a separate
+  documentation commit from implementation and test code.
+
+**Checkpoint**: No invalid-date reservation is parsed, selected, or listed;
+valid reservation selection, tie-breaks, list order, and past and
+checkout-today semantics are unchanged.
+
 ## Dependencies and Execution Order
 
 - T001 and T002 have no implementation dependency and MUST fail on the
@@ -107,3 +173,8 @@ tie-break, past-only, cancellation, and calendar-advance scenario, with
 - T006 depends on T001–T005.
 - T007 depends on T006.
 - T008 depends on T007 and is a separate commit from source and test changes.
+- T009-T012 MUST fail (or, for T012, be removed) against the current
+  behavior before T013 begins.
+- T013 depends on T009-T011; T014 depends on T012 and T013.
+- T015 depends on T013 and T014.
+- T016 depends on T015 and is a separate commit from source and test changes.
