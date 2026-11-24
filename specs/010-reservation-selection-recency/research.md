@@ -130,6 +130,23 @@ SPDX-License-Identifier: Apache-2.0
   rewrites state. A midnight callback would add complexity for at most one
   refresh interval of staleness.
 
+### One date per state write
+
+- **Decision**: Each property reads the local date when evaluated;
+  `extra_state_attributes` shares one date between selection and the list
+  filter. A midnight crossing between Home Assistant's separate reads of
+  state and attributes is accepted and documented in the spec.
+- **Rationale**: Home Assistant computes state and attributes synchronously,
+  microseconds apart, and the next refresh corrects any mismatch. The public
+  write entry points (`async_write_ha_state`, `async_update_ha_state`) do not
+  cover every path into the private state calculation, so a reliable
+  per-write snapshot is not available without private hooks.
+- **Alternatives considered**: Overriding public write methods to pin a date
+  (misses other write paths and is fragile across concurrent writes);
+  precomputing state in the coordinator-update callback (freezes the date
+  while refreshes fail and diverges from 009's live property design);
+  short-lived time-based caches (only move the boundary).
+
 ## References in the Repository
 
 - `custom_components/hostaway/sensor/helpers.py`: `_STATUS_PRIORITY`,

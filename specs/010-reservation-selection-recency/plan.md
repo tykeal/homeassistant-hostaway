@@ -114,7 +114,11 @@ of Home Assistant imports and adds no complexity requiring justification.
    each coordinator refresh. No midnight timer is added. State and attributes
    are read microseconds apart during a single state write; a local-midnight
    crossing between those two reads is an accepted, self-correcting race that
-   the next refresh resolves.
+   the next refresh resolves, as recorded in the spec's timing edge case and
+   FR-010. Guaranteeing one date per write would require hooking Home
+   Assistant's private write path or caching selection outside property
+   evaluation, which would also freeze the date between coordinator updates;
+   see research.md.
 
 ### Test Design
 
