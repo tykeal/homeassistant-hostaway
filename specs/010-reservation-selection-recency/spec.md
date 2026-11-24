@@ -62,10 +62,10 @@ and verify that the state and selected attributes describe the future booking.
    is evaluated, **Then** the stay in progress is selected.
 4. **Given** a stay whose check-out date is today, **When** the sensor is
    evaluated, **Then** that stay is treated as in progress and remains eligible.
-5. **Given** any data, **When** the sensor reports its state and attributes,
-   **Then** the state and every selected-reservation attribute describe the
-   same reservation, and that reservation is also present in
-   `upcoming_reservations`.
+5. **Given** any data and a local date, **When** the sensor reports its state
+   and attributes for that date, **Then** the state and every
+   selected-reservation attribute describe the same reservation, and that
+   reservation is also present in `upcoming_reservations`.
 
 ### User Story 2 - Past-only listing reports no reservation (Priority: P1)
 
@@ -203,7 +203,12 @@ Home Assistant clock and evaluate again.
 - **Timing**: The state is recalculated whenever Home Assistant evaluates the
   entity, including each coordinator refresh. No midnight timer or extra API
   request is added, so a date-boundary change is reflected on the next
-  refresh (by default within two minutes).
+  refresh (by default within two minutes). Home Assistant reads the state and
+  the attributes separately, microseconds apart; if local midnight falls
+  between those two reads, that single write can pair the old date's state
+  with the new date's details. This window is accepted because it is
+  vanishingly small, requires no new scheduling or Home Assistant internals,
+  and the next refresh rewrites a consistent state.
 - **Unavailable data**: When coordinator data is unavailable, availability and
   attribute behavior are unchanged.
 
@@ -239,9 +244,10 @@ Home Assistant clock and evaluate again.
   `no_reservation` and use the existing no-selection attribute shape: all
   selected-reservation detail attributes null, `custom_fields` empty, and
   `listing_id` and `upcoming_reservations` present.
-- **FR-010**: The sensor state and all selected-reservation attributes MUST be
-  derived from the same selection rules, and a selected reservation MUST also
-  appear in `upcoming_reservations`.
+- **FR-010**: For a given local date, the sensor state and all
+  selected-reservation attributes MUST be derived from the same selection, and
+  a selected reservation MUST also appear in `upcoming_reservations` computed
+  for that date.
 - **FR-011**: The existing `filter_cancelled` option MUST continue to govern
   whether cancelled, declined, and expired reservations are considered, and
   MUST be applied before classification.
