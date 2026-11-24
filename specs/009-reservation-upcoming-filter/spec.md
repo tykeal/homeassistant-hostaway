@@ -11,6 +11,16 @@ SPDX-License-Identifier: Apache-2.0
 **Input**: User request to omit completely past stays from the reservation
 status sensor list.
 
+> **Superseded in part (issue #300)**: The rule that retains reservations
+> with a missing, malformed, or unsupported check-out date in
+> `upcoming_reservations` (the malformed-date edge case, FR-005, and SC-003)
+> is superseded. Reservations with invalid dates, as defined by
+> `specs/010-reservation-selection-recency/spec.md` FR-015, are now rejected
+> when the API response is parsed, so they never reach the sensor or this
+> list, and this feature's invalid check-out warning is removed. See the
+> amendment in that specification. The text below is preserved as originally
+> implemented.
+
 ## User Scenarios & Testing
 
 ### User Story 1 - See only current and future stays (Priority: P1)
@@ -79,6 +89,7 @@ unchanged while the past reservation is omitted from the list.
   sensor unavailable because one value is malformed. The existing model/parser
   rejects and skips API records with a missing, empty, or non-string
   `departureDate`; this feature does not change that upstream behavior.
+  *(Superseded by issue #300; see the note above.)*
 - The attribute is recalculated through existing sensor/coordinator updates;
   this change adds no midnight timer, API request, or coordinator data filter.
 
@@ -104,6 +115,7 @@ unchanged while the past reservation is omitted from the list.
   unavailable or fail attribute construction. Existing upstream validation
   that rejects and skips API records with missing, empty, or non-string
   `departureDate` values MUST remain unchanged.
+  *(Superseded by issue #300; see the note above.)*
 - **FR-006**: Empty and unavailable coordinator data MUST retain existing
   behavior; no new API calls, persisted state, or date-boundary scheduling may
   be introduced.
@@ -139,6 +151,7 @@ unchanged while the past reservation is omitted from the list.
 - **SC-003**: An unparsable check-out date on a reservation object supplied
   to attribute construction remains visible and does not make the sensor
   unavailable; existing parser behavior for invalid API records is unchanged.
+  *(Superseded by issue #300; see the note above.)*
 - **SC-004**: Existing state selection, selected-reservation attributes,
   cancellation behavior, and unrelated sensor behavior continue to pass their
   regression tests.

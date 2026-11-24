@@ -7,9 +7,35 @@ SPDX-License-Identifier: Apache-2.0
 
 **Feature Branch**: `010-reservation-selection-recency`
 **Created**: 2026-11-24
-**Status**: Implemented
+**Status**: Implemented; amended 2026-11-24 (issue #300)
 **Input**: Issue #295, "Investigate past reservations driving selected sensor
 state", plus maintainer analysis and confirmed design decisions.
+
+## Amendment: Drop Invalid-Date Reservations at Ingest (Issue #300)
+
+After this feature shipped, the maintainer decided that "a reservation with
+missing or invalid dates is... invalid, it should not be anything we ever
+surface / use," and that "we should drop bad data during ingest and log
+identifying information at most about it." This amendment replaces the
+original last-resort "undated" selection group:
+
+- A reservation's dates are **invalid** when its check-in (`arrivalDate`) or
+  check-out (`departureDate`) is missing or not a canonical `YYYY-MM-DD`
+  calendar date, or when its check-out date is before its check-in date.
+- Invalid reservations are rejected when the API response is parsed into a
+  reservation object. In reservation lists, the bad record is dropped and the
+  rest of the page is kept; the log names at most the reservation ID, the
+  listing ID, and a generic reason, never raw date values, guest data, or
+  other payload content.
+- Because invalid reservations never reach the sensor, they are never
+  selected and never appear in `upcoming_reservations`. When only past
+  reservations remain, the sensor reports `no_reservation` with the existing
+  null-detail attributes.
+- The sensor's original undated group and undated warning, and feature 009's
+  retention of unparsable check-out dates with its warning, are removed.
+
+The requirements below are written in their amended form; the original
+undated design is preserved in git history (PRs #296-#299).
 
 ## Background
 
@@ -92,21 +118,27 @@ before today and verify the state and selected attributes.
 3. **Given** the same data with cancellation filtering disabled, **When** the
    sensor is evaluated, **Then** the non-past cancelled reservation is selected
    and the state is `cancelled`.
+4. **Given** a listing whose API data contains only past reservations and
+   reservations with invalid dates, **When** the data is fetched and the
+   sensor is evaluated, **Then** the invalid records are dropped at ingest and
+   the state is `no_reservation` with the same null-detail attributes and an
+   empty `upcoming_reservations`.
 
 ### User Story 3 - Deterministic choice among candidates (Priority: P2)
 
 As a Home Assistant user, I want a predictable choice when several eligible
-reservations compete, including same-day turnovers, equal statuses, and
-reservations whose dates cannot be read, so that the sensor does not change
-between refreshes when the data has not changed.
+reservations compete, including same-day turnovers and equal statuses, and I
+want reservations whose dates cannot be trusted to be dropped, so that the
+sensor does not change between refreshes when the data has not changed.
 
 **Why this priority**: Ambiguous ties cause state flapping and make
 automations hard to reason about, but they are less common than the primary
 defect.
 
-**Independent Test**: Provide competing current, upcoming, and undated
-reservations with equal and unequal statuses, in varying input orders, and
-verify the selected reservation.
+**Independent Test**: Provide competing current and upcoming reservations
+with equal and unequal statuses, in varying input orders, and verify the
+selected reservation; parse API records with invalid dates and verify that
+they are dropped.
 
 **Acceptance Scenarios**:
 
@@ -127,14 +159,16 @@ verify the selected reservation.
 5. **Given** candidates tied on bucket, status priority, and check-in date,
    **When** the sensor is evaluated in any input order, **Then** the
    reservation with the lowest reservation ID is selected.
-6. **Given** a reservation with a missing, malformed, or inverted date range
-   and a current or upcoming reservation with valid dates, **When** the sensor
-   is evaluated, **Then** the reservation with valid dates is selected
-   regardless of status priority.
-7. **Given** only reservations with unusable dates, **When** the sensor is
-   evaluated, **Then** the best status priority is selected and input order
-   breaks ties; selection logs its generic undated-reservation warning at most
-   once per process, independent of feature 009's check-out warning.
+6. **Given** an API page containing a reservation with a missing, malformed,
+   or inverted date range and a reservation with valid dates, **When** the
+   page is parsed, **Then** only the valid reservation is returned, the
+   invalid record is logged with at most its reservation ID, listing ID, and
+   a generic reason, and the sensor never selects or lists the invalid
+   record whatever its status.
+7. **Given** a listing whose API data contains only reservations with
+   invalid dates, **When** the data is fetched and the sensor is evaluated,
+   **Then** the state is `no_reservation` and `upcoming_reservations` is
+   empty.
 
 ### User Story 4 - Selection follows refreshes and the calendar (Priority: P2)
 
@@ -157,9 +191,11 @@ Home Assistant clock and evaluate again.
    **When** the sensor is next evaluated, **Then** the selection reflects the
    refreshed data.
 3. **Given** any reservation data, **When** the sensor is evaluated, **Then**
-   the contents, order, and entry shape of `upcoming_reservations`, the
-   coordinator data and its order, services, entity identifiers, the state
-   option list, and attribute keys are unchanged from feature 009 behavior.
+   the order and entry shape of `upcoming_reservations`, its past and
+   checkout-today semantics, the coordinator data and its order, services,
+   entity identifiers, the state option list, and attribute keys are unchanged
+   from feature 009 behavior; only invalid-date reservations, now dropped at
+   ingest, no longer appear.
 
 ## Edge Cases
 
@@ -185,17 +221,29 @@ Home Assistant clock and evaluate again.
 - **Unknown statuses**: Continue to rank after all known statuses within their
   date group and continue to report `unknown` with the existing one-time
   warning per status.
-- **Missing or malformed dates**: A date value is usable only when it is a
-  canonical `YYYY-MM-DD` calendar date. The existing API parser already skips
-  records with missing, empty, or non-string dates; this feature handles any
-  that still reach the sensor without raising or becoming unavailable.
-- **Inverted range**: A reservation whose check-out date is before its check-in
-  date is treated as having unusable dates, unless its valid check-out date is
-  before today, in which case it is past.
-- **Past determination uses check-out only**: A reservation with a valid
-  check-out date before today is past, whatever its check-in value. This
-  matches feature 009, so the selected reservation always appears in
-  `upcoming_reservations`.
+- **Missing or malformed dates**: A date value is valid only when it is a
+  canonical `YYYY-MM-DD` calendar date. A reservation is invalid when either
+  date is missing or not valid, or when its check-out date is before its
+  check-in date (an inverted range). Invalid reservations are rejected when
+  parsed, including one with a valid past check-out and a malformed check-in.
+  The parser already skipped records with missing, empty, or non-string
+  dates; it now also skips non-canonical and inverted dates.
+- **Zero-night stays at ingest**: Equal check-in and check-out dates are
+  valid. The optional `nights` value is not cross-checked against the dates;
+  it is already validated as non-negative and is not used for selection.
+- **Ingest logging**: A dropped list record is logged by the existing skip
+  path with at most its reservation ID (only when it is a positive integer),
+  the listing ID, and a generic reason naming the failed field. Raw date
+  values, guest names, and other payload content are never logged. The skip
+  path logs each time a refresh parses the record, as it already does for
+  other malformed records.
+- **Single-reservation reads**: Services that read one reservation by explicit
+  ID (the custom-field read and write services) receive the same rejection.
+  The service fails with a clear error naming the reservation and the generic
+  reason, and no write is attempted when the pre-write read fails.
+- **Past determination**: A reservation is past when its check-out date is
+  before today. Feature 009's list filter and selection share this rule, so
+  the selected reservation always appears in `upcoming_reservations`.
 - **Date context**: Today is the Home Assistant local calendar date, the same
   basis as feature 009. The Hostaway listing's own timezone is out of scope;
   near midnight, a Home Assistant instance in a different timezone from the
@@ -220,24 +268,20 @@ Home Assistant clock and evaluate again.
   local calendar date each time the selection is evaluated.
 - **FR-002**: The sensor MUST classify each reservation remaining after the
   existing cancellation filter into exactly one group:
-  1. **Past**: its check-out date is a valid date strictly before today.
-  2. **Current**: not past; both dates are valid; check-in is on or before
-     today; check-out is on or after check-in.
-  3. **Upcoming**: not past; both dates are valid; check-in is after today;
-     check-out is on or after check-in.
-  4. **Undated**: not past, and any date is missing or not a canonical
-     `YYYY-MM-DD` calendar date, or check-out is before check-in.
+  1. **Past**: its check-out date is strictly before today.
+  2. **Current**: not past; check-in is on or before today.
+  3. **Upcoming**: not past; check-in is after today.
+  Every reservation reaching the sensor has valid dates (FR-015).
 - **FR-003**: The sensor MUST never select a past reservation.
 - **FR-004**: The sensor MUST select a current reservation when one exists,
-  otherwise an upcoming reservation when one exists, otherwise an undated
-  reservation when one exists, otherwise no reservation.
+  otherwise an upcoming reservation when one exists, otherwise no reservation.
 - **FR-005**: Within the current group, the sensor MUST rank by existing status
   priority, then by the later check-in date, then by the lowest reservation ID.
 - **FR-006**: Within the upcoming group, the sensor MUST rank by existing status
   priority, then by the earlier check-in date, then by the lowest reservation
   ID.
-- **FR-007**: Within the undated group, the sensor MUST rank by existing status
-  priority, then by existing input order.
+- **FR-007**: `upcoming_reservations` MUST contain exactly the current and
+  upcoming reservations, in existing coordinator order.
 - **FR-008**: Existing status priorities, the unknown-status fallback, the
   status-to-state mapping, and the state option list MUST NOT change.
 - **FR-009**: When no reservation is selected, the sensor MUST report
@@ -251,31 +295,49 @@ Home Assistant clock and evaluate again.
 - **FR-011**: The existing `filter_cancelled` option MUST continue to govern
   whether cancelled, declined, and expired reservations are considered, and
   MUST be applied before classification.
-- **FR-012**: The first time selection encounters an undated reservation in a
-  process, the sensor MUST log one generic warning that contains no guest
-  name, reservation ID, date value, or other reservation data. An undated
-  reservation MUST NOT make the entity unavailable or fail evaluation.
-- **FR-013**: The feature MUST NOT change coordinator data or its sort order,
-  API requests, services, entity identifiers, attribute keys, or the contents,
-  order, entry shape, and filtering semantics of `upcoming_reservations`
-  defined by feature 009. It MUST NOT add timers, persisted state, or API
-  calls.
+- **FR-012**: The sensor MUST NOT contain a selection group, retention rule,
+  or warning for invalid-date reservations; invalid data is handled only at
+  ingest (FR-015, FR-016).
+- **FR-013**: Apart from dropping invalid-date reservations at ingest
+  (FR-015 to FR-017), the feature MUST NOT change coordinator data or its
+  sort order, API requests, services, entity identifiers, attribute keys, or
+  the order, entry shape, and past and checkout-today semantics of
+  `upcoming_reservations` defined by feature 009. It MUST NOT add timers,
+  persisted state, or API calls.
 - **FR-014**: This specification explicitly supersedes
   `specs/002-reservation-sensor-refactor/spec.md` FR-R03 (selection by status
-  priority alone) and the selection-preservation portions of
+  priority alone) and the following portions of
   `specs/009-reservation-upcoming-filter/spec.md`: User Story 2, FR-003's
   clause that state selection and selected attributes remain unchanged,
   SC-004's preservation of existing state selection and selected attributes,
-  and the assumption excluding reservation status selection from scope. All
-  other requirements of those specifications remain in force.
+  the assumption excluding reservation status selection from scope, and (by
+  the issue #300 amendment) the edge case, FR-005, and SC-003 rules that
+  retain reservations with unparsable check-out dates. All other
+  requirements of those specifications remain in force.
+- **FR-015**: Parsing a Hostaway reservation MUST fail with a validation error
+  when `arrivalDate` or `departureDate` is missing or not a canonical
+  `YYYY-MM-DD` calendar date, or when `departureDate` is before
+  `arrivalDate`. Equal dates are valid. The error message MUST name only the
+  failed field and a generic reason, never the raw value.
+- **FR-016**: When a reservation list page contains a record that fails
+  FR-015, only that record MUST be dropped; the remaining records MUST be
+  returned and the fetch MUST NOT fail. The log entry MUST contain at most the
+  reservation ID (when it is a positive integer), the listing ID, and the
+  generic reason, and MUST NOT contain raw date values, guest names, or other
+  payload content.
+- **FR-017**: A service that reads a single reservation by explicit ID MUST
+  report a reservation that fails FR-015 as a clear service validation error
+  naming the reservation ID and the generic reason, and MUST NOT write to it.
 
 ### Key Entities
 
 - **Reservation**: An existing Hostaway reservation record with an ID,
   check-in date, check-out date, status, guest, and access details. This
-  feature reads dates and status only; it does not add or alter fields.
-- **Date group**: A transient classification (past, current, upcoming,
-  undated) of a reservation relative to today, used only for selection.
+  feature reads dates and status only and adds no fields; the amendment
+  requires valid dates for a reservation to be parsed at all.
+- **Date group**: A transient classification (past, current, upcoming) of a
+  reservation relative to today, used for selection and for
+  `upcoming_reservations`.
 - **Selected reservation**: The single reservation, or none, that drives the
   sensor state and selected-reservation attributes.
 
@@ -292,13 +354,19 @@ Home Assistant clock and evaluate again.
 - **SC-003**: A listing whose remaining reservations are all past reports
   `no_reservation` with null selected details.
 - **SC-004**: For identical data and date, the selected reservation is the same
-  for every input order of tied candidates, except within the undated group
-  where input order is the documented tie-break.
+  for every input order of tied candidates.
 - **SC-005**: Existing `upcoming_reservations`, cancellation-filter,
   availability, and unrelated sensor regression tests continue to pass with
   their expected outcomes unchanged. Tests whose fixture dates are now in the
-  past may pin the Home Assistant date or use current dates; only the test
-  that asserted the old past-selection behavior changes its expectation.
+  past may pin the Home Assistant date or use current dates. Only tests that
+  asserted past-reservation selection, invalid-date selection, or retention of
+  invalid check-out dates in `upcoming_reservations` change their
+  expectations.
+- **SC-006**: Every invalid-date case (unparsable, non-canonical, empty,
+  missing, and check-out before check-in) is rejected at parse time; a page
+  containing one such record still returns its valid records; the log names
+  only IDs and a generic reason; and a listing whose API data has only invalid
+  and/or past reservations reports `no_reservation`.
 
 ## Compatibility Impact
 
@@ -312,6 +380,11 @@ Home Assistant clock and evaluate again.
   check-out date passes.
 - `checked_out` is reported only for a non-past stay that has no
   better-ranked competitor.
+- Reservations with invalid dates are dropped at ingest, so they no longer
+  drive the state or appear in `upcoming_reservations`. A listing whose only
+  non-past data has invalid dates reports `no_reservation` instead of that
+  reservation's details. Custom-field services addressing such a reservation
+  by ID fail with a clear validation error.
 - No entity, attribute key, option, or service changes are made.
 
 ## Assumptions
@@ -325,15 +398,19 @@ Home Assistant clock and evaluate again.
   encodes operational state (for example, a departing guest still
   `checked_in`). Dates are used only to exclude past stays and to order
   groups and ties.
-- The lowest reservation ID is used as the final tie-break for dated
-  reservations because it does not depend on API response order, avoiding
-  state flapping between refreshes. Undated reservations keep input order, as
-  they have no reliable chronology.
+- The lowest reservation ID is used as the final tie-break because it does
+  not depend on API response order, avoiding state flapping between
+  refreshes.
 - When `filter_cancelled` is disabled, a current cancelled reservation
   outranks an upcoming booking. This is the conservative reading of the
   group-first rule and preserves the user's explicit choice to see
   cancellations; enabling the default filter avoids it.
-- A separate one-time warning for undated reservations is acceptable in
-  addition to feature 009's one-time check-out warning; neither repeats.
+- A reservation with invalid dates cannot be placed in time and is treated as
+  invalid data, per the maintainer's decision in issue #300. Dropping it at
+  ingest is preferred over surfacing guest, door-code, or custom-field
+  details that may be stale or wrong, and keeps the sensor free of
+  invalid-data handling.
+- The existing per-record skip log is sufficient for dropped records; it
+  carries identifiers only and needs no new rate limiting.
 - The README does not describe reservation selection rules, so no README
   change is required by this feature.

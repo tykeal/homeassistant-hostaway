@@ -5,6 +5,11 @@ SPDX-License-Identifier: Apache-2.0
 
 # Data Model: Upcoming Reservation Date Filter
 
+> **Superseded in part (issue #300)**: Retention of reservations with
+> invalid check-out dates is superseded; invalid-date reservations are now
+> dropped at ingest and never reach `upcoming_reservations`. See
+> `specs/010-reservation-selection-recency/spec.md` (amendment, FR-015).
+
 ## Existing Reservation
 
 The existing immutable `HostawayReservation` object is the sole input record.

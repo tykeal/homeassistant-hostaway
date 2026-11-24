@@ -5,6 +5,11 @@ SPDX-License-Identifier: Apache-2.0
 
 # Implementation Plan: Filter Past Reservations from Upcoming Attribute
 
+> **Superseded in part (issue #300)**: Retention of reservations with
+> invalid check-out dates is superseded; invalid-date reservations are now
+> dropped at ingest and never reach `upcoming_reservations`. See
+> `specs/010-reservation-selection-recency/spec.md` (amendment, FR-015).
+
 **Branch**: `009-reservation-upcoming-plan` | **Date**: 2026-11-20 | **Spec**: [spec.md](spec.md)
 **Input**: Feature specification from `specs/009-reservation-upcoming-filter/spec.md`
 

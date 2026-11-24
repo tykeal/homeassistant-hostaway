@@ -48,5 +48,10 @@ proceeding to planning
   treated as undated, and no special handling for cancelled statuses when the
   cancellation filter is disabled) are recorded in the Edge Cases and
   Assumptions sections.
+- Amendment (issue #300): the maintainer decided that reservations with
+  invalid dates are never surfaced. The "inverted ranges treated as undated"
+  choice above is superseded; invalid-date reservations are dropped at ingest
+  and never reach selection or `upcoming_reservations`. The amended spec was
+  rechecked against every item above.
 - The live-data prevalence of stale `new`/`modified` statuses is explicitly
   marked unverified; the requirements do not depend on it.
