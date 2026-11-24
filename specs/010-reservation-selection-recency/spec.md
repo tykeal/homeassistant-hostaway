@@ -234,7 +234,9 @@ Home Assistant clock and evaluate again.
 - **Ingest logging**: A dropped list record is logged by the existing skip
   path with at most its reservation ID (only when it is a positive integer),
   the listing ID, and a generic reason naming the failed field. Raw date
-  values, guest names, and other payload content are never logged. The skip
+  values, guest names, and other payload content are never logged, including
+  by the pagination cursor warning for a page whose last record has an
+  invalid ID, which reports only that the ID is invalid. The skip
   path logs each time a refresh parses the record, as it already does for
   other malformed records.
 - **Single-reservation reads**: Services that read one reservation by explicit
@@ -324,7 +326,8 @@ Home Assistant clock and evaluate again.
   returned and the fetch MUST NOT fail. The log entry MUST contain at most the
   reservation ID (when it is a positive integer), the listing ID, and the
   generic reason, and MUST NOT contain raw date values, guest names, or other
-  payload content.
+  payload content. No other reservation ingest warning, including the
+  pagination cursor warning, may log a raw non-integer ID value.
 - **FR-017**: A service that reads a single reservation by explicit ID MUST
   report a reservation that fails FR-015 as a clear service validation error
   naming the reservation ID and the generic reason, and MUST NOT write to it.

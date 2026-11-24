@@ -106,6 +106,10 @@ of Home Assistant imports and adds no complexity requiring justification.
    bad record is dropped without failing the page. Tighten the log to include
    the reservation ID only when it is a positive integer (otherwise it is
    omitted), alongside the listing ID and the generic exception message.
+   `reservation_page_cursor` also logs the raw last ID with `%r` when a full
+   page ends in a non-integer ID; that value can be arbitrary payload text,
+   so the warning drops it and states only that the last record's ID is
+   invalid.
 4. **Single-reservation reads** (`client.get_reservation` and the
    custom-field services): the `ValueError` propagates to the service, which
    reports `Unable to read reservation <id>: <reason>` as a
