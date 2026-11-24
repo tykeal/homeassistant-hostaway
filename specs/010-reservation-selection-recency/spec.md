@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 
 **Feature Branch**: `010-reservation-selection-recency`
 **Created**: 2026-11-24
-**Status**: Draft
+**Status**: Implemented
 **Input**: Issue #295, "Investigate past reservations driving selected sensor
 state", plus maintainer analysis and confirmed design decisions.
 
