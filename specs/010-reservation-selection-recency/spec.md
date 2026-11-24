@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 
 **Feature Branch**: `010-reservation-selection-recency`
 **Created**: 2026-11-24
-**Status**: Implemented; amended 2026-11-24 (issue #300)
+**Status**: Implemented; amended 2026-11-24 (issues #300, #303)
 **Input**: Issue #295, "Investigate past reservations driving selected sensor
 state", plus maintainer analysis and confirmed design decisions.
 
@@ -36,6 +36,13 @@ original last-resort "undated" selection group:
 
 The requirements below are written in their amended form; the original
 undated design is preserved in git history (PRs #296-#299).
+
+### Amendment: Warn Once per Skipped Record (Issue #303)
+
+A permanently bad record warned on every coordinator refresh, which the
+maintainer found "way, way too noisy." The skip path now warns the first
+time a record is seen in the Home Assistant process and logs repeats at
+DEBUG with the same identifier-only content (FR-018).
 
 ## Background
 
@@ -236,9 +243,8 @@ Home Assistant clock and evaluate again.
   the listing ID, and a generic reason naming the failed field. Raw date
   values, guest names, and other payload content are never logged, including
   by the pagination cursor warning for a page whose last record has an
-  invalid ID, which reports only that the ID is invalid. The skip
-  path logs each time a refresh parses the record, as it already does for
-  other malformed records.
+  invalid ID, which reports only that the ID is invalid. The skip path
+  warns once per record per process and logs repeats at DEBUG (FR-018).
 - **Single-reservation reads**: Services that read one reservation by explicit
   ID (the custom-field read and write services) receive the same rejection.
   The service fails with a clear error naming the reservation and the generic
@@ -331,6 +337,14 @@ Home Assistant clock and evaluate again.
 - **FR-017**: A service that reads a single reservation by explicit ID MUST
   report a reservation that fails FR-015 as a clear service validation error
   naming the reservation ID and the generic reason, and MUST NOT write to it.
+- **FR-018**: The FR-016 skip log MUST be a WARNING only the first time a
+  record is skipped in the Home Assistant process; later skips of the same
+  record MUST log at DEBUG with the same content. A record is identified by
+  listing ID and reservation ID, or by listing ID and generic reason when it
+  has no positive integer ID. The pagination cursor fallback warning MUST
+  likewise warn once per listing. Remembered records MUST be capped at 500;
+  once full, new records log at DEBUG. A remembered record that later parses
+  MUST be forgotten so a future failure warns again.
 
 ### Key Entities
 

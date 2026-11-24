@@ -162,6 +162,18 @@ content, and the custom-field service error; verify sensor selection and
 valid reservation selection, tie-breaks, list order, and past and
 checkout-today semantics are unchanged.
 
+## Phase 4: Amendment - Warn Once per Skipped Record (Issue #303)
+
+**Goal**: Stop the ingest skip warning from repeating on every refresh,
+per spec FR-018.
+
+- [x] T017 [US3] In `tests/api/test_reservations.py`, add failing tests for
+  first-skip WARNING then DEBUG, distinct records each warning once, a fixed
+  then broken record warning again, ID-less records deduplicated by reason,
+  the 500-entry cap, and the once-per-listing cursor fallback, with an
+  autouse reset of the warn-once set in `tests/conftest.py`; then implement
+  the capped warn-once set in `custom_components/hostaway/api/reservations.py`.
+
 ## Dependencies and Execution Order
 
 - T001 and T002 have no implementation dependency and MUST fail on the
@@ -179,3 +191,5 @@ checkout-today semantics are unchanged.
 - T013 depends on T009-T011; T014 depends on T012 and T013.
 - T015 depends on T013 and T014.
 - T016 depends on T015 and is a separate commit from source and test changes.
+- T017 depends on T016; its checkbox is a separate commit from source and
+  test changes.
