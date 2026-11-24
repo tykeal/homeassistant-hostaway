@@ -140,7 +140,8 @@ of Home Assistant imports and adds no complexity requiring justification.
   with a test asserting the future booking drives state and attributes;
   past-only listing returns `no_reservation` with the existing null-detail
   shape; cancellation filter on and off with a current cancelled stay and an
-  upcoming booking; state and attributes agree and the selected ID is in
+  upcoming booking, and with a cancelled stay as the only non-past
+  reservation; state and attributes agree and the selected ID is in
   `upcoming_reservations`; data changes after a coordinator refresh; a date
   advance past check-out moves selection to the next stay and then to
   `no_reservation`.
