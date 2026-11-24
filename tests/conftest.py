@@ -10,6 +10,7 @@ import httpx2 as httpx
 import pytest
 import respx
 
+from custom_components.hostaway.api import reservations as reservations_module
 from custom_components.hostaway.api.rate_limit import reset_shared_state
 
 
@@ -26,6 +27,19 @@ def reset_rate_limit_state() -> Iterator[None]:
     reset_shared_state()
     yield
     reset_shared_state()
+
+
+@pytest.fixture(autouse=True)
+def reset_warned_reservations(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Give each test a fresh warn-once set for skipped reservations.
+
+    The set is process-wide so a bad record warns once per Home Assistant
+    run; between tests it would turn expected warnings into DEBUG logs.
+
+    Args:
+        monkeypatch: Pytest fixture used to swap in an empty set.
+    """
+    monkeypatch.setattr(reservations_module, "_warned_reservations", set())
 
 
 @pytest.fixture

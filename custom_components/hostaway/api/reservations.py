@@ -15,6 +15,15 @@ from custom_components.hostaway.api.models import HostawayReservation
 
 _LOGGER = logging.getLogger(__name__)
 
+# Process-wide warn-once memory for permanently bad records, which would
+# otherwise warn on every coordinator refresh. Keys are (listing ID,
+# reservation ID) for usable IDs, or (listing ID, generic reason) for
+# records and pagination anomalies without one. The set is capped; once
+# full, new records log at DEBUG instead of growing it.
+_MAX_WARNED_RESERVATIONS = 500
+_PAGINATION_CURSOR_FALLBACK = "pagination cursor fallback"
+_warned_reservations: set[tuple[int, int | str]] = set()
+
 
 class RequestResults(Protocol):
     """Callable interface for fetching validated Hostaway result lists."""
@@ -56,9 +65,13 @@ def parse_reservations(
     reservations: list[HostawayReservation] = []
     for item in items:
         try:
-            reservations.append(HostawayReservation.from_api_response(item))
+            reservation = HostawayReservation.from_api_response(item)
         except ValueError as exc:
             _log_skipped_reservation(item.get("id"), listing_id, exc)
+            continue
+        if _warned_reservations:
+            _warned_reservations.discard((listing_id, reservation.id))
+        reservations.append(reservation)
     return reservations
 
 
@@ -77,7 +90,8 @@ def reservation_page_cursor(items: list[dict[str, Any]], listing_id: int) -> int
         if not _is_valid_cursor(cursor):
             continue
         if not _is_valid_cursor(last_raw_id) or cursor != last_raw_id:
-            _LOGGER.warning(
+            _log_once(
+                (listing_id, _PAGINATION_CURSOR_FALLBACK),
                 "Using reservation %s as pagination cursor for listing %s "
                 "because the last raw reservation has an invalid id",
                 cursor,
@@ -128,21 +142,44 @@ def _log_skipped_reservation(
 
     Only identifying information is logged: the reservation ID when it is
     a positive integer, the listing ID, and the generic validation reason.
-    Raw payload values such as dates or guest data are never logged.
+    Raw payload values such as dates or guest data are never logged. Each
+    record warns once per process; repeats log at DEBUG.
     """
     if not _is_valid_cursor(reservation_id):
-        _LOGGER.warning(
+        _log_once(
+            (listing_id, str(exc)),
             "Skipping malformed Hostaway reservation for listing %s: %s",
             listing_id,
             exc,
         )
         return
-    _LOGGER.warning(
+    _log_once(
+        (listing_id, reservation_id),
         "Skipping malformed Hostaway reservation %s for listing %s: %s",
         reservation_id,
         listing_id,
         exc,
     )
+
+
+def _log_once(key: tuple[int, int | str], msg: str, *args: object) -> None:
+    """Log a WARNING the first time ``key`` is seen, DEBUG afterwards.
+
+    New keys log at DEBUG without being remembered once the set holds
+    ``_MAX_WARNED_RESERVATIONS`` entries, bounding memory.
+
+    Args:
+        key: Listing ID paired with a reservation ID or generic reason.
+        msg: Logging format string.
+        *args: Arguments for ``msg``.
+    """
+    if key in _warned_reservations or (
+        len(_warned_reservations) >= _MAX_WARNED_RESERVATIONS
+    ):
+        _LOGGER.debug(msg, *args)
+        return
+    _warned_reservations.add(key)
+    _LOGGER.warning(msg, *args)
 
 
 def _is_valid_cursor(value: object) -> TypeGuard[int]:
