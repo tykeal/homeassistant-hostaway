@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock
@@ -36,6 +36,11 @@ from custom_components.hostaway.sensor.reservation import (
     HostawayReservationStatusSensor,
 )
 from tests.sensor.conftest import _make_entry, _make_listing, _make_reservation
+
+_TODAY = date(2025, 8, 5)
+# Inside the default _make_reservation stay (2025-08-01 to 2025-08-05).
+_FIXTURE_TODAY = date(2025, 8, 3)
+_FIXTURE_NOW = datetime(2025, 8, 3, 12, tzinfo=UTC)
 
 
 def _custom_definition(custom_field_id: int) -> HostawayCustomFieldDefinition:
@@ -100,6 +105,38 @@ async def _make_reservation_sensor(
         100,
         entry,
     )
+
+
+def _pin_now(monkeypatch: pytest.MonkeyPatch, now: datetime) -> None:
+    """Pin Home Assistant's local time for date-dependent sensor tests.
+
+    Args:
+        monkeypatch: Pytest monkeypatch fixture.
+        now: Timezone-aware time returned by ``dt_util.now``.
+    """
+    monkeypatch.setattr(dt_util, "now", lambda: now)
+
+
+def _assert_consistent_selection(
+    sensor: HostawayReservationStatusSensor,
+) -> dict[str, Any]:
+    """Assert the state and attributes describe the same reservation.
+
+    Args:
+        sensor: Reservation sensor to evaluate.
+
+    Returns:
+        The evaluated extra state attributes.
+    """
+    attrs = sensor.extra_state_attributes
+    state = sensor.native_value
+    if attrs["reservation_id"] is None:
+        assert state == "no_reservation"
+        return attrs
+    assert state == _STATUS_TO_DERIVED.get(attrs["status"], "unknown")
+    upcoming_ids = [item["id"] for item in attrs["upcoming_reservations"]]
+    assert attrs["reservation_id"] in upcoming_ids
+    return attrs
 
 
 class TestUpcomingReservationFiltering:
@@ -266,14 +303,13 @@ class TestUpcomingReservationFiltering:
 
         assert [item["id"] for item in upcoming] == expected_ids
 
-    async def test_past_reservation_still_drives_selected_state(
+    async def test_future_booking_drives_state_over_stale_past(
         self,
         hass: HomeAssistant,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Filter only the list, not state selection or selected attributes."""
-        now = datetime(2025, 8, 5, 12, tzinfo=UTC)
-        monkeypatch.setattr(dt_util, "now", lambda: now)
+        """Select the future booking, not a past stay left checked in."""
+        _pin_now(monkeypatch, datetime(2025, 8, 5, 12, tzinfo=UTC))
         past = _make_reservation(
             1,
             check_in="2025-08-01",
@@ -292,26 +328,283 @@ class TestUpcomingReservationFiltering:
             filter_cancelled=False,
         )
 
-        attrs = sensor.extra_state_attributes
+        attrs = _assert_consistent_selection(sensor)
 
-        assert sensor.native_value == "checked_in"
-        assert attrs["reservation_id"] == 1
-        assert attrs["check_out"] == "2025-08-04"
+        assert sensor.native_value == "awaiting_checkin"
+        assert attrs["reservation_id"] == 2
+        assert attrs["check_out"] == "2025-08-12"
         assert [item["id"] for item in attrs["upcoming_reservations"]] == [2]
 
 
+class TestDateAwareSelectionSensor:
+    """Tests for date-aware selection through the reservation sensor."""
+
+    async def test_past_only_listing_reports_no_reservation(
+        self,
+        hass: HomeAssistant,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Past-only listings use the existing no-selection attributes."""
+        _pin_now(monkeypatch, datetime(2025, 8, 5, 12, tzinfo=UTC))
+        reservations = [
+            _make_reservation(
+                1,
+                check_in="2025-07-01",
+                check_out="2025-07-04",
+                status="new",
+            ),
+            _make_reservation(
+                2,
+                check_in="2025-08-01",
+                check_out="2025-08-04",
+                status="checked_in",
+            ),
+        ]
+        sensor = await _make_reservation_sensor(
+            hass,
+            reservations,
+            filter_cancelled=True,
+        )
+
+        attrs = _assert_consistent_selection(sensor)
+
+        assert sensor.native_value == "no_reservation"
+        assert attrs == _build_reservation_attributes(None, [], 100)
+        assert attrs["custom_fields"] == {}
+        assert attrs["listing_id"] == 100
+        assert attrs["upcoming_reservations"] == []
+
+    @pytest.mark.parametrize(
+        ("filter_cancelled", "expected_state", "expected_id"),
+        [(True, "awaiting_checkin", 2), (False, "cancelled", 1)],
+    )
+    async def test_cancellation_filter_with_upcoming_booking(
+        self,
+        hass: HomeAssistant,
+        monkeypatch: pytest.MonkeyPatch,
+        filter_cancelled: bool,
+        expected_state: str,
+        expected_id: int,
+    ) -> None:
+        """The cancellation option is applied before date grouping."""
+        _pin_now(monkeypatch, datetime(2025, 8, 5, 12, tzinfo=UTC))
+        reservations = [
+            _make_reservation(
+                1,
+                check_in="2025-08-03",
+                check_out="2025-08-07",
+                status="cancelled",
+            ),
+            _make_reservation(
+                2,
+                check_in="2025-08-10",
+                check_out="2025-08-12",
+                status="confirmed",
+            ),
+        ]
+        sensor = await _make_reservation_sensor(
+            hass,
+            reservations,
+            filter_cancelled=filter_cancelled,
+        )
+
+        attrs = _assert_consistent_selection(sensor)
+
+        assert sensor.native_value == expected_state
+        assert attrs["reservation_id"] == expected_id
+
+    @pytest.mark.parametrize(
+        ("filter_cancelled", "expected_state", "expected_id"),
+        [(True, "no_reservation", None), (False, "cancelled", 2)],
+    )
+    async def test_cancelled_only_non_past_reservation(
+        self,
+        hass: HomeAssistant,
+        monkeypatch: pytest.MonkeyPatch,
+        filter_cancelled: bool,
+        expected_state: str,
+        expected_id: int | None,
+    ) -> None:
+        """A lone non-past cancelled stay follows the cancellation option."""
+        _pin_now(monkeypatch, datetime(2025, 8, 5, 12, tzinfo=UTC))
+        reservations = [
+            _make_reservation(
+                1,
+                check_in="2025-08-01",
+                check_out="2025-08-04",
+                status="confirmed",
+            ),
+            _make_reservation(
+                2,
+                check_in="2025-08-10",
+                check_out="2025-08-12",
+                status="cancelled",
+            ),
+        ]
+        sensor = await _make_reservation_sensor(
+            hass,
+            reservations,
+            filter_cancelled=filter_cancelled,
+        )
+
+        attrs = _assert_consistent_selection(sensor)
+
+        assert sensor.native_value == expected_state
+        assert attrs["reservation_id"] == expected_id
+
+    async def test_same_day_turnover_selects_arrival(
+        self,
+        hass: HomeAssistant,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A checked-out departure yields to the confirmed arrival."""
+        _pin_now(monkeypatch, datetime(2025, 8, 5, 12, tzinfo=UTC))
+        reservations = [
+            _make_reservation(
+                1,
+                check_in="2025-08-01",
+                check_out="2025-08-05",
+                status="checked_out",
+            ),
+            _make_reservation(
+                2,
+                check_in="2025-08-05",
+                check_out="2025-08-08",
+                status="confirmed",
+            ),
+        ]
+        sensor = await _make_reservation_sensor(
+            hass,
+            reservations,
+            filter_cancelled=True,
+        )
+
+        attrs = _assert_consistent_selection(sensor)
+
+        assert sensor.native_value == "awaiting_checkin"
+        assert attrs["reservation_id"] == 2
+        assert [item["id"] for item in attrs["upcoming_reservations"]] == [1, 2]
+
+    async def test_uses_home_assistant_local_date_for_selection(
+        self,
+        hass: HomeAssistant,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Group stays by the local date, not the UTC date."""
+        _pin_now(
+            monkeypatch,
+            datetime(2025, 8, 5, 0, 30, tzinfo=ZoneInfo("Pacific/Kiritimati")),
+        )
+        reservations = [
+            _make_reservation(
+                1,
+                check_in="2025-08-01",
+                check_out="2025-08-04",
+                status="checked_in",
+            ),
+            _make_reservation(
+                2,
+                check_in="2025-08-05",
+                check_out="2025-08-07",
+                status="confirmed",
+            ),
+        ]
+        sensor = await _make_reservation_sensor(
+            hass,
+            reservations,
+            filter_cancelled=True,
+        )
+
+        attrs = _assert_consistent_selection(sensor)
+
+        assert sensor.native_value == "awaiting_checkin"
+        assert attrs["reservation_id"] == 2
+
+    async def test_selection_follows_coordinator_refresh(
+        self,
+        hass: HomeAssistant,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Refreshed coordinator data changes the selection."""
+        _pin_now(monkeypatch, datetime(2025, 8, 5, 12, tzinfo=UTC))
+        upcoming = _make_reservation(
+            2,
+            check_in="2025-08-10",
+            check_out="2025-08-12",
+            status="confirmed",
+        )
+        sensor = await _make_reservation_sensor(
+            hass,
+            [upcoming],
+            filter_cancelled=True,
+        )
+        assert _assert_consistent_selection(sensor)["reservation_id"] == 2
+
+        current = _make_reservation(
+            1,
+            check_in="2025-08-03",
+            check_out="2025-08-06",
+            status="confirmed",
+        )
+        sensor.coordinator.async_set_updated_data({100: [current, upcoming]})
+        assert _assert_consistent_selection(sensor)["reservation_id"] == 1
+
+        sensor.coordinator.async_set_updated_data({100: []})
+        assert _assert_consistent_selection(sensor)["reservation_id"] is None
+        assert sensor.native_value == "no_reservation"
+
+    async def test_selection_follows_local_date(
+        self,
+        hass: HomeAssistant,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Advancing the date moves selection to the next stay, then none."""
+        now = [datetime(2025, 8, 5, 12, tzinfo=UTC)]
+        monkeypatch.setattr(dt_util, "now", lambda: now[0])
+        reservations = [
+            _make_reservation(
+                1,
+                check_in="2025-08-01",
+                check_out="2025-08-05",
+                status="checked_in",
+            ),
+            _make_reservation(
+                2,
+                check_in="2025-08-10",
+                check_out="2025-08-12",
+                status="confirmed",
+            ),
+        ]
+        sensor = await _make_reservation_sensor(
+            hass,
+            reservations,
+            filter_cancelled=True,
+        )
+
+        assert sensor.native_value == "checked_in"
+        assert _assert_consistent_selection(sensor)["reservation_id"] == 1
+
+        now[0] = datetime(2025, 8, 6, 12, tzinfo=UTC)
+        assert sensor.native_value == "awaiting_checkin"
+        assert _assert_consistent_selection(sensor)["reservation_id"] == 2
+
+        now[0] = datetime(2025, 8, 13, 12, tzinfo=UTC)
+        assert sensor.native_value == "no_reservation"
+        assert _assert_consistent_selection(sensor)["reservation_id"] is None
+
+
 class TestSelectReservation:
-    """Tests for _select_reservation helper."""
+    """Tests for _select_reservation status priority among current stays."""
 
     def test_empty_returns_none(self) -> None:
         """Empty list returns None."""
-        assert _select_reservation([]) is None
+        assert _select_reservation([], _FIXTURE_TODAY) is None
 
     def test_checked_in_wins_over_confirmed(self) -> None:
         """checked_in has higher priority than confirmed."""
         confirmed = _make_reservation(1, status="confirmed")
         checked_in = _make_reservation(2, status="checked_in")
-        result = _select_reservation([confirmed, checked_in])
+        result = _select_reservation([confirmed, checked_in], _FIXTURE_TODAY)
         assert result is not None
         assert result.id == 2
 
@@ -319,7 +612,7 @@ class TestSelectReservation:
         """confirmed has higher priority than checked_out."""
         checked_out = _make_reservation(1, status="checked_out")
         confirmed = _make_reservation(2, status="confirmed")
-        result = _select_reservation([checked_out, confirmed])
+        result = _select_reservation([checked_out, confirmed], _FIXTURE_TODAY)
         assert result is not None
         assert result.id == 2
 
@@ -327,7 +620,7 @@ class TestSelectReservation:
         """checked_out has higher priority than cancelled."""
         cancelled = _make_reservation(1, status="cancelled")
         checked_out = _make_reservation(2, status="checked_out")
-        result = _select_reservation([cancelled, checked_out])
+        result = _select_reservation([cancelled, checked_out], _FIXTURE_TODAY)
         assert result is not None
         assert result.id == 2
 
@@ -335,7 +628,7 @@ class TestSelectReservation:
         """Unknown status sorts after all known statuses."""
         unknown = _make_reservation(1, status="totally_unknown")
         cancelled = _make_reservation(2, status="cancelled")
-        result = _select_reservation([unknown, cancelled])
+        result = _select_reservation([unknown, cancelled], _FIXTURE_TODAY)
         assert result is not None
         assert result.id == 2
 
@@ -343,7 +636,7 @@ class TestSelectReservation:
         """new has higher priority than checked_out."""
         checked_out = _make_reservation(1, status="checked_out")
         new = _make_reservation(2, status="new")
-        result = _select_reservation([checked_out, new])
+        result = _select_reservation([checked_out, new], _FIXTURE_TODAY)
         assert result is not None
         assert result.id == 2
 
@@ -351,16 +644,282 @@ class TestSelectReservation:
         """pending has higher priority than ownerStay."""
         owner = _make_reservation(1, status="ownerStay")
         pending = _make_reservation(2, status="pending")
-        result = _select_reservation([owner, pending])
+        result = _select_reservation([owner, pending], _FIXTURE_TODAY)
         assert result is not None
         assert result.id == 2
 
     def test_single_reservation(self) -> None:
         """Single reservation is selected."""
         res = _make_reservation(42, status="confirmed")
-        result = _select_reservation([res])
+        result = _select_reservation([res], _FIXTURE_TODAY)
         assert result is not None
         assert result.id == 42
+
+
+class TestDateAwareSelection:
+    """Tests for date-aware reservation selection."""
+
+    @staticmethod
+    def _res(
+        res_id: int,
+        check_in: str | None,
+        check_out: str | None,
+        status: str = "confirmed",
+    ) -> HostawayReservation:
+        """Return a reservation with the given dates and status."""
+        return _make_reservation(
+            res_id,
+            check_in=cast(str, check_in),
+            check_out=cast(str, check_out),
+            status=status,
+        )
+
+    @staticmethod
+    def _selected_id(
+        reservations: list[HostawayReservation],
+        today: date = _TODAY,
+    ) -> int | None:
+        """Return the selected reservation ID, or None."""
+        selected = _select_reservation(reservations, today)
+        return None if selected is None else selected.id
+
+    def test_stale_checked_in_past_loses_to_future_confirmed(self) -> None:
+        """A past stay still checked in is never selected."""
+        past = self._res(1, "2025-08-01", "2025-08-04", "checked_in")
+        future = self._res(2, "2025-08-10", "2025-08-12", "confirmed")
+        assert self._selected_id([past, future]) == 2
+
+    def test_equal_priority_past_new_loses_to_future_confirmed(self) -> None:
+        """An older equal-priority stay first in coordinator order loses."""
+        past = self._res(1, "2025-07-01", "2025-07-04", "new")
+        future = self._res(2, "2025-08-10", "2025-08-12", "confirmed")
+        assert self._selected_id([past, future]) == 2
+
+    @pytest.mark.parametrize(
+        ("check_in", "check_out"),
+        [("2025-08-01", "2025-08-05"), ("2025-08-05", "2025-08-05")],
+        ids=["checkout-today", "zero-night"],
+    )
+    def test_stay_ending_today_is_current(
+        self,
+        check_in: str,
+        check_out: str,
+    ) -> None:
+        """Checkout-today and zero-night stays outrank upcoming stays."""
+        current = self._res(1, check_in, check_out, "inquiry")
+        upcoming = self._res(2, "2025-08-06", "2025-08-08", "checked_in")
+        assert self._selected_id([upcoming, current]) == 1
+
+    def test_current_beats_better_status_upcoming(self) -> None:
+        """A stay in progress outranks a better-status future booking."""
+        current = self._res(1, "2025-08-03", "2025-08-07", "pending")
+        upcoming = self._res(2, "2025-08-10", "2025-08-12", "checked_in")
+        assert self._selected_id([current, upcoming]) == 1
+
+    @pytest.mark.parametrize(
+        ("departing_status", "arriving_status", "expected_id"),
+        [
+            ("checked_in", "confirmed", 1),
+            ("checked_out", "confirmed", 2),
+            ("checked_out", "inquiry", 1),
+            ("confirmed", "new", 2),
+        ],
+    )
+    @pytest.mark.parametrize("reverse", [False, True])
+    def test_same_day_turnover(
+        self,
+        departing_status: str,
+        arriving_status: str,
+        expected_id: int,
+        reverse: bool,
+    ) -> None:
+        """Status decides a turnover first; equal priority picks the arrival."""
+        departing = self._res(1, "2025-08-01", "2025-08-05", departing_status)
+        arriving = self._res(2, "2025-08-05", "2025-08-08", arriving_status)
+        reservations = [departing, arriving]
+        if reverse:
+            reservations.reverse()
+        assert self._selected_id(reservations) == expected_id
+
+    def test_upcoming_status_beats_sooner_check_in(self) -> None:
+        """Status priority outranks chronology among upcoming stays."""
+        sooner = self._res(1, "2025-08-10", "2025-08-12", "pending")
+        later = self._res(2, "2025-08-20", "2025-08-22", "confirmed")
+        assert self._selected_id([sooner, later]) == 2
+
+    def test_upcoming_equal_priority_picks_sooner_check_in(self) -> None:
+        """The sooner check-in wins among equal-priority upcoming stays."""
+        later = self._res(1, "2025-08-20", "2025-08-22", "new")
+        sooner = self._res(2, "2025-08-10", "2025-08-12", "confirmed")
+        assert self._selected_id([later, sooner]) == 2
+
+    @pytest.mark.parametrize(
+        ("check_in", "check_out"),
+        [("2025-08-03", "2025-08-07"), ("2025-08-10", "2025-08-12")],
+        ids=["current", "upcoming"],
+    )
+    @pytest.mark.parametrize("reverse", [False, True])
+    def test_full_tie_picks_lowest_id(
+        self,
+        check_in: str,
+        check_out: str,
+        reverse: bool,
+    ) -> None:
+        """Fully tied dated stays select the lowest ID in any input order."""
+        reservations = [
+            self._res(7, check_in, check_out),
+            self._res(3, check_in, check_out),
+            self._res(5, check_in, check_out),
+        ]
+        if reverse:
+            reservations.reverse()
+        assert self._selected_id(reservations) == 3
+
+    @pytest.mark.parametrize(
+        ("check_in", "check_out"),
+        [
+            ("not-a-date", "2025-08-12"),
+            ("2025-08-01", "not-a-date"),
+            (None, "2025-08-12"),
+            ("2025-08-01", None),
+            ("2025-8-1", "2025-08-12"),
+            ("2025-08-01T00:00:00", "2025-08-12"),
+            ("2025-08-10", "2025-08-08"),
+        ],
+        ids=[
+            "malformed-check-in",
+            "malformed-check-out",
+            "missing-check-in",
+            "missing-check-out",
+            "non-canonical",
+            "datetime",
+            "inverted-range",
+        ],
+    )
+    def test_undated_ranks_after_dated(
+        self,
+        check_in: str | None,
+        check_out: str | None,
+    ) -> None:
+        """Valid dates outrank unusable dates regardless of status."""
+        undated = self._res(1, check_in, check_out, "checked_in")
+        upcoming = self._res(2, "2025-08-20", "2025-08-22", "inquiry")
+        assert self._selected_id([undated, upcoming]) == 2
+        assert self._selected_id([undated]) == 1
+
+    def test_undated_only_uses_status_then_input_order(self) -> None:
+        """Undated stays rank by status, then by input order."""
+        reservations = [
+            self._res(1, None, None, "confirmed"),
+            self._res(9, "bad", "2025-08-12", "checked_in"),
+            self._res(2, "2025-08-10", "bad", "checked_in"),
+        ]
+        assert self._selected_id(reservations) == 9
+        assert self._selected_id(list(reversed(reservations))) == 2
+
+    @pytest.mark.parametrize(
+        ("check_in", "check_out"),
+        [
+            ("2025-08-01", "2025-08-04"),
+            ("not-a-date", "2025-08-04"),
+            (None, "2025-08-04"),
+            ("2025-08-10", "2025-08-01"),
+        ],
+        ids=["dated", "malformed-check-in", "missing-check-in", "inverted"],
+    )
+    def test_past_check_out_is_never_selected(
+        self,
+        check_in: str | None,
+        check_out: str,
+    ) -> None:
+        """A valid check-out before today excludes the reservation."""
+        assert self._selected_id([self._res(1, check_in, check_out)]) is None
+
+    def test_past_only_returns_none(self) -> None:
+        """Only past reservations yields no selection."""
+        reservations = [
+            self._res(1, "2025-07-01", "2025-07-04", "checked_in"),
+            self._res(2, "2025-08-01", "2025-08-04", "new"),
+        ]
+        assert self._selected_id(reservations) is None
+
+    def test_empty_returns_none(self) -> None:
+        """An empty list yields no selection."""
+        assert self._selected_id([]) is None
+
+    def test_unknown_status_ranks_last_within_group(self) -> None:
+        """Unknown statuses rank last in their group, not across groups."""
+        unknown = self._res(1, "2025-08-03", "2025-08-07", "totally_unknown")
+        inquiry = self._res(2, "2025-08-04", "2025-08-06", "inquiryDenied")
+        upcoming = self._res(3, "2025-08-10", "2025-08-12", "checked_in")
+        assert self._selected_id([unknown, inquiry, upcoming]) == 2
+        assert self._selected_id([unknown, upcoming]) == 1
+
+    def test_does_not_mutate_input(self) -> None:
+        """Selection leaves the input list and its order unchanged."""
+        reservations = [
+            self._res(1, "2025-07-01", "2025-07-04"),
+            self._res(2, "2025-08-10", "2025-08-12"),
+            self._res(3, "2025-08-03", "2025-08-07"),
+        ]
+        snapshot = list(reservations)
+        self._selected_id(reservations)
+        assert reservations == snapshot
+
+    def test_undated_warning_logged_once_without_data(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Undated selection logs one generic warning without reservation data."""
+        monkeypatch.setattr(
+            "custom_components.hostaway.sensor.helpers._warned_undated_reservation",
+            False,
+            raising=False,
+        )
+        monkeypatch.setattr(
+            "custom_components.hostaway.sensor.helpers._warned_invalid_check_out_date",
+            True,
+            raising=False,
+        )
+        reservation = _make_reservation(
+            4242,
+            guest_name="Sensitive Guest Name",
+            check_in="garbled-in",
+            check_out="garbled-out",
+        )
+
+        with caplog.at_level(logging.WARNING):
+            assert self._selected_id([reservation]) == 4242
+            assert self._selected_id([reservation]) == 4242
+
+        assert len(caplog.records) == 1
+        message = caplog.records[0].getMessage()
+        assert "invalid check-out date" not in message
+        assert "Sensitive Guest Name" not in caplog.text
+        assert "4242" not in caplog.text
+        assert "garbled" not in caplog.text
+
+    def test_dated_selection_does_not_warn(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Valid or past reservations do not trigger the undated warning."""
+        monkeypatch.setattr(
+            "custom_components.hostaway.sensor.helpers._warned_undated_reservation",
+            False,
+            raising=False,
+        )
+        reservations = [
+            self._res(1, "not-a-date", "2025-08-01"),
+            self._res(2, "2025-08-10", "2025-08-12"),
+        ]
+
+        with caplog.at_level(logging.WARNING):
+            assert self._selected_id(reservations) == 2
+
+        assert caplog.records == []
 
 
 class TestDeriveState:
@@ -741,8 +1300,10 @@ class TestReservationStatusSensor:
     async def test_state_checked_in(
         self,
         hass: HomeAssistant,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """State is checked_in when reservation is checked in."""
+        _pin_now(monkeypatch, _FIXTURE_NOW)
         entry = _make_entry(selected=[100])
         entry.add_to_hass(hass)
         api_client = AsyncMock()
@@ -763,8 +1324,10 @@ class TestReservationStatusSensor:
     async def test_state_awaiting_checkin_from_confirmed(
         self,
         hass: HomeAssistant,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """State is awaiting_checkin when confirmed."""
+        _pin_now(monkeypatch, _FIXTURE_NOW)
         entry = _make_entry(selected=[100])
         entry.add_to_hass(hass)
         api_client = AsyncMock()
@@ -785,8 +1348,10 @@ class TestReservationStatusSensor:
     async def test_priority_checked_in_wins(
         self,
         hass: HomeAssistant,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """checked_in wins over confirmed in priority."""
+        _pin_now(monkeypatch, _FIXTURE_NOW)
         entry = _make_entry(selected=[100])
         entry.add_to_hass(hass)
         api_client = AsyncMock()
@@ -1007,8 +1572,10 @@ class TestReservationStatusSensor:
     async def test_status_change_updates_state(
         self,
         hass: HomeAssistant,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Status change updates sensor state."""
+        _pin_now(monkeypatch, _FIXTURE_NOW)
         entry = _make_entry(selected=[100])
         entry.add_to_hass(hass)
         api_client = AsyncMock()

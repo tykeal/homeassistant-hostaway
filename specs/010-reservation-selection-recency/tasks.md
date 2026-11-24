@@ -25,7 +25,7 @@ verify the state and selected attributes.
 
 ### Tests First (Red)
 
-- [ ] T001 [US1,US2,US3,US4] Add failing tests in
+- [x] T001 [US1,US2,US3,US4] Add failing tests in
   `tests/sensor/test_reservation.py` that call `_select_reservation` with an
   explicit `today` for every scenario in the plan's helper test design:
   stale `checked_in` past vs future `confirmed`; equal-priority past `new` vs
@@ -41,7 +41,7 @@ verify the state and selected attributes.
   excluded; past-only returning `None`; unknown status last within its group;
   and one generic undated warning without reservation data, independent of
   feature 009's check-out warning.
-- [ ] T002 [US1,US2,US4] Add failing sensor tests in
+- [x] T002 [US1,US2,US4] Add failing sensor tests in
   `tests/sensor/test_reservation.py` using `_make_reservation_sensor` and a
   monkeypatched `dt_util.now`: replace
   `TestUpcomingReservationFiltering::test_past_reservation_still_drives_selected_state`
@@ -57,20 +57,20 @@ verify the state and selected attributes.
 
 ### Implementation
 
-- [ ] T003 [US1,US2,US3] In `custom_components/hostaway/sensor/helpers.py`,
+- [x] T003 [US1,US2,US3] In `custom_components/hostaway/sensor/helpers.py`,
   rename `_parse_check_out_date` to `_parse_calendar_date` and update the 009
   list filter to use it with identical behavior; add a typed, documented
   classification helper (past, current, upcoming, undated) per FR-002; change
   `_select_reservation(reservations, today)` to skip past entries and return
   the minimum rank tuple from `data-model.md`, or `None`; add the one-time
   generic undated warning behind its own module flag.
-- [ ] T004 [US1,US2,US4] In `custom_components/hostaway/sensor/reservation.py`,
+- [x] T004 [US1,US2,US4] In `custom_components/hostaway/sensor/reservation.py`,
   pass `dt_util.now().date()` to `_select_reservation` in `native_value`; in
   `extra_state_attributes`, read the date once and pass the same value to
   `_select_reservation` and `_filter_upcoming_reservations`. Keep
   `_reservations`, cancellation filtering, coordinator data, and attribute
   construction unchanged.
-- [ ] T005 [US3,US4] Update existing `TestSelectReservation` calls to pass a
+- [x] T005 [US3,US4] Update existing `TestSelectReservation` calls to pass a
   `today` that keeps their fixture dates current, and pin the Home Assistant
   date in existing sensor tests (in `tests/sensor/test_reservation.py` and,
   only where fixture dates are now past, `tests/test_integration.py`,
@@ -85,14 +85,14 @@ tie-break, past-only, cancellation, and calendar-advance scenario, with
 
 **Purpose**: Verify the full regression surface and record completion.
 
-- [ ] T006 Run `uv run pytest tests/ -x -q`,
+- [x] T006 Run `uv run pytest tests/ -x -q`,
   `uv run ruff check custom_components/ tests/`,
   `uv run mypy custom_components/`,
   `uv run interrogate custom_components/`, and
   `uv run pre-commit run --all-files`; resolve any regressions.
-- [ ] T007 Mark the specification status as implemented in a separate
+- [x] T007 Mark the specification status as implemented in a separate
   documentation commit from implementation and test code.
-- [ ] T008 Mark completed items in this `tasks.md` in a separate documentation
+- [x] T008 Mark completed items in this `tasks.md` in a separate documentation
   commit from implementation, test code, and the specification status.
 
 ## Dependencies and Execution Order

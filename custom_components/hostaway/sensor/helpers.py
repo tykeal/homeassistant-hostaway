@@ -75,29 +75,91 @@ _CANCELLED_STATUSES: frozenset[str] = frozenset(
 )
 
 _warned_invalid_check_out_date = False
+_warned_undated_reservation = False
+
+# Transient date groups used only for reservation selection.
+_GROUP_PAST = "past"
+_GROUP_CURRENT = "current"
+_GROUP_UPCOMING = "upcoming"
+_GROUP_UNDATED = "undated"
 
 
 def _select_reservation(
     reservations: list[HostawayReservation],
+    today: date,
 ) -> HostawayReservation | None:
-    """Select the highest-priority reservation.
+    """Select the reservation that should drive the sensor.
 
-    Uses ``_STATUS_PRIORITY`` to rank reservations. Unknown
-    statuses sort after all known statuses.
+    Past reservations (a valid check-out date before ``today``) are never
+    selected. Remaining reservations rank by date group first (current,
+    then upcoming, then undated), then by ``_STATUS_PRIORITY`` with unknown
+    statuses after all known statuses. Current stays then prefer the later
+    check-in, upcoming stays the earlier check-in, and dated ties fall back to
+    the lowest reservation ID. Undated ties keep input order.
 
     Args:
         reservations: List of reservations for a listing.
+        today: Current Home Assistant local calendar date.
 
     Returns:
-        The highest-priority reservation, or None if empty.
+        The selected reservation, or None if no reservation is eligible.
     """
-    if not reservations:
-        return None
+    global _warned_undated_reservation
+
     fallback = max(_STATUS_PRIORITY.values()) + 1
-    return min(
-        reservations,
-        key=lambda reservation: _STATUS_PRIORITY.get(reservation.status, fallback),
-    )
+    selected: HostawayReservation | None = None
+    selected_rank: tuple[int, int, int, int] | None = None
+    for index, reservation in enumerate(reservations):
+        group, check_in = _classify_reservation(reservation, today)
+        if group == _GROUP_PAST:
+            continue
+        priority = _STATUS_PRIORITY.get(reservation.status, fallback)
+        if group == _GROUP_CURRENT and check_in is not None:
+            rank = (0, priority, -check_in.toordinal(), reservation.id)
+        elif group == _GROUP_UPCOMING and check_in is not None:
+            rank = (1, priority, check_in.toordinal(), reservation.id)
+        else:
+            if not _warned_undated_reservation:
+                _LOGGER.warning(
+                    "Hostaway reservation without usable stay dates is ranked "
+                    "after dated reservations for sensor selection",
+                )
+                _warned_undated_reservation = True
+            rank = (2, priority, 0, index)
+        if selected_rank is None or rank < selected_rank:
+            selected = reservation
+            selected_rank = rank
+    return selected
+
+
+def _classify_reservation(
+    reservation: HostawayReservation,
+    today: date,
+) -> tuple[str, date | None]:
+    """Classify a reservation into a date group relative to ``today``.
+
+    A reservation is past when its check-out date is valid and before
+    ``today``, whatever its check-in value. Otherwise it is undated when either
+    date is invalid or check-out precedes check-in, current when check-in is on
+    or before ``today``, and upcoming otherwise.
+
+    Args:
+        reservation: Reservation to classify.
+        today: Current Home Assistant local calendar date.
+
+    Returns:
+        The date group and, for current or upcoming reservations, the parsed
+        check-in date.
+    """
+    check_out = _parse_calendar_date(reservation.check_out)
+    if check_out is not None and check_out < today:
+        return _GROUP_PAST, None
+    check_in = _parse_calendar_date(reservation.check_in)
+    if check_in is None or check_out is None or check_out < check_in:
+        return _GROUP_UNDATED, None
+    if check_in <= today:
+        return _GROUP_CURRENT, check_in
+    return _GROUP_UPCOMING, check_in
 
 
 def _derive_state(
@@ -133,8 +195,8 @@ def _derive_state(
     return "unknown"
 
 
-def _parse_check_out_date(value: object) -> date | None:
-    """Parse a canonical Hostaway check-out date.
+def _parse_calendar_date(value: object) -> date | None:
+    """Parse a canonical Hostaway ``YYYY-MM-DD`` calendar date.
 
     Args:
         value: Candidate date value from a reservation.
@@ -145,12 +207,12 @@ def _parse_check_out_date(value: object) -> date | None:
     if not isinstance(value, str):
         return None
     try:
-        check_out = date.fromisoformat(value)
+        parsed = date.fromisoformat(value)
     except ValueError:
         return None
-    if check_out.isoformat() != value:
+    if parsed.isoformat() != value:
         return None
-    return check_out
+    return parsed
 
 
 def _filter_upcoming_reservations(
@@ -175,7 +237,7 @@ def _filter_upcoming_reservations(
 
     upcoming: list[HostawayReservation] = []
     for reservation in reservations:
-        check_out = _parse_check_out_date(reservation.check_out)
+        check_out = _parse_calendar_date(reservation.check_out)
         if check_out is None:
             if not _warned_invalid_check_out_date:
                 _LOGGER.warning(

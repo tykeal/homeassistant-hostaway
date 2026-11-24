@@ -45,9 +45,10 @@ class HostawayReservationStatusSensor(
 ):
     """Per-listing reservation status sensor (FR-R01).
 
-    Selects the highest-priority reservation for a listing
-    and exposes its status as the sensor state. Attributes
-    include reservation details and an upcoming list.
+    Selects the current or next reservation for a listing,
+    ranked by date group and status priority, and exposes its
+    status as the sensor state. Attributes include reservation
+    details and an upcoming list.
 
     Attributes:
         _listing_id: The listing ID this sensor monitors.
@@ -163,7 +164,10 @@ class HostawayReservationStatusSensor(
         Returns:
             The reservation status string (FR-R02).
         """
-        selected = _select_reservation(self._reservations)
+        selected = _select_reservation(
+            self._reservations,
+            dt_util.now().date(),
+        )
         return _derive_state(selected)
 
     @property
@@ -174,10 +178,11 @@ class HostawayReservationStatusSensor(
             Dictionary of attributes per FR-R04.
         """
         reservations = self._reservations
-        selected = _select_reservation(reservations)
+        today = dt_util.now().date()
+        selected = _select_reservation(reservations, today)
         upcoming_reservations = _filter_upcoming_reservations(
             reservations,
-            dt_util.now().date(),
+            today,
         )
         definitions = (
             self._custom_fields_coordinator.data
