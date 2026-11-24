@@ -113,9 +113,12 @@ verify the selected reservation.
 1. **Given** a same-day turnover where the departing guest is `checked_in` and
    the arriving booking is `confirmed`, **When** the sensor is evaluated,
    **Then** the departing stay is selected (state `checked_in`).
-2. **Given** a same-day turnover where the departing stay is `checked_out`, or
-   where both stays have the same status priority, **When** the sensor is
-   evaluated, **Then** the arriving stay is selected.
+2. **Given** a same-day turnover where the departing stay is `checked_out` and
+   the arriving booking is `confirmed`, or where both stays have the same
+   status priority, **When** the sensor is evaluated, **Then** the arriving
+   stay is selected. An arriving stay whose status ranks below `checked_out`
+   (for example, an inquiry) does not win, because status priority decides
+   first.
 3. **Given** two upcoming bookings with the same status priority, **When** the
    sensor is evaluated, **Then** the one with the earlier check-in is selected.
 4. **Given** two upcoming bookings with different status priorities, **When**
