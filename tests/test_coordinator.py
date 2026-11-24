@@ -155,6 +155,7 @@ def _make_reservation(
     listing_id: int,
     check_in: str = "2025-08-01",
     guest_name: str = "Guest",
+    check_out: str = "2025-08-05",
 ) -> HostawayReservation:
     """Create a HostawayReservation for testing.
 
@@ -163,6 +164,7 @@ def _make_reservation(
         listing_id: Associated listing ID.
         check_in: Check-in date string.
         guest_name: Guest name.
+        check_out: Check-out date string.
 
     Returns:
         A HostawayReservation instance.
@@ -172,7 +174,7 @@ def _make_reservation(
         listing_id=listing_id,
         guest_name=guest_name,
         check_in=check_in,
-        check_out="2025-08-05",
+        check_out=check_out,
         status="confirmed",
     )
 
@@ -353,9 +355,9 @@ class TestHostawayReservationsCoordinator:
         api_client = AsyncMock()
         api_client.get_all_reservations = AsyncMock(
             return_value=[
-                _make_reservation(2, 100, "2025-09-01"),
+                _make_reservation(2, 100, "2025-09-01", check_out="2025-09-05"),
                 _make_reservation(1, 100, "2025-08-01"),
-                _make_reservation(3, 100, "2025-08-15"),
+                _make_reservation(3, 100, "2025-08-15", check_out="2025-08-18"),
             ]
         )
 
@@ -496,8 +498,8 @@ class TestHostawayReservationsCoordinator:
         api_client.get_all_reservations = AsyncMock(
             return_value=[
                 _make_reservation(1, 100, "2025-08-01"),
-                _make_reservation(2, 100, "2025-08-10"),
-                _make_reservation(3, 100, "2025-08-20"),
+                _make_reservation(2, 100, "2025-08-10", check_out="2025-08-12"),
+                _make_reservation(3, 100, "2025-08-20", check_out="2025-08-22"),
             ]
         )
 

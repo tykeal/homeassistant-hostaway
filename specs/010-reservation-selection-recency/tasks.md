@@ -110,22 +110,22 @@ content, and the custom-field service error; verify sensor selection and
 
 ### Amendment Tests First (Red)
 
-- [ ] T009 [US3] In the API model tests, add failing tests that
+- [x] T009 [US3] In the API model tests, add failing tests that
   `HostawayReservation.from_api_response` and direct construction raise
   `ValueError` for unparsable, non-canonical (for example `2025-8-1` and a
   timestamp), and empty values of `arrivalDate` and `departureDate`, and for
   a departure before arrival, with messages that omit the raw value; equal
   dates are accepted.
-- [ ] T010 [US3] In the reservation parsing tests, add failing tests that a
+- [x] T010 [US3] In the reservation parsing tests, add failing tests that a
   page containing one invalid-date record returns the remaining valid
   records, and that the skip warning contains the reservation and listing
   IDs but not the raw date value or guest name; a non-integer reservation ID
   is omitted from the log; and a full page whose last record has a
   non-integer ID (via `fetch_all_reservations`) logs no raw ID value.
-- [ ] T011 [US3] In the custom-field service tests, add a failing test that
+- [x] T011 [US3] In the custom-field service tests, add a failing test that
   reading or writing a reservation whose payload has invalid dates raises
   `ServiceValidationError` naming the reservation and sends no write.
-- [ ] T012 [US3] In `tests/sensor/test_reservation.py`, remove the 009 test
+- [x] T012 [US3] In `tests/sensor/test_reservation.py`, remove the 009 test
   asserting invalid check-out retention and the 010 undated selection and
   warning tests (`test_undated_ranks_after_dated`,
   `test_undated_only_uses_status_then_input_order`, the inverted and
@@ -138,7 +138,7 @@ content, and the custom-field service error; verify sensor selection and
 
 ### Amendment Implementation
 
-- [ ] T013 [US3] Add `custom_components/hostaway/api/dates.py` with the
+- [x] T013 [US3] Add `custom_components/hostaway/api/dates.py` with the
   canonical `parse_calendar_date` moved from the sensor helpers; validate
   reservation dates in `HostawayReservation.__post_init__` in
   `api/models.py` with generic messages; log the reservation ID in
@@ -146,16 +146,16 @@ content, and the custom-field service error; verify sensor selection and
   the raw last ID from the `reservation_page_cursor` warning; translate
   `ValueError` in the custom-field services' `_read_target_collection` and
   `_read_target_model` (`_read_target_snapshot` already does).
-- [ ] T014 [US1,US2,US3] In `custom_components/hostaway/sensor/helpers.py`,
+- [x] T014 [US1,US2,US3] In `custom_components/hostaway/sensor/helpers.py`,
   remove the undated group and rank, 009's invalid check-out retention, both
   warning flags, and the local date parser; parse dates with
   `date.fromisoformat`; update docstrings. Past, current, and upcoming rules,
   tie-breaks, and list order are unchanged.
-- [ ] T015 Run `uv run pytest tests/ -q`,
+- [x] T015 Run `uv run pytest tests/ -q`,
   `uv run ruff check custom_components/ tests/`,
   `uv run mypy custom_components/`, `uv run interrogate custom_components/`,
   and `uv run pre-commit run --all-files`; resolve any regressions.
-- [ ] T016 Mark T009-T016 complete in this `tasks.md` in a separate
+- [x] T016 Mark T009-T016 complete in this `tasks.md` in a separate
   documentation commit from implementation and test code.
 
 **Checkpoint**: No invalid-date reservation is parsed, selected, or listed;

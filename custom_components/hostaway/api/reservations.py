@@ -79,10 +79,9 @@ def reservation_page_cursor(items: list[dict[str, Any]], listing_id: int) -> int
         if not _is_valid_cursor(last_raw_id) or cursor != last_raw_id:
             _LOGGER.warning(
                 "Using reservation %s as pagination cursor for listing %s "
-                "because the last raw reservation has invalid id %r",
+                "because the last raw reservation has an invalid id",
                 cursor,
                 listing_id,
-                last_raw_id,
             )
         return cursor
     _LOGGER.warning(
@@ -125,8 +124,13 @@ async def fetch_all_reservations(
 def _log_skipped_reservation(
     reservation_id: Any, listing_id: int, exc: ValueError
 ) -> None:
-    """Log a skipped malformed reservation payload."""
-    if reservation_id is None:
+    """Log a skipped malformed reservation payload.
+
+    Only identifying information is logged: the reservation ID when it is
+    a positive integer, the listing ID, and the generic validation reason.
+    Raw payload values such as dates or guest data are never logged.
+    """
+    if not _is_valid_cursor(reservation_id):
         _LOGGER.warning(
             "Skipping malformed Hostaway reservation for listing %s: %s",
             listing_id,
@@ -134,7 +138,7 @@ def _log_skipped_reservation(
         )
         return
     _LOGGER.warning(
-        "Skipping malformed Hostaway reservation %r for listing %s: %s",
+        "Skipping malformed Hostaway reservation %s for listing %s: %s",
         reservation_id,
         listing_id,
         exc,

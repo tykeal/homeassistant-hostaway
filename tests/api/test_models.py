@@ -457,6 +457,74 @@ class TestHostawayReservationFromApiResponse:
         with pytest.raises(ValueError, match="status"):
             HostawayReservation.from_api_response(data)
 
+    @pytest.mark.parametrize(
+        ("api_key", "field_name"),
+        [("arrivalDate", "check_in"), ("departureDate", "check_out")],
+    )
+    @pytest.mark.parametrize(
+        "bad_value",
+        [
+            "not-a-date",
+            "2025-8-1",
+            "2025-08-01T00:00:00",
+            "20250801",
+            "2025-02-30",
+            " 2025-08-01",
+            "",
+        ],
+    )
+    def test_invalid_date_raises_without_raw_value(
+        self, api_key: str, field_name: str, bad_value: str
+    ) -> None:
+        """Non-canonical or empty dates are rejected without echoing the value."""
+        data = make_reservation_response(
+            arrivalDate="2025-08-01", departureDate="2025-08-01"
+        )
+        data[api_key] = bad_value
+        with pytest.raises(ValueError, match=field_name) as exc_info:
+            HostawayReservation.from_api_response(data)
+        if bad_value.strip():
+            assert bad_value.strip() not in str(exc_info.value)
+
+    def test_departure_before_arrival_raises(self) -> None:
+        """A departure date before the arrival date is rejected."""
+        data = make_reservation_response(
+            arrivalDate="2025-08-05", departureDate="2025-08-04"
+        )
+        with pytest.raises(ValueError, match="check_out") as exc_info:
+            HostawayReservation.from_api_response(data)
+        assert "2025-08" not in str(exc_info.value)
+
+    def test_equal_dates_allowed(self) -> None:
+        """A zero-night stay with equal dates is valid."""
+        data = make_reservation_response(
+            arrivalDate="2025-08-05", departureDate="2025-08-05", nights=0
+        )
+        res = HostawayReservation.from_api_response(data)
+        assert res.check_in == res.check_out == "2025-08-05"
+
+    @pytest.mark.parametrize(
+        ("check_in", "check_out", "field_name"),
+        [
+            ("bad", "2025-08-05", "check_in"),
+            ("2025-08-01", "bad", "check_out"),
+            ("2025-08-05", "2025-08-01", "check_out"),
+        ],
+    )
+    def test_direct_construction_rejects_invalid_dates(
+        self, check_in: str, check_out: str, field_name: str
+    ) -> None:
+        """Every construction path enforces valid stay dates."""
+        with pytest.raises(ValueError, match=field_name):
+            HostawayReservation(
+                id=1,
+                listing_id=2,
+                guest_name="Guest",
+                check_in=check_in,
+                check_out=check_out,
+                status="confirmed",
+            )
+
 
 class TestCustomFieldModelMapping:
     """Tests custom-field mapping on listing and reservation models."""

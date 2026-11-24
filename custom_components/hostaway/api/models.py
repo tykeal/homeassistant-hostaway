@@ -15,6 +15,7 @@ from custom_components.hostaway.api.const import TOKEN_READY_DELAY
 from custom_components.hostaway.api.custom_fields import (
     HostawayCustomFieldCollection,
 )
+from custom_components.hostaway.api.dates import parse_calendar_date
 
 
 def _validate_non_negative(
@@ -323,8 +324,9 @@ class HostawayReservation:
         id: Unique reservation identifier.
         listing_id: Associated listing ID.
         guest_name: Primary guest name.
-        check_in: Arrival date string.
-        check_out: Departure date string.
+        check_in: Canonical ``YYYY-MM-DD`` arrival date string.
+        check_out: Canonical ``YYYY-MM-DD`` departure date string, never
+            before ``check_in`` (equal dates are a valid zero-night stay).
         status: Reservation status.
         channel: Booking channel name.
         num_guests: Number of guests.
@@ -355,6 +357,27 @@ class HostawayReservation:
     custom_fields: dict[int, Any] = field(default_factory=dict)
     custom_field_collection: HostawayCustomFieldCollection | None = None
 
+    def __post_init__(self) -> None:
+        """Validate stay dates on every construction path.
+
+        Error messages name the field only and never echo payload values.
+
+        Raises:
+            ValueError: If either date is not a canonical ``YYYY-MM-DD``
+                date or if check-out is before check-in.
+        """
+        check_in = parse_calendar_date(self.check_in)
+        if check_in is None:
+            msg = "check_in must be a YYYY-MM-DD date"
+            raise ValueError(msg)
+        check_out = parse_calendar_date(self.check_out)
+        if check_out is None:
+            msg = "check_out must be a YYYY-MM-DD date"
+            raise ValueError(msg)
+        if check_out < check_in:
+            msg = "check_out must not be before check_in"
+            raise ValueError(msg)
+
     @classmethod
     def from_api_response(cls, data: dict[str, Any]) -> HostawayReservation:
         """Create a HostawayReservation from an API response dict.
@@ -366,7 +389,9 @@ class HostawayReservation:
             A HostawayReservation instance.
 
         Raises:
-            ValueError: If required fields are missing or invalid.
+            ValueError: If required fields are missing or invalid,
+                including non-canonical stay dates or a departure date
+                before the arrival date.
         """
         required_mappings = {
             "id": "id",

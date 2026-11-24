@@ -70,6 +70,90 @@ def test_parse_reservations_skips_malformed_item(
     assert "nights must be non-negative" in caplog.text
 
 
+@pytest.mark.parametrize(
+    ("arrival", "departure"),
+    [
+        ("2025-13-01", "2025-08-05"),
+        ("2025-08-01", "08/05/2025"),
+        ("2025-08-06", "2025-08-05"),
+        ("", "2025-08-05"),
+    ],
+)
+def test_parse_reservations_drops_invalid_dates_logging_only_ids(
+    caplog: pytest.LogCaptureFixture, arrival: str, departure: str
+) -> None:
+    """Invalid-date records are dropped and only identifiers are logged."""
+    listing_id = 12345
+    valid = make_reservation_response(id=1, listingMapId=listing_id)
+    invalid = make_reservation_response(
+        id=2,
+        listingMapId=listing_id,
+        guestName="Secret Guest",
+        arrivalDate=arrival,
+        departureDate=departure,
+    )
+
+    with caplog.at_level(
+        "WARNING", logger="custom_components.hostaway.api.reservations"
+    ):
+        reservations = parse_reservations([valid, invalid, valid], listing_id)
+
+    assert [reservation.id for reservation in reservations] == [1, 1]
+    assert f"reservation 2 for listing {listing_id}" in caplog.text
+    assert "Secret Guest" not in caplog.text
+    for value in (arrival, departure):
+        if value and value != "2025-08-05":
+            assert value not in caplog.text
+
+
+@pytest.mark.parametrize("raw_id", ["guest-secret", True, -5, 1.5, None])
+def test_parse_reservations_omits_unusable_ids_from_log(
+    caplog: pytest.LogCaptureFixture, raw_id: Any
+) -> None:
+    """Skipped records without a positive integer ID log no raw ID value."""
+    listing_id = 12345
+    item = make_reservation_response(
+        id=raw_id, listingMapId=listing_id, arrivalDate="bad"
+    )
+
+    with caplog.at_level(
+        "WARNING", logger="custom_components.hostaway.api.reservations"
+    ):
+        reservations = parse_reservations([item], listing_id)
+
+    assert reservations == []
+    assert (
+        f"Skipping malformed Hostaway reservation for listing {listing_id}"
+        in caplog.text
+    )
+    assert str(raw_id) not in caplog.text.replace(str(listing_id), "")
+
+
+async def test_fetch_all_reservations_invalid_last_id_logs_no_raw_value(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A full page ending in an unusable ID never logs that raw value."""
+    listing_id = 12345
+    page = [
+        make_reservation_response(id=item_id, listingMapId=listing_id)
+        for item_id in range(1, DEFAULT_PAGE_LIMIT)
+    ]
+    page.append(make_reservation_response(id="guest-secret", listingMapId=listing_id))
+    pages = iter([page, []])
+
+    async def fetch_page(_after_id: int | None, _limit: int) -> list[dict[str, Any]]:
+        """Return the next synthetic reservation page."""
+        return next(pages)
+
+    with caplog.at_level(
+        "WARNING", logger="custom_components.hostaway.api.reservations"
+    ):
+        reservations = await fetch_all_reservations(fetch_page, listing_id)
+
+    assert len(reservations) == DEFAULT_PAGE_LIMIT - 1
+    assert "guest-secret" not in caplog.text
+
+
 def test_reservation_page_cursor_uses_last_valid_raw_id(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -88,7 +172,8 @@ def test_reservation_page_cursor_uses_last_valid_raw_id(
 
     assert cursor == 2
     assert "Using reservation 2 as pagination cursor" in caplog.text
-    assert "invalid id True" in caplog.text
+    assert "last raw reservation has an invalid id" in caplog.text
+    assert "True" not in caplog.text
 
 
 def test_reservation_page_cursor_warns_for_bool_last_id(
@@ -108,7 +193,8 @@ def test_reservation_page_cursor_warns_for_bool_last_id(
 
     assert cursor == 1
     assert "Using reservation 1 as pagination cursor" in caplog.text
-    assert "invalid id True" in caplog.text
+    assert "last raw reservation has an invalid id" in caplog.text
+    assert "True" not in caplog.text
 
 
 def test_reservation_page_cursor_stops_on_empty_page(

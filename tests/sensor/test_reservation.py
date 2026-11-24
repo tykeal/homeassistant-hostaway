@@ -199,53 +199,6 @@ class TestUpcomingReservationFiltering:
             "status": "checked_in",
         }
 
-    async def test_retains_unparsable_check_out_once_without_sensitive_logs(
-        self,
-        hass: HomeAssistant,
-        monkeypatch: pytest.MonkeyPatch,
-        caplog: pytest.LogCaptureFixture,
-    ) -> None:
-        """Retain invalid date strings and emit one generic warning."""
-        now = datetime(2025, 8, 5, 12, tzinfo=UTC)
-        monkeypatch.setattr(dt_util, "now", lambda: now)
-        monkeypatch.setattr(
-            "custom_components.hostaway.sensor.helpers._warned_invalid_check_out_date",
-            False,
-            raising=False,
-        )
-        reservation = _make_reservation(
-            1,
-            guest_name="Sensitive Guest Name",
-            check_out="not-a-date",
-        )
-        missing_date = _make_reservation(
-            2,
-            guest_name="Another Sensitive Guest",
-            check_out=cast(str, None),
-        )
-        sensor = await _make_reservation_sensor(
-            hass,
-            [reservation, missing_date],
-            filter_cancelled=False,
-        )
-
-        with caplog.at_level(logging.WARNING):
-            first = sensor.extra_state_attributes["upcoming_reservations"]
-            second = sensor.extra_state_attributes["upcoming_reservations"]
-
-        assert [item["id"] for item in first] == [1, 2]
-        assert [item["id"] for item in second] == [1, 2]
-        warnings = [
-            record
-            for record in caplog.records
-            if "invalid check-out date" in record.message
-        ]
-        assert len(warnings) == 1
-        assert "Sensitive Guest Name" not in caplog.text
-        assert "Another Sensitive Guest" not in caplog.text
-        assert "not-a-date" not in caplog.text
-        assert "reservation 1" not in caplog.text
-
     @pytest.mark.parametrize(
         ("now", "check_out_dates", "expected_ids"),
         [
@@ -662,15 +615,15 @@ class TestDateAwareSelection:
     @staticmethod
     def _res(
         res_id: int,
-        check_in: str | None,
-        check_out: str | None,
+        check_in: str,
+        check_out: str,
         status: str = "confirmed",
     ) -> HostawayReservation:
         """Return a reservation with the given dates and status."""
         return _make_reservation(
             res_id,
-            check_in=cast(str, check_in),
-            check_out=cast(str, check_out),
+            check_in=check_in,
+            check_out=check_out,
             status=status,
         )
 
@@ -775,65 +728,10 @@ class TestDateAwareSelection:
             reservations.reverse()
         assert self._selected_id(reservations) == 3
 
-    @pytest.mark.parametrize(
-        ("check_in", "check_out"),
-        [
-            ("not-a-date", "2025-08-12"),
-            ("2025-08-01", "not-a-date"),
-            (None, "2025-08-12"),
-            ("2025-08-01", None),
-            ("2025-8-1", "2025-08-12"),
-            ("2025-08-01T00:00:00", "2025-08-12"),
-            ("2025-08-10", "2025-08-08"),
-        ],
-        ids=[
-            "malformed-check-in",
-            "malformed-check-out",
-            "missing-check-in",
-            "missing-check-out",
-            "non-canonical",
-            "datetime",
-            "inverted-range",
-        ],
-    )
-    def test_undated_ranks_after_dated(
-        self,
-        check_in: str | None,
-        check_out: str | None,
-    ) -> None:
-        """Valid dates outrank unusable dates regardless of status."""
-        undated = self._res(1, check_in, check_out, "checked_in")
-        upcoming = self._res(2, "2025-08-20", "2025-08-22", "inquiry")
-        assert self._selected_id([undated, upcoming]) == 2
-        assert self._selected_id([undated]) == 1
-
-    def test_undated_only_uses_status_then_input_order(self) -> None:
-        """Undated stays rank by status, then by input order."""
-        reservations = [
-            self._res(1, None, None, "confirmed"),
-            self._res(9, "bad", "2025-08-12", "checked_in"),
-            self._res(2, "2025-08-10", "bad", "checked_in"),
-        ]
-        assert self._selected_id(reservations) == 9
-        assert self._selected_id(list(reversed(reservations))) == 2
-
-    @pytest.mark.parametrize(
-        ("check_in", "check_out"),
-        [
-            ("2025-08-01", "2025-08-04"),
-            ("not-a-date", "2025-08-04"),
-            (None, "2025-08-04"),
-            ("2025-08-10", "2025-08-01"),
-        ],
-        ids=["dated", "malformed-check-in", "missing-check-in", "inverted"],
-    )
-    def test_past_check_out_is_never_selected(
-        self,
-        check_in: str | None,
-        check_out: str,
-    ) -> None:
-        """A valid check-out before today excludes the reservation."""
-        assert self._selected_id([self._res(1, check_in, check_out)]) is None
+    def test_past_check_out_is_never_selected(self) -> None:
+        """A check-out before today excludes the reservation."""
+        reservation = self._res(1, "2025-08-01", "2025-08-04", "checked_in")
+        assert self._selected_id([reservation]) is None
 
     def test_past_only_returns_none(self) -> None:
         """Only past reservations yields no selection."""
@@ -866,53 +764,13 @@ class TestDateAwareSelection:
         self._selected_id(reservations)
         assert reservations == snapshot
 
-    def test_undated_warning_logged_once_without_data(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        caplog: pytest.LogCaptureFixture,
-    ) -> None:
-        """Undated selection logs one generic warning without reservation data."""
-        monkeypatch.setattr(
-            "custom_components.hostaway.sensor.helpers._warned_undated_reservation",
-            False,
-            raising=False,
-        )
-        monkeypatch.setattr(
-            "custom_components.hostaway.sensor.helpers._warned_invalid_check_out_date",
-            True,
-            raising=False,
-        )
-        reservation = _make_reservation(
-            4242,
-            guest_name="Sensitive Guest Name",
-            check_in="garbled-in",
-            check_out="garbled-out",
-        )
-
-        with caplog.at_level(logging.WARNING):
-            assert self._selected_id([reservation]) == 4242
-            assert self._selected_id([reservation]) == 4242
-
-        assert len(caplog.records) == 1
-        message = caplog.records[0].getMessage()
-        assert "invalid check-out date" not in message
-        assert "Sensitive Guest Name" not in caplog.text
-        assert "4242" not in caplog.text
-        assert "garbled" not in caplog.text
-
     def test_dated_selection_does_not_warn(
         self,
-        monkeypatch: pytest.MonkeyPatch,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """Valid or past reservations do not trigger the undated warning."""
-        monkeypatch.setattr(
-            "custom_components.hostaway.sensor.helpers._warned_undated_reservation",
-            False,
-            raising=False,
-        )
+        """Selecting among past and upcoming reservations logs nothing."""
         reservations = [
-            self._res(1, "not-a-date", "2025-08-01"),
+            self._res(1, "2025-07-30", "2025-08-01"),
             self._res(2, "2025-08-10", "2025-08-12"),
         ]
 
@@ -1244,8 +1102,8 @@ class TestBuildReservationAttributes:
     def test_upcoming_reservations_preserve_order(self) -> None:
         """upcoming_reservations preserves input order."""
         r1 = _make_reservation(1, check_in="2025-08-01")
-        r2 = _make_reservation(2, check_in="2025-09-01")
-        r3 = _make_reservation(3, check_in="2025-10-01")
+        r2 = _make_reservation(2, check_in="2025-09-01", check_out="2025-09-05")
+        r3 = _make_reservation(3, check_in="2025-10-01", check_out="2025-10-05")
         attrs = _build_reservation_attributes(r1, [r1, r2, r3], 100)
         upcoming = attrs["upcoming_reservations"]
         assert len(upcoming) == 3
@@ -1429,7 +1287,13 @@ class TestReservationStatusSensor:
         entry = _make_entry(selected=[100])
         entry.add_to_hass(hass)
         api_client = AsyncMock()
-        r1 = _make_reservation(1001, 100, check_in="2025-09-01", status="confirmed")
+        r1 = _make_reservation(
+            1001,
+            100,
+            check_in="2025-09-01",
+            check_out="2025-09-05",
+            status="confirmed",
+        )
         r2 = _make_reservation(1002, 100, check_in="2025-08-01", status="checked_in")
         api_client.get_all_reservations = AsyncMock(return_value=[r1, r2])
 

@@ -248,7 +248,7 @@ async def _read_target_collection(
                 HostawayCustomFieldCollection | None,
                 reservation.custom_field_collection,
             )
-    except HostawayApiError as exc:
+    except (HostawayApiError, ValueError) as exc:
         raise ServiceValidationError(
             f"Unable to read {target_type} {target_id}: {exc}"
         ) from exc
@@ -272,7 +272,7 @@ async def _read_target_model(
             result: HostawayListing | HostawayReservation = listing
         else:
             result = await api_client.get_reservation(target_id)
-    except HostawayApiError as exc:
+    except (HostawayApiError, ValueError) as exc:
         raise ServiceValidationError(
             f"Unable to read {target_type} {target_id}: {exc}"
         ) from exc

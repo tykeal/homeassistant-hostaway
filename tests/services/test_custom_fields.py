@@ -1627,6 +1627,88 @@ async def test_set_custom_field_pre_write_read_failure_is_clear(
     assert patched.custom_fields[1] == "old"
 
 
+async def test_set_custom_field_rejects_invalid_reservation_dates(
+    hass: HomeAssistant,
+) -> None:
+    """An invalid-date reservation read fails before any write is sent."""
+    snapshot = {
+        "id": 456,
+        "listingMapId": 123,
+        "guestName": "Secret Guest",
+        "arrivalDate": "2026-01-05",
+        "departureDate": "2026-01-01",
+        "status": "confirmed",
+        "customFieldValues": [{"customFieldId": 1, "value": "old"}],
+    }
+    api_client = SimpleNamespace(
+        get_reservation_payload=AsyncMock(return_value=snapshot),
+        update_reservation_custom_fields=AsyncMock(return_value={}),
+    )
+    hass.data.setdefault(DOMAIN, {})["entry-1"] = {
+        "api_client": api_client,
+        "account_id": 1,
+        "config_entry_id": "entry-1",
+        "custom_fields_coordinator": SimpleNamespace(
+            data=[_definition(1, "reservation")],
+            last_refresh_succeeded=True,
+        ),
+        "custom_field_write_safety": _enabled_reservation_gates(),
+        "custom_field_write_generations": CustomFieldWriteGenerationRegistry(),
+        "reservation_custom_field_evidence": ReservationCustomFieldEvidenceState(
+            account_id=1,
+            config_entry_id="entry-1",
+            custom_field_values_round_trip_verified=True,
+            payload_strategy="partial",
+        ),
+        "reservations_coordinator": SimpleNamespace(data={}),
+    }
+
+    with pytest.raises(
+        ServiceValidationError, match="Unable to read reservation 456"
+    ) as exc_info:
+        await async_handle_set_custom_field(
+            hass,
+            {
+                "target_type": "reservation",
+                "target_id": 456,
+                "customFieldId": 1,
+                "value": "new",
+            },
+        )
+
+    api_client.update_reservation_custom_fields.assert_not_called()
+    assert "2026-01" not in str(exc_info.value)
+    assert "Secret Guest" not in str(exc_info.value)
+
+
+async def test_get_custom_field_values_rejects_invalid_reservation_dates(
+    hass: HomeAssistant,
+) -> None:
+    """A value read of an invalid-date reservation is a clear service error."""
+    api_client = SimpleNamespace(
+        get_reservation=AsyncMock(
+            side_effect=ValueError("check_in must be a YYYY-MM-DD date")
+        )
+    )
+    hass.data.setdefault(DOMAIN, {})["entry-1"] = {
+        "api_client": api_client,
+        "custom_fields_coordinator": SimpleNamespace(
+            data=[_definition(5, "reservation")]
+        ),
+    }
+
+    with pytest.raises(ServiceValidationError, match="Unable to read reservation 456"):
+        await async_handle_get_custom_field_values(
+            hass,
+            ServiceCall(
+                hass,
+                DOMAIN,
+                "get_custom_field_values",
+                {"target_type": "reservation", "target_id": 456},
+            ),
+        )
+
+
 async def test_set_custom_field_api_error_does_not_publish_success(
     hass: HomeAssistant,
 ) -> None:

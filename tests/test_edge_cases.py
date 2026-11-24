@@ -221,7 +221,7 @@ class TestLargeReservationSets:
                     listingMapId=101,
                     guestName=f"Guest {i}",
                     arrivalDate=f"2025-{1 + i // 30:02d}-{1 + i % 28:02d}",
-                    departureDate=f"2025-{1 + i // 30:02d}-{2 + i % 28:02d}",
+                    departureDate=f"2025-{1 + i // 30:02d}-{min(2 + i % 28, 28):02d}",
                 ),
             )
             for i in range(250)
