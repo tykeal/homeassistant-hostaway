@@ -19,7 +19,10 @@ uv sync --frozen
    explicit `today` to `_select_reservation`, and sensor tests that
    monkeypatch `homeassistant.util.dt.now`, for every scenario in the plan's
    test design. Replace `test_past_reservation_still_drives_selected_state`
-   with the new expected behavior.
+   with the new expected behavior. For the issue #300 amendment, add model,
+   reservation-parsing, and custom-field service tests that reject
+   invalid-date reservations at ingest, and remove the sensor tests that
+   asserted undated selection and invalid check-out retention.
 2. Run the focused module and confirm the new tests fail on current code:
 
    ```bash

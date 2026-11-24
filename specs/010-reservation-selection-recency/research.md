@@ -45,8 +45,9 @@ SPDX-License-Identifier: Apache-2.0
 
 ### Group-first ranking
 
-- **Decision**: Rank current, then upcoming, then undated; never select past.
-  Status priority orders reservations within a group.
+- **Decision**: Rank current, then upcoming; never select past reservations.
+  Reservations with invalid dates never reach the sensor (issue #300
+  amendment). Status priority orders reservations within a group.
 - **Rationale**: Dates decide relevance; status still carries operational
   meaning such as a departing guest who has not checked out. Keeping
   `_STATUS_PRIORITY` unchanged within groups minimizes behavior change.
@@ -58,34 +59,53 @@ SPDX-License-Identifier: Apache-2.0
 
 ### Past determination
 
-- **Decision**: A reservation is past when its valid check-out date is before
-  today, regardless of its check-in value.
-- **Rationale**: Matches feature 009 exactly, so every selectable reservation
-  is also in `upcoming_reservations`. A valid past check-out proves the stay is
-  over even if check-in is malformed.
-- **Alternatives considered**: Requiring both dates to be valid before calling
-  a stay past (would let a malformed check-in resurrect a finished stay and
-  break the list/selection invariant).
+- **Decision**: A reservation is past when its check-out date is before
+  today. Feature 009's list filter uses the same rule, so every selectable
+  reservation is also in `upcoming_reservations`.
+- **Original decision (superseded by issue #300)**: Past was determined from
+  a valid check-out alone, whatever the check-in value, so that a malformed
+  check-in could not resurrect a finished stay. Such a record is now rejected
+  at ingest, so the case no longer reaches the sensor.
 
-### Validity and undated reservations
+### Invalid dates: drop at ingest (amended, issue #300)
 
-- **Decision**: Current or upcoming requires both dates to be canonical and
-  check-out on or after check-in. Anything else that is not past is undated
-  and ranks after all dated candidates by status priority, then input order.
-- **Rationale**: An inverted or unreadable range cannot be placed in time.
-  Keeping it eligible avoids hiding a possibly real booking when it is the
-  only data, but it must not displace a reservation with trustworthy dates.
-  Input order is the only stable signal left; it is the coordinator order.
-- **Alternatives considered**: Excluding undated reservations (could hide
-  real bookings and produce `no_reservation` incorrectly); ranking them by
-  status alongside dated reservations (reintroduces the defect when a stale
-  record has a malformed date).
+- **Decision**: A reservation is invalid when either date is missing or not
+  a canonical `YYYY-MM-DD` calendar date, or check-out is before check-in.
+  `HostawayReservation` rejects such data with `ValueError` at construction,
+  so `from_api_response` fails for it. List parsing drops just that record via
+  the existing per-record skip path and logs only the reservation ID (when it
+  is a positive integer), the listing ID, and a generic reason naming the
+  field. Equal dates are valid; `nights` is not cross-checked. A single
+  reservation read by explicit ID (custom-field services) surfaces the
+  rejection as a clear `ServiceValidationError` and sends no write.
+- **Rationale**: The maintainer decided that "a reservation with missing or
+  invalid dates is... invalid, it should not be anything we ever surface /
+  use," and "we should drop bad data during ingest and log identifying
+  information at most about it." Rejecting in the model gives one rule for
+  every consumer and makes valid dates an invariant, so the sensor needs no
+  invalid-data bucket, retention rule, or warning. Validating in the
+  constructor rather than only in `from_api_response` also covers direct
+  construction and `dataclasses.replace`. Zero-night stays are legitimate and
+  already treated as current by this feature. `nights` is optional and is not
+  used for selection, and a mismatch would not make the dates themselves
+  untrustworthy, so it is not checked.
+- **Original decision (superseded)**: Invalid reservations were "undated",
+  ranked after all dated candidates by status priority, then input order, to
+  avoid hiding a possibly real booking; feature 009 likewise retained
+  unparsable check-out dates in the list, each with its own once-per-process
+  warning.
+- **Alternatives considered**: Excluding invalid reservations only in the
+  sensor (keeps bad data in the coordinator and services and duplicates
+  validity handling; superseded by the ingest decision); failing the whole
+  fetch on one bad record (one bad record would blank every reservation for
+  the listing); rate-limiting the skip log (existing skip-path behavior for
+  other malformed records is kept for consistency; it logs identifiers only);
+  logging raw values for diagnosis (rejected as possible personal data).
 
 ### Tie-breaks
 
 - **Decision**: Current ties prefer the later check-in; upcoming ties prefer
-  the earlier check-in; the final tie-break for dated reservations is the
-  lowest reservation ID.
+  the earlier check-in; the final tie-break is the lowest reservation ID.
 - **Rationale**: On a same-day turnover with equal status priority, the
   departing stay ends today and the arriving stay is the one about to matter.
   For upcoming stays, the soonest arrival is the next actionable booking.
@@ -114,14 +134,11 @@ SPDX-License-Identifier: Apache-2.0
 
 ### Warning behavior
 
-- **Decision**: One generic warning per process the first time selection sees
-  an undated reservation, using a flag separate from 009's.
-- **Rationale**: Consistent with 009 (bounded, no personal data). A separate
-  flag reports malformed check-in values and inverted ranges that 009 never
-  sees, while keeping 009's own warning behavior and tests unchanged.
-- **Alternatives considered**: Reusing 009's flag (would hide one of the two
-  conditions depending on evaluation order); per-reservation warnings (log
-  spam on every refresh).
+- **Decision (amended, issue #300)**: The sensor logs no invalid-date
+  warning. Dropped records are logged at ingest by the existing skip path.
+- **Original decision (superseded)**: One generic warning per process the
+  first time selection saw an undated reservation, with a flag separate from
+  009's invalid check-out warning. Both are removed as dead code.
 
 ### Recalculation
 
@@ -156,7 +173,10 @@ SPDX-License-Identifier: Apache-2.0
   `native_value`, `extra_state_attributes`.
 - `custom_components/hostaway/coordinator.py`: per-listing fetch and
   `check_in` sort.
-- `custom_components/hostaway/api/models.py`: required date strings.
+- `custom_components/hostaway/api/models.py`: required date strings and, by
+  amendment, canonical-date validation.
+- `custom_components/hostaway/api/reservations.py`: per-record skip path
+  (`parse_reservations`, `_log_skipped_reservation`).
 - `tests/sensor/test_reservation.py`: existing selection, state, and 009
   filter tests, including the superseded
   `test_past_reservation_still_drives_selected_state`.
